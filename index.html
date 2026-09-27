@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TableMaster - Đặt bàn theo Sơ đồ Mặt bằng Thời gian thực</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #0b0f17;
+      color: #f8fafc;
+    }
+    .table-selected {
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+      transform: scale(1.05);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-amber-500 selection:text-black">
+
+  <!-- 1. NAVIGATION BAR -->
+  <header class="border-b border-slate-800/80 bg-[#0b0f17]/90 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+      <!-- Logo -->
+      <div class="flex items-center gap-3 cursor-pointer">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-amber-300 flex items-center justify-center text-slate-950 font-black text-xl shadow-lg shadow-amber-500/20">
+          T
+        </div>
+        <div>
+          <span class="text-xl font-extrabold tracking-tight text-white">Table<span class="text-amber-400">Master</span></span>
+          <span class="block text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Live Floor Booking</span>
+        </div>
+      </div>
+
+      <!-- Links -->
+      <nav class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-300">
+        <a href="#" class="text-amber-400 hover:text-amber-300 transition">Khám phá quán</a>
+        <a href="#" class="hover:text-white transition">Đặt tiệc sự kiện</a>
+        <a href="#" class="hover:text-white transition flex items-center gap-1.5">
+          Dành cho chủ quán 
+          <span class="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full border border-amber-500/20 font-bold">B2B</span>
+        </a>
+        <a href="#" class="hover:text-white transition">Công nghệ Live Map</a>
+      </nav>
+
+      <!-- Auth Actions -->
+      <div class="flex items-center gap-4">
+        <button class="text-sm font-semibold text-slate-300 hover:text-white px-3 py-2 transition">Đăng nhập</button>
+        <button class="text-sm font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 px-5 py-2.5 rounded-xl transition font-bold shadow-lg shadow-amber-500/20">
+          Đăng ký ngay
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 2. HERO SECTION -->
+  <section class="relative pt-12 pb-16 overflow-hidden">
+    <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-500/10 via-transparent to-transparent pointer-events-none"></div>
+
+    <div class="max-w-7xl mx-auto px-6 text-center relative z-10">
+      <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/60 border border-slate-700/60 text-xs font-medium text-amber-400 mb-6">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        Hệ thống đồng bộ sơ đồ bàn thời gian thực (WebSockets + Redis Redlock)
+      </div>
+
+      <h1 class="text-4xl md:text-6xl font-black tracking-tight text-white max-w-4xl mx-auto leading-tight md:leading-[1.15]">
+        Chọn trước góc ngồi đẹp nhất.<br>
+        <span class="bg-gradient-to-r from-amber-400 via-amber-200 to-amber-500 bg-clip-text text-transparent">
+          Xem sơ đồ mặt bằng trực tiếp.
+        </span>
+      </h1>
+      <p class="mt-4 text-slate-400 max-w-2xl mx-auto text-base md:text-lg">
+        Không còn cảnh đến nơi mới biết ngồi cạnh lối đi vệ sinh hay chen chúc góc khuất. Click chọn bàn yêu thích trên sơ đồ 2D và giữ chỗ chỉ trong 5 phút.
+      </p>
+
+      <!-- Search Box Bar -->
+      <div class="mt-10 max-w-5xl mx-auto bg-slate-900/90 border border-slate-700/70 p-3 rounded-2xl shadow-2xl shadow-black/50 backdrop-blur">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <!-- Loc / Restaurant -->
+          <div class="flex items-center gap-3 px-4 py-3 bg-slate-950/60 rounded-xl border border-slate-800/80 text-left">
+            <i data-lucide="map-pin" class="w-5 h-5 text-amber-400 shrink-0"></i>
+            <div>
+              <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Khu vực / Tên quán</p>
+              <input type="text" value="Quận 1, TP. Hồ Chí Minh" class="bg-transparent text-sm font-bold text-white focus:outline-none w-full cursor-pointer">
+            </div>
+          </div>
+
+          <!-- Date -->
+          <div class="flex items-center gap-3 px-4 py-3 bg-slate-950/60 rounded-xl border border-slate-800/80 text-left">
+            <i data-lucide="calendar" class="w-5 h-5 text-amber-400 shrink-0"></i>
+            <div>
+              <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Ngày đặt bàn</p>
+              <p class="text-sm font-bold text-white">Hôm nay, 24 Tháng 10</p>
+            </div>
+          </div>
+
+          <!-- Time Slot -->
+          <div class="flex items-center gap-3 px-4 py-3 bg-slate-950/60 rounded-xl border border-slate-800/80 text-left">
+            <i data-lucide="clock" class="w-5 h-5 text-amber-400 shrink-0"></i>
+            <div>
+              <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Khung giờ (Slot)</p>
+              <select class="bg-transparent text-sm font-bold text-white focus:outline-none cursor-pointer w-full">
+                <option class="bg-slate-900 text-white">18:00 - 20:00 (Tối)</option>
+                <option class="bg-slate-900 text-white" selected>19:00 - 21:00 (Giờ vàng)</option>
+                <option class="bg-slate-900 text-white">20:30 - 22:30 (Đêm)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Guests & CTA -->
+          <div class="flex items-center gap-2">
+            <div class="flex-1 flex items-center gap-3 px-4 py-3 bg-slate-950/60 rounded-xl border border-slate-800/80 text-left">
+              <i data-lucide="users" class="w-5 h-5 text-amber-400 shrink-0"></i>
+              <div>
+                <p class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Số khách</p>
+                <p class="text-sm font-bold text-white">4 Người</p>
+              </div>
+            </div>
+            <button class="h-full px-6 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-extrabold rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20">
+              <i data-lucide="search" class="w-5 h-5"></i>
+              <span class="hidden lg:inline">Tìm bàn</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. LIVE INTERACTIVE 2D FLOOR PLAN DEMO -->
+  <section class="max-w-7xl mx-auto px-6 py-6 w-full">
+    <div class="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 gap-2">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+          <h2 class="text-xl font-bold text-white">Trải nghiệm tương tác: The Prime Bistro & Grill (Tầng 2)</h2>
+        </div>
+        <p class="text-xs text-slate-400">Click vào bất kỳ bàn nào bên dưới để xem thông tin chi tiết và khóa giữ chỗ thử nghiệm</p>
+      </div>
+
+      <!-- Legend -->
+      <div class="flex items-center gap-4 text-xs font-semibold bg-slate-900/60 px-4 py-2 rounded-xl border border-slate-800">
+        <div class="flex items-center gap-1.5">
+          <span class="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+          <span>Trống (Có thể book)</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-3 h-3 rounded-full bg-amber-400 animate-pulse"></span>
+          <span>Đang giữ (Hold 5p)</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-3 h-3 rounded-full bg-rose-500"></span>
+          <span>Đã có khách</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- The 2-Column Canvas + Sidebar Container -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      
+      <!-- LEFT: 2D FLOOR PLAN (8 COLS) -->
+      <div class="lg:col-span-8 bg-slate-950 border border-slate-800 rounded-2xl p-6 relative overflow-hidden shadow-2xl min-h-[460px] flex flex-col justify-between">
+        
+        <!-- Top Wall: Window View -->
+        <div class="w-full bg-slate-900/90 border border-dashed border-sky-500/40 rounded-xl py-2 px-4 text-center text-xs font-bold text-sky-400 flex items-center justify-center gap-2">
+          <i data-lucide="sun" class="w-4 h-4"></i>
+          DÃY BÀN VIEW CỬA KÍNH HƯỚNG PHỐ ĐI BỘ (PANORAMIC VIEW)
+        </div>
+
+        <!-- Floor Grid Layout of Tables -->
+        <div class="my-8 grid grid-cols-3 gap-6 relative">
+          
+          <!-- Row 1: Window Row -->
+          <!-- Table 1 (Booked) -->
+          <div class="h-24 bg-rose-950/40 border-2 border-rose-600/70 rounded-2xl flex flex-col items-center justify-center p-2 opacity-70 cursor-not-allowed relative">
+            <span class="text-xs font-black text-rose-300">BÀN W-01</span>
+            <span class="text-[10px] text-slate-400">2 Ghế • Cửa sổ</span>
+            <span class="mt-2 text-[10px] bg-rose-600/30 text-rose-300 px-2 py-0.5 rounded font-bold">ĐÃ ĐẶT</span>
+          </div>
+
+          <!-- Table 2 (Available) -->
+          <div onclick="selectTable('W-02', 'Bàn Cửa Sổ Hướng Phố', '2 - 4 Khách', '150.000 VNĐ', 'Trống khả dụng', 'emerald')" 
+               id="table-W-02"
+               class="table-btn h-24 bg-emerald-950/30 hover:bg-emerald-900/40 border-2 border-emerald-500/80 rounded-2xl flex flex-col items-center justify-center p-2 cursor-pointer transition relative group">
+            <span class="text-xs font-black text-emerald-300 group-hover:scale-110 transition">BÀN W-02</span>
+            <span class="text-[10px] text-slate-300">2 - 4 Ghế • Cửa sổ</span>
+            <span class="mt-2 text-[10px] bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full font-bold">CHỌN BÀN</span>
+          </div>
+
+          <!-- Table 3 (Holding) -->
+          <div class="h-24 bg-amber-950/30 border-2 border-amber-500/70 rounded-2xl flex flex-col items-center justify-center p-2 cursor-not-allowed relative">
+            <div class="absolute -top-2.5 bg-amber-500 text-slate-950 text-[9px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
+              <i data-lucide="hourglass" class="w-2.5 h-2.5"></i> 03:42
+            </div>
+            <span class="text-xs font-black text-amber-300">BÀN W-03</span>
+            <span class="text-[10px] text-slate-400">4 Ghế • Cửa sổ</span>
+            <span class="mt-2 text-[10px] text-amber-400 font-bold">ĐANG GIỮ CHỖ</span>
+          </div>
+
+          <!-- Row 2: Center Row -->
+          <!-- Table 4 (Available) -->
+          <div onclick="selectTable('C-04', 'Bàn Gia Đình Trung Tâm', '4 - 6 Khách', '200.000 VNĐ', 'Trống khả dụng', 'emerald')" 
+               id="table-C-04"
+               class="table-btn h-24 bg-emerald-950/30 hover:bg-emerald-900/40 border-2 border-emerald-500/80 rounded-2xl flex flex-col items-center justify-center p-2 cursor-pointer transition relative group">
+            <span class="text-xs font-black text-emerald-300 group-hover:scale-110 transition">BÀN C-04</span>
+            <span class="text-[10px] text-slate-300">4 - 6 Ghế • Trung tâm</span>
+            <span class="mt-2 text-[10px] bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full font-bold">CHỌN BÀN</span>
+          </div>
+
+          <!-- Table 5 (Selected Default) -->
+          <div onclick="selectTable('C-05', 'Bàn Sofa Trung Tâm VIP', '4 - 6 Khách', '200.000 VNĐ', 'Trống khả dụng', 'emerald')" 
+               id="table-C-05"
+               class="table-btn h-24 bg-blue-950/50 border-2 border-blue-500 rounded-2xl flex flex-col items-center justify-center p-2 cursor-pointer transition relative table-selected">
+            <div class="absolute -top-2.5 bg-blue-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full">
+              BẠN ĐANG CHỌN
+            </div>
+            <span class="text-xs font-black text-blue-300">BÀN C-05</span>
+            <span class="text-[10px] text-slate-200">4 - 6 Ghế • Sofa Da</span>
+            <span class="mt-2 text-[10px] bg-blue-500/20 text-blue-200 px-2.5 py-0.5 rounded-full font-bold">ĐÃ CHỌN</span>
+          </div>
+
+          <!-- Table 6 (VIP Room) -->
+          <div onclick="selectTable('VIP-01', 'Phòng Riêng Yên Tĩnh (Private Room)', '8 - 12 Khách', '500.000 VNĐ', 'Trống khả dụng', 'emerald')" 
+               id="table-VIP-01"
+               class="table-btn h-24 bg-purple-950/30 hover:bg-purple-900/40 border-2 border-purple-500/80 rounded-2xl flex flex-col items-center justify-center p-2 cursor-pointer transition relative group">
+            <span class="text-xs font-black text-purple-300 group-hover:scale-110 transition">PHÒNG VIP 01</span>
+            <span class="text-[10px] text-slate-300">8 - 12 Ghế • Riêng tư</span>
+            <span class="mt-2 text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded font-bold">PHÒNG VIP</span>
+          </div>
+
+        </div>
+
+        <!-- Bottom Wall: Entrance & Reception -->
+        <div class="w-full bg-slate-900/50 border border-slate-800 rounded-xl py-2 px-4 flex items-center justify-between text-xs text-slate-400">
+          <div class="flex items-center gap-2">
+            <i data-lucide="log-in" class="w-4 h-4 text-slate-400"></i>
+            <span>Lối vào chính / Thang máy</span>
+          </div>
+          <div class="flex items-center gap-2 font-mono text-slate-400">
+            <i data-lucide="concierge-bell" class="w-4 h-4"></i>
+            <span>Quầy Lễ Tân & Bar Tiếp Đón</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: DETAIL SIDEBAR (4 COLS) -->
+      <div class="lg:col-span-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-2xl backdrop-blur relative">
+        <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+          <div>
+            <p class="text-[10px] uppercase font-bold tracking-widest text-amber-400">Bàn đang chọn</p>
+            <h3 id="panel-title" class="text-xl font-black text-white">BÀN C-05</h3>
+          </div>
+          <span id="panel-badge" class="px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold rounded-lg">
+            Sẵn sàng
+          </span>
+        </div>
+
+        <!-- Table Attributes -->
+        <div class="py-4 space-y-3.5 text-xs">
+          <div class="flex justify-between py-1.5 border-b border-slate-800/60">
+            <span class="text-slate-400">Vị trí không gian:</span>
+            <span id="panel-location" class="font-bold text-slate-200">Khu Sofa Trung Tâm</span>
+          </div>
+          <div class="flex justify-between py-1.5 border-b border-slate-800/60">
+            <span class="text-slate-400">Sức chứa tối đa:</span>
+            <span id="panel-capacity" class="font-bold text-slate-200">4 - 6 Người lớn</span>
+          </div>
+          <div class="flex justify-between py-1.5 border-b border-slate-800/60">
+            <span class="text-slate-400">Khung giờ đã chọn:</span>
+            <span class="font-bold text-amber-300">19:00 - 21:00 (Hôm nay)</span>
+          </div>
+          <div class="flex justify-between py-1.5 border-b border-slate-800/60">
+            <span class="text-slate-400">Tiền cọc giữ chỗ:</span>
+            <span id="panel-deposit" class="font-black text-amber-400 text-sm">200.000 VNĐ</span>
+          </div>
+        </div>
+
+        <!-- Notice Box -->
+        <div class="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-200 leading-relaxed mb-6 flex gap-2">
+          <i data-lucide="shield-alert" class="w-4 h-4 shrink-0 text-amber-400 mt-0.5"></i>
+          <span>Khi bấm nút, bàn sẽ được <b>khóa tạm 5 phút</b> để bạn quét mã VietQR. Quá 5 phút bàn sẽ tự động mở lại cho khách khác.</span>
+        </div>
+
+        <!-- Action Button -->
+        <button class="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-sm rounded-xl transition shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2">
+          <span>GIỮ BÀN NÀY VÀ ĐẶT CỌC</span>
+          <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+
+        <p class="text-center text-[10px] text-slate-400 mt-3 flex items-center justify-center gap-1">
+          <i data-lucide="lock" class="w-3 h-3"></i> Bảo vệ giao dịch an toàn với Redis Distributed Lock
+        </p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 4. VALUE PROPOSITION: WHY TABLEMASTER -->
+  <section class="max-w-7xl mx-auto px-6 py-16">
+    <div class="text-center max-w-2xl mx-auto mb-12">
+      <h3 class="text-2xl md:text-3xl font-black text-white">Tại sao nên đặt bàn qua sơ đồ trực tiếp?</h3>
+      <p class="text-sm text-slate-400 mt-2">Giải quyết triệt để sự thất vọng khi đến nơi bàn ăn không đúng như mong đợi.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="bg-slate-900/60 border border-slate-800 p-6 rounded-2xl hover:border-slate-700 transition">
+        <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-4">
+          <i data-lucide="layout-grid" class="w-6 h-6"></i>
+        </div>
+        <h4 class="text-base font-bold text-white mb-2">Sơ đồ 2D trực quan</h4>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Tự tay chọn vị trí sát cửa sổ ngắm hoàng hôn, phòng riêng kín đáo hay bàn rộng cho tiệc công ty như đang mua vé xem phim.
+        </p>
+      </div>
+
+      <div class="bg-slate-900/60 border border-slate-800 p-6 rounded-2xl hover:border-slate-700 transition">
+        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4">
+          <i data-lucide="zap" class="w-6 h-6"></i>
+        </div>
+        <h4 class="text-base font-bold text-white mb-2">Real-time WebSocket</h4>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Trạng thái bàn xanh/đỏ/vàng nhảy tức thì không cần reload trang. Người khác vừa giữ bàn là bạn thấy bàn đổi màu ngay.
+        </p>
+      </div>
+
+      <div class="bg-slate-900/60 border border-slate-800 p-6 rounded-2xl hover:border-slate-700 transition">
+        <div class="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 mb-4">
+          <i data-lucide="credit-card" class="w-6 h-6"></i>
+        </div>
+        <h4 class="text-base font-bold text-white mb-2">Chống bùng cọc thông minh</h4>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Cơ chế tạo mã VietQR tự động. Nếu sau 5 phút không cọc, hàng đợi Message Queue sẽ tự động trả bàn về trạng thái trống.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. FEATURED RESTAURANTS -->
+  <section class="max-w-7xl mx-auto px-6 pb-20">
+    <div class="flex justify-between items-end mb-8">
+      <div>
+        <h3 class="text-2xl font-black text-white">Nhà hàng có sơ đồ xem trước hôm nay</h3>
+        <p class="text-xs text-slate-400 mt-1">Hơn 40+ nhà hàng tiệc cao cấp đã số hóa mặt bằng</p>
+      </div>
+      <a href="#" class="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1">
+        Xem tất cả <i data-lucide="chevron-right" class="w-4 h-4"></i>
+      </a>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      
+      <!-- Card 1 -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition group">
+        <div class="h-44 bg-slate-800 relative overflow-hidden">
+          <img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=600&q=80" alt="Restaurant" class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
+          <span class="absolute top-3 right-3 bg-slate-950/80 backdrop-blur text-emerald-400 text-[10px] font-extrabold px-2.5 py-1 rounded-lg border border-emerald-500/30">
+            Còn 8 bàn trống
+          </span>
+        </div>
+        <div class="p-4">
+          <span class="text-[10px] text-amber-400 font-bold uppercase tracking-wider">Fine Dining • Quận 1</span>
+          <h5 class="text-sm font-bold text-white mt-1">Le Bistro Heritage</h5>
+          <p class="text-[11px] text-slate-400 mt-1">Phù hợp hẹn hò, bàn view phố đi bộ Nguyễn Huệ</p>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+            <span class="text-xs font-black text-slate-200">Từ 500k/người</span>
+            <button class="text-xs bg-slate-800 hover:bg-slate-700 text-white font-bold px-3 py-1.5 rounded-lg transition">Xem sơ đồ</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition group">
+        <div class="h-44 bg-slate-800 relative overflow-hidden">
+          <img src="https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=600&q=80" alt="Restaurant" class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
+          <span class="absolute top-3 right-3 bg-slate-950/80 backdrop-blur text-amber-400 text-[10px] font-extrabold px-2.5 py-1 rounded-lg border border-amber-500/30">
+            Chỉ còn 2 bàn
+          </span>
+        </div>
+        <div class="p-4">
+          <span class="text-[10px] text-amber-400 font-bold uppercase tracking-wider">Rooftop Bar • Quận 3</span>
+          <h5 class="text-sm font-bold text-white mt-1">Twilight Sky Lounge</h5>
+          <p class="text-[11px] text-slate-400 mt-1">Bàn ngắm hoàng hôn, âm nhạc acoustic nhẹ</p>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+            <span class="text-xs font-black text-slate-200">Từ 350k/người</span>
+            <button class="text-xs bg-slate-800 hover:bg-slate-700 text-white font-bold px-3 py-1.5 rounded-lg transition">Xem sơ đồ</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition group">
+        <div class="h-44 bg-slate-800 relative overflow-hidden">
+          <img src="https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=600&q=80" alt="Restaurant" class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
+          <span class="absolute top-3 right-3 bg-slate-950/80 backdrop-blur text-emerald-400 text-[10px] font-extrabold px-2.5 py-1 rounded-lg border border-emerald-500/30">
+            Còn 12 bàn trống
+          </span>
+        </div>
+        <div class="p-4">
+          <span class="text-[10px] text-amber-400 font-bold uppercase tracking-wider">Steakhouse • Bình Thạnh</span>
+          <h5 class="text-sm font-bold text-white mt-1">Black Angus Grill</h5>
+          <p class="text-[11px] text-slate-400 mt-1">Phòng riêng VIP cho nhóm đối tác, họp mặt</p>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+            <span class="text-xs font-black text-slate-200">Từ 600k/người</span>
+            <button class="text-xs bg-slate-800 hover:bg-slate-700 text-white font-bold px-3 py-1.5 rounded-lg transition">Xem sơ đồ</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden hover:border-slate-700 transition group">
+        <div class="h-44 bg-slate-800 relative overflow-hidden">
+          <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=600&q=80" alt="Restaurant" class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
+          <span class="absolute top-3 right-3 bg-slate-950/80 backdrop-blur text-rose-400 text-[10px] font-extrabold px-2.5 py-1 rounded-lg border border-rose-500/30">
+            Hết bàn giờ vàng
+          </span>
+        </div>
+        <div class="p-4">
+          <span class="text-[10px] text-amber-400 font-bold uppercase tracking-wider">Ẩm thực Nhật • Quận 7</span>
+          <h5 class="text-sm font-bold text-white mt-1">Sakura Omakase Room</h5>
+          <p class="text-[11px] text-slate-400 mt-1">Quầy bar xem trực tiếp đầu bếp chế biến</p>
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
+            <span class="text-xs font-black text-slate-200">Từ 1.200k/người</span>
+            <button class="text-xs bg-slate-800 hover:bg-slate-700 text-white font-bold px-3 py-1.5 rounded-lg transition">Xem sơ đồ</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 6. FOOTER -->
+  <footer class="mt-auto border-t border-slate-800 bg-[#070a10] py-8 text-xs text-slate-400">
+    <div class="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-2">
+        <span class="font-extrabold text-white">TableMaster</span>
+        <span>© 2026 - Đồ án Tốt nghiệp Kỹ thuật Phần mềm (React + Spring Boot)</span>
+      </div>
+      <div class="flex items-center gap-6">
+        <a href="#" class="hover:text-white transition">Tài liệu API (Swagger)</a>
+        <a href="#" class="hover:text-white transition">Sơ đồ Kiến trúc</a>
+        <a href="#" class="hover:text-white transition">GitHub Repo</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- SCRIPT XỬ LÝ CLICK TƯƠNG TÁC SƠ ĐỒ BÀN -->
+  <script>
+    lucide.createIcons();
+
+    function selectTable(code, name, capacity, deposit, status, color) {
+      // 1. Cập nhật Sidebar
+      document.getElementById('panel-title').innerText = 'BÀN ' + code;
+      document.getElementById('panel-location').innerText = name;
+      document.getElementById('panel-capacity').innerText = capacity;
+      document.getElementById('panel-deposit').innerText = deposit;
+      
+      // 2. Cập nhật CSS bàn được chọn
+      document.querySelectorAll('.table-btn').forEach(btn => {
+        btn.classList.remove('table-selected', 'border-blue-500', 'bg-blue-950/50');
+      });
+
+      const selectedEl = document.getElementById('table-' + code);
+      if (selectedEl) {
+        selectedEl.classList.add('table-selected', 'border-blue-500', 'bg-blue-950/50');
+      }
+    }
+  </script>
+</body>
+</html>
