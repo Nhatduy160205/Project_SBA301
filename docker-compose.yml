@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # 1. POSTGRESQL 16 (5 CSDL ĐỘC LẬP TỰ ĐỘNG KHỞI TẠO)
+  postgres:
+    image: postgres:16-alpine
+    container_name: tablemaster_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_MULTIPLE_DATABASES: tablemaster_auth,tablemaster_restaurant,tablemaster_booking,tablemaster_payment,tablemaster_analytics
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infrastructure/db-init:/docker-entrypoint-initdb.d
+    networks:
+      - tablemaster-network
+
+  # 2. REDIS CLUSTER 7.2 (IN-MEMORY CACHE, REDLOCK & BLACKLIST)
+  redis:
+    image: redis:7.2-alpine
+    container_name: tablemaster_redis
+    restart: always
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - tablemaster-network
+
+  # 3. APACHE KAFKA (KRAFT MODE - EVENT STREAMING)
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: tablemaster_kafka
+    restart: always
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+    volumes:
+      - kafkadata:/bitnami/kafka
+    networks:
+      - tablemaster-network
+
+networks:
+  tablemaster-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redisdata:
+  kafkadata:

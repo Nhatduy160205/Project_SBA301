@@ -185,28 +185,28 @@ Quản lý thực khách thành viên, lễ tân tại sảnh (Host), quản lý
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 1. BẢNG NGƯỜI DÙNG & NHÂN VIÊN
+-- 1. BẢNG NGƯỜI DÙNG & NHÂN VIÊN (HYBRID AUTH: KHÁCH ĐẶT 1-CHẠM & NHÂN VIÊN BẢO MẬT)
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    email VARCHAR(120) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
+    phone_number VARCHAR(20) UNIQUE NOT NULL, -- Định dạng chuẩn quốc tế E.164 (+84901234567)
+    email VARCHAR(120) UNIQUE,                -- Có thể NULL lúc khách đặt nhanh vãng lai
+    password_hash VARCHAR(255),               -- NULL: Khách vãng lai, NOT NULL: Nhân sự có mật khẩu
     full_name VARCHAR(100) NOT NULL,
-    phone_number VARCHAR(20) UNIQUE NOT NULL,
     role VARCHAR(30) NOT NULL DEFAULT 'ROLE_CUSTOMER', 
-    -- Phân quyền nội bộ:
-    -- 'ROLE_CUSTOMER': Thực khách xem sơ đồ, cọc bàn, nhận vé QR.
+    -- Phân quyền nội bộ (RBAC):
+    -- 'ROLE_CUSTOMER': Thực khách xem sơ đồ, cọc bàn, nhận vé QR, tích điểm qua SĐT.
     -- 'ROLE_HOST'    : Lễ tân cầm Tablet quét QR, xếp khách vãng lai, chuyển bàn, thanh toán.
     -- 'ROLE_WAITER'  : Nhân viên phục vụ dùng Mobile App: Gọi món tại bàn, nhập món riêng, chuyển/ghép bàn.
     -- 'ROLE_MANAGER' : Quản lý ca điều phối sơ đồ, xử lý hoàn hủy tiền cọc.
     -- 'ROLE_ADMIN'   : Chủ nhà hàng cấu hình sơ đồ tầng, xem báo cáo doanh thu.
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    loyalty_points INT DEFAULT 0, -- Tích điểm thành viên thân thiết cho nhà hàng
+    loyalty_points INT DEFAULT 0, -- Tích điểm thành viên thân thiết tự động theo SĐT
     avatar_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. BẢNG REFRESH TOKENS (Quản lý phiên đăng nhập thiết bị)
+-- 2. BẢNG REFRESH TOKENS (Quản lý phiên đăng nhập thiết bị nhân viên)
 CREATE TABLE refresh_tokens (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -217,8 +217,9 @@ CREATE TABLE refresh_tokens (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_phone ON users(phone_number);
+CREATE INDEX idx_users_email ON users(email) WHERE email IS NOT NULL;
+CREATE INDEX idx_users_role ON users(role) WHERE is_active = TRUE;
 CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id, is_revoked);
 ```
 
@@ -276,22 +277,19 @@ CREATE TABLE floor_plans (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. BẢNG BÀN ĂN VẬT LÝ THEO TỪNG TẦNG (TABLES)
+-- 4. BẢNG BÀN ĂN VẬT LÝ & VỊ TRÍ REAL-TIME (TABLES)
 CREATE TABLE tables (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     floor_plan_id UUID NOT NULL REFERENCES floor_plans(id) ON DELETE CASCADE,
-    table_code VARCHAR(30) UNIQUE NOT NULL, -- Mã bàn duy nhất của quán: "T-01", "VIP-01", "ROOF-05"
-    shape VARCHAR(20) NOT NULL DEFAULT 'RECT', -- 'RECT' (Chữ nhật/Vuông), 'CIRCLE' (Tròn)
+    table_code VARCHAR(30) UNIQUE NOT NULL, -- "OUT-01", "BAR-02", "VIP-01", "T1-05"
+    zone_type VARCHAR(50) NOT NULL DEFAULT 'STANDARD', -- 'OUTDOOR', 'BAR_COUNTER', 'PRIVATE_VIP', 'WINDOW_VIEW', 'STANDARD'
     min_capacity INT NOT NULL DEFAULT 2,
     max_capacity INT NOT NULL DEFAULT 4,
+    custom_deposit DECIMAL(12, 2), -- Tiền cọc riêng theo bàn (VD: Phòng VIP 500k)
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     pos_x FLOAT NOT NULL DEFAULT 100.0,
     pos_y FLOAT NOT NULL DEFAULT 100.0,
-    width FLOAT NOT NULL DEFAULT 80.0,
-    height FLOAT NOT NULL DEFAULT 80.0,
-    rotation_deg FLOAT NOT NULL DEFAULT 0.0,
-    custom_deposit DECIMAL(12, 2), -- Tiền cọc riêng cho bàn đắc địa (nếu NULL sẽ lấy mặc định của quán)
-    zone_tag VARCHAR(50) DEFAULT 'STANDARD', -- 'WINDOW_VIEW', 'PRIVATE_VIP', 'OUTDOOR_BALCONY', 'STANDARD'
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    shape VARCHAR(20) NOT NULL DEFAULT 'RECT', -- 'RECT', 'CIRCLE'
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -332,20 +330,30 @@ CREATE TABLE bookings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     booking_code VARCHAR(20) UNIQUE NOT NULL, -- Mã hiển thị cho khách: "PB-20261024-001"
     user_id UUID NOT NULL,                   -- Ref tablemaster_auth.users(id)
+    -- Snapshot thông tin người đi ăn thực tế (Độc lập & không lo đổi chủ SIM)
+    guest_name VARCHAR(100) NOT NULL,
+    guest_phone VARCHAR(20) NOT NULL,        -- E.164 Format
+    guest_email VARCHAR(120) NOT NULL,       -- Bắt buộc để gửi Vé QR qua Email
     booking_date DATE NOT NULL,
     time_slot_id UUID NOT NULL,              -- Ref tablemaster_restaurant.time_slots(id)
     guest_count INT NOT NULL CHECK (guest_count > 0),
     total_deposit DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
-    status VARCHAR(30) NOT NULL DEFAULT 'HOLDING',
-    -- 'HOLDING'   : Đang khóa bàn 5 phút chờ cọc
-    -- 'CONFIRMED' : Đã cọc thành công, có vé QR
-    -- 'SEATED'    : Lễ tân đã quét QR cho khách vào bàn
-    -- 'COMPLETED' : Khách đã dùng bữa xong và thanh toán bill
-    -- 'CANCELLED' : Hủy trước giờ quy định (có thể được hoàn cọc)
-    -- 'NO_SHOW'   : Quá 15 phút không đến, tịch thu cọc
+    status VARCHAR(30) NOT NULL DEFAULT 'PENDING_REVIEW',
+    -- VÒNG ĐỜI TRẠNG THÁI:
+    -- 'PENDING_REVIEW'   : Khách vừa gửi đơn trên web, chờ Lễ tân gọi
+    -- 'AWAITING_PAYMENT' : Lễ tân đã gọi chốt OK, chờ khách chuyển khoản cọc VietQR
+    -- 'CONFIRMED'        : Đã cọc thành công, ĐÃ GỬI VÉ QR EMAIL
+    -- 'SEATED'           : Lễ tân quét QR check-in khách vào bàn
+    -- 'COMPLETED'        : Khách đã dùng bữa xong và thanh toán bill
+    -- 'REJECTED'         : Từ chối (gọi không nghe máy, khách đổi ý)
+    -- 'EXPIRED'          : Quá hạn payment_deadline (tự động nhả bàn)
+    -- 'CANCELLED'        : Hủy trước giờ quy định (có thể được hoàn cọc)
+    -- 'NO_SHOW'          : Quá 15 phút không đến, tịch thu cọc
     special_notes TEXT,                      -- Ghi chú tiệc: "Setup nến sinh nhật góc cửa sổ", "Tiếp đối tác"
-    checkin_qr_token VARCHAR(255) UNIQUE,     -- Mã Token bảo mật sinh mã QR Check-in
-    expires_at TIMESTAMP WITH TIME ZONE NOT NULL, -- Mốc hết hạn 5 phút cho HOLDING
+    staff_notes TEXT,                        -- Ghi chú của Lễ tân sau cuộc gọi Telesales
+    reviewed_by_user_id UUID,                -- Ref tablemaster_auth.users(id) (Lễ tân gọi điện)
+    payment_deadline TIMESTAMP WITH TIME ZONE, -- Hạn chót cọc VietQR (VD: 60 phút)
+    checkin_qr_token VARCHAR(255) UNIQUE,     -- Mã Token bảo mật sinh mã QR Check-in gửi qua Email
     seated_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -379,9 +387,7 @@ CREATE TABLE table_order_items (
     quantity INT NOT NULL CHECK (quantity > 0),
     unit_price DECIMAL(12, 2) NOT NULL,
     status VARCHAR(30) NOT NULL DEFAULT 'PREPARING', -- 'PREPARING', 'SERVED', 'CANCELLED'
-    category VARCHAR(80) DEFAULT 'Món Gọi Thêm',
     notes TEXT,                 -- Ghi chú chế biến bếp (Medium rare, ít đá...)
-    is_custom_item BOOLEAN NOT NULL DEFAULT FALSE,
     ordered_by_user_id UUID,    -- Ref tablemaster_auth.users(id) (Nhân viên phục vụ)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -403,7 +409,7 @@ CREATE TABLE outbox_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     aggregate_type VARCHAR(50) NOT NULL, -- 'BOOKING', 'TABLE'
     aggregate_id VARCHAR(50) NOT NULL,
-    event_type VARCHAR(60) NOT NULL,    -- 'TableHeldEvent', 'BookingConfirmedEvent', 'TableTransferredEvent'
+    event_type VARCHAR(60) NOT NULL,    -- 'BookingCreatedEvent', 'BookingConfirmedEvent', 'TableTransferredEvent'
     payload JSONB NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
     retry_count INT DEFAULT 0,
@@ -413,8 +419,9 @@ CREATE TABLE outbox_events (
 
 CREATE INDEX idx_bookings_date_slot ON bookings(booking_date, time_slot_id, status);
 CREATE INDEX idx_bookings_user ON bookings(user_id, status);
+CREATE INDEX idx_bookings_qr_token ON bookings(checkin_qr_token) WHERE checkin_qr_token IS NOT NULL;
+CREATE INDEX idx_bookings_pending_deadline ON bookings(status, payment_deadline) WHERE status = 'AWAITING_PAYMENT';
 CREATE INDEX idx_table_order_items ON table_order_items(booking_id, table_id, status);
-CREATE INDEX idx_bookings_holding ON bookings(status, expires_at) WHERE status = 'HOLDING';
 CREATE INDEX idx_outbox_pending ON outbox_events(status, created_at) WHERE status = 'PENDING';
 ```
 
@@ -442,13 +449,10 @@ CREATE TABLE payment_transactions (
     bank_transaction_id VARCHAR(100),              -- Mã bút toán phía Ngân hàng bắn về
     status VARCHAR(30) NOT NULL DEFAULT 'PENDING', 
     -- 'PENDING'       : Chờ khách quét QR cọc
-    -- 'ESCROW_HOLDING': Webhook xác thực thành công, tiền giữ trong tài khoản tạm giữ
-    -- 'SUCCESS'       : Tiền cọc đã ghi nhận thành công
-    -- 'DISBURSED'     : Đơn ăn xong, tiền cọc đã giải ngân về tài khoản công ty
+    -- 'SUCCESS'       : Tiền cọc đã vào tài khoản ngân hàng thành công
+    -- 'FAILED'        : Giao dịch lỗi / Hết hạn
     -- 'REFUNDED'      : Hoàn cọc cho khách do hủy đúng hạn
-    -- 'FAILED'        : Giao dịch lỗi / hết hạn
     paid_at TIMESTAMP WITH TIME ZONE,
-    escrow_disbursed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -458,25 +462,34 @@ CREATE TABLE payment_refunds (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     payment_transaction_id UUID NOT NULL REFERENCES payment_transactions(id) ON DELETE RESTRICT,
     refund_amount DECIMAL(12, 2) NOT NULL,
-    refund_ratio FLOAT NOT NULL, -- 1.0 (Hoàn 100% nếu hủy trước 6h), 0.5 (Hoàn 50%)
+    refund_ratio FLOAT NOT NULL DEFAULT 1.0, -- 1.0 = Hoàn 100% (hủy trước 6 tiếng), 0.5 = Hoàn 50%
     refund_status VARCHAR(30) NOT NULL DEFAULT 'PROCESSING',
-    reason TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    -- 'PROCESSING' : Đang xử lý hoàn tiền
+    -- 'COMPLETED'  : Đã chuyển tiền hoàn thành công về tài khoản khách
+    -- 'REJECTED'   : Từ chối hoàn cọc (hủy quá sát giờ)
+    refund_bank_bin VARCHAR(10),             -- Mã ngân hàng nhận hoàn
+    refund_account_no VARCHAR(30),           -- Số tài khoản nhận tiền hoàn
+    refund_account_holder VARCHAR(100),      -- Tên chủ tài khoản nhận hoàn
+    reason TEXT,                             -- Lý do khách hủy bàn
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP WITH TIME ZONE
 );
 
 -- 3. BẢNG LOG WEBHOOK NGÂN HÀNG (AUDIT LOG CHỐNG GIAN LẬN CHUYỂN KHOẢN)
 CREATE TABLE webhook_audit_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    provider VARCHAR(50) NOT NULL, -- "PAYOS", "CASSO", "SEAPAY"
+    provider VARCHAR(50) NOT NULL,           -- "PAYOS", "CASSO", "MBBANK"
     payload JSONB NOT NULL,
     signature_header TEXT,
     is_signature_valid BOOLEAN NOT NULL,
+    processed_status VARCHAR(30) NOT NULL DEFAULT 'PROCESSED',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_payment_booking ON payment_transactions(booking_id);
 CREATE INDEX idx_payment_content ON payment_transactions(transfer_content);
-CREATE INDEX idx_payment_status ON payment_transactions(status);
+CREATE INDEX idx_payment_booking ON payment_transactions(booking_id);
+CREATE INDEX idx_payment_status_created ON payment_transactions(status, created_at DESC);
+CREATE INDEX idx_refund_payment_id ON payment_refunds(payment_transaction_id);
 ```
 
 ---
@@ -499,24 +512,43 @@ CREATE TABLE daily_shift_metrics (
     total_no_shows INT DEFAULT 0,
     total_deposit_collected DECIMAL(14, 2) DEFAULT 0.00,
     no_show_penalty_income DECIMAL(14, 2) DEFAULT 0.00,
+    total_food_revenue DECIMAL(14, 2) DEFAULT 0.00,
     revpash_score DECIMAL(10, 2) DEFAULT 0.00, -- Doanh thu trên mỗi ghế khả dụng theo giờ
     occupancy_rate FLOAT DEFAULT 0.0,          -- Tỷ lệ lấp đầy bàn (%)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_date_slot UNIQUE (metric_date, time_slot_id)
 );
 
--- 2. BẢNG XẾP HẠNG BÀN "HOT" TRONG QUÁN (TABLE POPULARITY)
+-- 2. BẢNG XẾP HẠNG BÀN "HOT" TRONG QUÁN (TABLE POPULARITY & HEATMAP)
 CREATE TABLE table_popularity_stats (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     table_id UUID UNIQUE NOT NULL,
     table_code VARCHAR(30) NOT NULL,
+    zone_type VARCHAR(50) NOT NULL,
     total_reservations INT DEFAULT 0,
     cancel_count INT DEFAULT 0,
     total_revenue_generated DECIMAL(14, 2) DEFAULT 0.00,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_shift_metrics_date ON daily_shift_metrics(metric_date);
+-- 3. BẢNG HỒ SƠ & PHÂN HẠNG KHÁCH VIP (VIP CUSTOMER INSIGHTS)
+CREATE TABLE vip_customer_insights (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID UNIQUE NOT NULL,
+    phone_number VARCHAR(20) NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    total_visits INT DEFAULT 0,
+    total_spent DECIMAL(14, 2) DEFAULT 0.00,
+    average_party_size FLOAT DEFAULT 0.0,
+    last_visit_date DATE,
+    favorite_zone VARCHAR(50) DEFAULT 'STANDARD',
+    loyalty_tier VARCHAR(30) NOT NULL DEFAULT 'BRONZE',
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_shift_metrics_date ON daily_shift_metrics(metric_date DESC);
+CREATE INDEX idx_popularity_revenue ON table_popularity_stats(total_revenue_generated DESC);
+CREATE INDEX idx_vip_tier_spent ON vip_customer_insights(loyalty_tier, total_spent DESC);
 ```
 
 ---
