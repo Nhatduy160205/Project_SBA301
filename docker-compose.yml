@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 services:
   # 1. POSTGRESQL 16 (5 CSDL ĐỘC LẬP TỰ ĐỘNG KHỞI TẠO)
@@ -7,14 +7,14 @@ services:
     container_name: tablemaster_postgres
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_USER: postgres_duy_dao
+      POSTGRES_PASSWORD: 1234567
       POSTGRES_MULTIPLE_DATABASES: tablemaster_auth,tablemaster_restaurant,tablemaster_booking,tablemaster_payment,tablemaster_analytics
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./infrastructure/db-init:/docker-entrypoint-initdb.d
+      - ./infrastructure/db-init:/docker-entrypoint-initdb.d:ro
     networks:
       - tablemaster-network
 
@@ -31,7 +31,7 @@ services:
     networks:
       - tablemaster-network
 
-  # 3. APACHE KAFKA (KRAFT MODE - EVENT STREAMING)
+ # 3. APACHE KAFKA (KRAFT MODE - EVENT STREAMING)
   kafka:
     image: apache/kafka:latest
     container_name: tablemaster_kafka
