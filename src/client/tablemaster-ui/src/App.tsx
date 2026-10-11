@@ -8,6 +8,7 @@ import {
 
 import { Navbar } from './components/common/Navbar';
 import type { ActiveView } from './components/common/Navbar';
+import { LoginModal } from './components/common/LoginModal';
 import { LandingPage } from './views/LandingPage';
 import { BookingPage } from './views/BookingPage';
 import { HostTabletPage } from './views/HostTabletPage';
@@ -15,7 +16,7 @@ import { WaitstaffMobilePage } from './views/WaitstaffMobilePage';
 import { AdminStudioPage } from './views/AdminStudioPage';
 import { RestaurantManagementPage } from './views/restaurant/RestaurantManagementPage';
 import { INITIAL_TABLES, INITIAL_BOOKINGS, INITIAL_TABLE_ORDERS } from './data/mockData';
-import type { TableItem, TableStatus, BookingDetails, TableOrderRecord } from './types';
+import type { TableItem, TableStatus, BookingDetails, TableOrderRecord, AuthUser } from './types';
 import { bookingApi } from './services/bookingApi';
 
 
@@ -66,6 +67,41 @@ export function App() {
         setBackendConnected(false);
       });
   }, []);
+
+  // Authentication state
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('tm_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
+  const handleLogout = async () => {
+    const refreshToken = localStorage.getItem('tm_refresh_token');
+    const accessToken = localStorage.getItem('tm_access_token');
+    try {
+      if (refreshToken || accessToken) {
+        await fetch('/api/v1/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({ refreshToken }),
+        });
+      }
+    } catch (e) {
+      console.warn('Logout API error:', e);
+    } finally {
+      localStorage.removeItem('tm_user');
+      localStorage.removeItem('tm_access_token');
+      localStorage.removeItem('tm_refresh_token');
+      setCurrentUser(null);
+    }
+  };
 
   const handleNavigate = (view: ActiveView, floor?: 1 | 2 | 3) => {
     if (floor) {
@@ -266,7 +302,14 @@ export function App() {
   return (
     <div className="min-h-screen flex flex-col bg-[#FDFBF7] text-[#0F172A] selection:bg-amber-100 selection:text-amber-900">
       {/* Sticky Luxury Navbar */}
-      <Navbar currentView={currentView} onNavigate={handleNavigate} backendConnected={backendConnected} />
+      <Navbar
+        currentView={currentView}
+        onNavigate={handleNavigate}
+        backendConnected={backendConnected}
+        currentUser={currentUser}
+        onOpenLogin={() => setIsLoginModalOpen(true)}
+        onLogout={handleLogout}
+      />
 
       {/* Main View Transition Container */}
       <main className="flex-1 flex flex-col">
@@ -443,6 +486,14 @@ export function App() {
         </div>
       </footer>
 
+      {/* Authentication Login Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+        }}
+      />
     </div>
   );
 }
