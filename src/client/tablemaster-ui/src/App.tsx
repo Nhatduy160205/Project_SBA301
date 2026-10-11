@@ -13,6 +13,7 @@ import { BookingPage } from './views/BookingPage';
 import { HostTabletPage } from './views/HostTabletPage';
 import { WaitstaffMobilePage } from './views/WaitstaffMobilePage';
 import { AdminStudioPage } from './views/AdminStudioPage';
+import { RestaurantManagementPage } from './views/restaurant/RestaurantManagementPage';
 import { INITIAL_TABLES, INITIAL_BOOKINGS, INITIAL_TABLE_ORDERS } from './data/mockData';
 import type { TableItem, TableStatus, BookingDetails, TableOrderRecord } from './types';
 
@@ -294,6 +295,18 @@ export function App() {
                 onMergeTables={handleMergeTables}
                 onNavigateToHost={() => handleNavigate('host')}
               />
+            </motion.div>
+          )}
+
+          {currentView === 'restaurant' && (
+            <motion.div
+              key="restaurant"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <RestaurantManagementPage />
             </motion.div>
           )}
 
