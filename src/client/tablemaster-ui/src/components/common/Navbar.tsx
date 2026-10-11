@@ -1,14 +1,24 @@
 import React from 'react';
-import { Calendar, LayoutDashboard, Shield, Compass } from 'lucide-react';
+import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut } from 'lucide-react';
+import type { AuthUser } from '../../types';
 
 export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'admin';
 
 interface NavbarProps {
   currentView: ActiveView;
   onNavigate: (view: ActiveView) => void;
+  currentUser?: AuthUser | null;
+  onOpenLogin: () => void;
+  onLogout: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  currentView,
+  onNavigate,
+  currentUser,
+  onOpenLogin,
+  onLogout,
+}) => {
   return (
     <header className="sticky top-0 z-40 w-full bg-[#FBF8F3]/95 backdrop-blur-md border-b border-[#E8DFD1] transition-all">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
@@ -88,15 +98,50 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
           </button>
         </nav>
 
-        {/* Right CTA Button (Camel pill button matching video) */}
+        {/* Right CTA Button & Auth */}
         <div className="flex items-center gap-3">
           <button
             onClick={() => onNavigate('booking')}
-            className="btn-tan px-6 py-2.5 text-xs font-semibold shadow-2xs flex items-center gap-2 cursor-pointer active:scale-95"
+            className="btn-tan px-5 py-2.5 text-xs font-semibold shadow-2xs flex items-center gap-2 cursor-pointer active:scale-95"
           >
             <Compass className="w-4 h-4" />
             <span>Đặt Bàn Ngay</span>
           </button>
+
+          {/* User Auth Section */}
+          {currentUser ? (
+            <div className="flex items-center gap-2 pl-2 border-l border-[#E8DFD1]">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#F2ECE1] border border-[#E8DFD1]">
+                <div className="w-6 h-6 rounded-full bg-[#8C6A43] text-white flex items-center justify-center text-xs font-bold font-serif">
+                  {currentUser.fullName.charAt(0)}
+                </div>
+                <div className="text-left hidden sm:block">
+                  <div className="text-xs font-bold text-[#1C1917] leading-tight truncate max-w-[120px]">
+                    {currentUser.fullName}
+                  </div>
+                  <div className="text-[9px] font-mono text-[#8C6A43] font-semibold leading-none">
+                    {currentUser.role.replace('ROLE_', '')}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={onLogout}
+                title="Đăng xuất"
+                className="p-2 rounded-full hover:bg-red-50 text-stone-500 hover:text-red-600 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={onOpenLogin}
+              className="px-4 py-2.5 rounded-full border border-[#C4A480] bg-white hover:bg-[#FAF7F2] text-[#8C6A43] text-xs font-semibold shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition"
+            >
+              <LogIn className="w-4 h-4" />
+              <span>Đăng Nhập</span>
+            </button>
+          )}
         </div>
       </div>
     </header>
