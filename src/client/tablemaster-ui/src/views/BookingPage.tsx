@@ -235,7 +235,6 @@ export const BookingPage: React.FC<BookingPageProps> = ({
 
     setIsSubmitting(true);
     let realBookingCode = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
-    let createdBackendUUID = '';
 
     // GỌI BACKEND THẬT QUA REST API: POST /api/v1/bookings/request
     try {
@@ -259,7 +258,6 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       const res = await bookingApi.createBooking(payload);
       if (res.success && res.data) {
         realBookingCode = res.data.bookingCode;
-        createdBackendUUID = res.data.id;
         setBackendBookingUUID(res.data.id);
         console.log('✅ [Backend API] Đã tạo thành công đơn đặt bàn trên PostgreSQL:', res.data);
       }
