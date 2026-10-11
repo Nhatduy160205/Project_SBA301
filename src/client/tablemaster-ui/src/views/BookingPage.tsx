@@ -34,6 +34,7 @@ import {
 import type { TableItem, SignatureDish, BookingDetails } from '../types';
 import { SIGNATURE_DISHES } from '../data/mockData';
 import { QRPaymentModal } from '../components/common/QRPaymentModal';
+import { bookingApi, ensureUUID, SEED_DATA, type CreateBookingRequestPayload } from '../services/bookingApi';
 
 const OCCASIONS = [
   { id: 'date', label: 'Hẹn hò lãng mạn', icon: Heart },
@@ -160,6 +161,8 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   const [isQRModalOpen, setIsQRModalOpen] = useState<boolean>(false);
   const [currentBooking, setCurrentBooking] = useState<BookingDetails | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<BookingDetails | null>(null);
+  const [backendBookingUUID, setBackendBookingUUID] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const handleQuickTagClick = (tag: string) => {
     if (customNotes.includes(tag)) {
@@ -209,13 +212,15 @@ export const BookingPage: React.FC<BookingPageProps> = ({
 
   const effectiveTimeSlot = computeEffectiveSlot();
 
-  const handleOpenDepositModal = () => {
+  const handleOpenDepositModal = async () => {
     if (!customerName.trim() || !customerPhone.trim()) {
       alert('Vui lòng nhập họ tên và số điện thoại liên hệ');
       return;
     }
 
     const assignedTable = findMatchingTable();
+    const tableUUID = ensureUUID(assignedTable.id);
+
     const preOrderItems = Object.entries(selectedDishes)
       .map(([id, quantity]) => {
         const dish = SIGNATURE_DISHES.find((d) => d.id === id);
@@ -228,15 +233,50 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       : '';
     const fullNotes = `${occasionText}${customNotes}`.trim();
 
-    const bookingId = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
+    setIsSubmitting(true);
+    let realBookingCode = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
+    let createdBackendUUID = '';
+
+    // GỌI BACKEND THẬT QUA REST API: POST /api/v1/bookings/request
+    try {
+      const payload: CreateBookingRequestPayload = {
+        guestName: customerName,
+        guestPhone: customerPhone,
+        guestEmail: customerEmail || 'customer@leprimebistro.vn',
+        bookingDate: selectedDate,
+        timeSlotId: SEED_DATA.TIME_SLOT_ID,
+        guestCount: partySize,
+        tableIds: [tableUUID],
+        specialNotes: fullNotes,
+        totalDeposit: depositRequired,
+        preorderItems: preOrderItems.map((p) => ({
+          menuItemId: SEED_DATA.MENU_ITEM_ID,
+          quantity: p.quantity,
+          unitPrice: p.dish.price,
+        })),
+      };
+
+      const res = await bookingApi.createBooking(payload);
+      if (res.success && res.data) {
+        realBookingCode = res.data.bookingCode;
+        createdBackendUUID = res.data.id;
+        setBackendBookingUUID(res.data.id);
+        console.log('✅ [Backend API] Đã tạo thành công đơn đặt bàn trên PostgreSQL:', res.data);
+      }
+    } catch (err: any) {
+      console.warn('⚠️ [Backend API] Lỗi khi gửi đơn lên Backend (chuyển sang dự phòng):', err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+
     const newBooking: BookingDetails = {
-      bookingId,
+      bookingId: realBookingCode,
       customerName,
       phone: customerPhone,
       email: customerEmail || 'customer@leprimebistro.vn',
       partySize,
       floor: 1,
-      tableCode: `Le Prime (Lễ tân xếp)`,
+      tableCode: assignedTable.code || `Bàn ${assignedTable.id}`,
       tableId: assignedTable.id,
       date: selectedDate,
       timeSlot: effectiveTimeSlot,
@@ -246,15 +286,30 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       totalEstimatedAmount: grandTotal,
       createdAt: 'Vừa xong',
       status: 'PENDING_DEPOSIT',
-      vietqrCode: `TM ${bookingId}`,
+      vietqrCode: `TM ${realBookingCode}`,
     };
 
     setCurrentBooking(newBooking);
     setIsQRModalOpen(true);
   };
 
-  const handlePaymentSuccess = () => {
+  const handlePaymentSuccess = async () => {
     if (currentBooking) {
+      // GỌI BACKEND THẬT: DUYỆT ĐƠN VÀ XÁC NHẬN CỌC
+      if (backendBookingUUID) {
+        try {
+          const res = await bookingApi.approveAndRequestDeposit(
+            backendBookingUUID,
+            depositRequired,
+            60,
+            'Khách đã thanh toán cọc thành công qua VietQR'
+          );
+          console.log('✅ [Backend API] Duyệt cọc đơn thành công:', res.data);
+        } catch (err: any) {
+          console.warn('⚠️ [Backend API] Lỗi duyệt cọc trên backend:', err.message);
+        }
+      }
+
       const confirmedBooking: BookingDetails = {
         ...currentBooking,
         status: 'CONFIRMED',
@@ -1364,9 +1419,10 @@ export const BookingPage: React.FC<BookingPageProps> = ({
             {/* Submit Action Button */}
             <button
               onClick={handleOpenDepositModal}
-              className="w-full py-4 bg-gradient-to-r from-[#C4A480] to-[#B3936F] hover:brightness-105 text-white text-xs font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all active:scale-98"
+              disabled={isSubmitting}
+              className="w-full py-4 bg-gradient-to-r from-[#C4A480] to-[#B3936F] hover:brightness-105 text-white text-xs font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all active:scale-98 disabled:opacity-60"
             >
-              <span>Xác Nhận Đặt Bàn & Giữ Chỗ VietQR</span>
+              <span>{isSubmitting ? 'Đang gửi yêu cầu tới máy chủ...' : 'Xác Nhận Đặt Bàn & Giữ Chỗ VietQR'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 

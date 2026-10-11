@@ -6,9 +6,10 @@ export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'admin';
 interface NavbarProps {
   currentView: ActiveView;
   onNavigate: (view: ActiveView) => void;
+  backendConnected?: boolean | null;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
+export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, backendConnected }) => {
   return (
     <header className="sticky top-0 z-40 w-full bg-[#FBF8F3]/95 backdrop-blur-md border-b border-[#E8DFD1] transition-all">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
@@ -90,6 +91,18 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
 
         {/* Right CTA Button (Camel pill button matching video) */}
         <div className="flex items-center gap-3">
+          {backendConnected === true && (
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Backend: 8083 Online</span>
+            </div>
+          )}
+          {backendConnected === false && (
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+              <span>Backend: Offline</span>
+            </div>
+          )}
           <button
             onClick={() => onNavigate('booking')}
             className="btn-tan px-6 py-2.5 text-xs font-semibold shadow-2xs flex items-center gap-2 cursor-pointer active:scale-95"
