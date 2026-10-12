@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Phone,
@@ -14,6 +14,7 @@ import { BookingPage } from './views/BookingPage';
 import { HostTabletPage } from './views/HostTabletPage';
 import { WaitstaffMobilePage } from './views/WaitstaffMobilePage';
 import { AdminStudioPage } from './views/AdminStudioPage';
+import { RestaurantManagementPage } from './views/restaurant/RestaurantManagementPage';
 import { INITIAL_TABLES, INITIAL_BOOKINGS, INITIAL_TABLE_ORDERS } from './data/mockData';
 import type { TableItem, TableStatus, BookingDetails, TableOrderRecord, AuthUser } from './types';
 
@@ -24,6 +25,47 @@ export function App() {
   const [tables, setTables] = useState<TableItem[]>(INITIAL_TABLES);
   const [bookings, setBookings] = useState<BookingDetails[]>(INITIAL_BOOKINGS);
   const [tableOrders, setTableOrders] = useState<Record<string, TableOrderRecord>>(INITIAL_TABLE_ORDERS);
+  const [backendConnected, setBackendConnected] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    bookingApi
+      .getAllBookings()
+      .then((res) => {
+        if (res.success && Array.isArray(res.data)) {
+          setBackendConnected(true);
+          console.log('✅ [App] Đã kết nối với Backend Spring Boot (8083)! Có', res.data.length, 'đơn trong DB');
+          if (res.data.length > 0) {
+            const mapped: BookingDetails[] = res.data.map((b) => ({
+              bookingId: b.bookingCode || b.id.substring(0, 8),
+              customerName: b.guestName,
+              phone: b.guestPhone,
+              email: b.guestEmail,
+              partySize: b.guestCount,
+              floor: 1,
+              tableCode: b.tableIds && b.tableIds.length > 0 ? `Bàn VIP` : 'Sảnh',
+              tableId: b.tableIds && b.tableIds.length > 0 ? b.tableIds[0] : 'f1-t01',
+              date: b.bookingDate,
+              timeSlot: '19:00 - 21:00',
+              notes: b.specialNotes,
+              preOrders: [],
+              depositAmount: Number(b.totalDeposit) || 0,
+              totalEstimatedAmount: Number(b.totalDeposit) || 0,
+              createdAt: b.createdAt ? new Date(b.createdAt).toLocaleTimeString('vi-VN') : 'Hôm nay',
+              status: b.status === 'CONFIRMED' || b.status === 'SEATED' ? 'CONFIRMED' : 'PENDING_DEPOSIT',
+              vietqrCode: `TM ${b.bookingCode}`,
+            }));
+            setBookings((prev) => {
+              const existingCodes = new Set(mapped.map((m) => m.bookingId));
+              return [...mapped, ...prev.filter((p) => !existingCodes.has(p.bookingId))];
+            });
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('⚠️ [App] Chưa thể kết nối Backend:', err);
+        setBackendConnected(false);
+      });
+  }, []);
 
   // Authentication state
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
@@ -336,6 +378,18 @@ export function App() {
                 onMergeTables={handleMergeTables}
                 onNavigateToHost={() => handleNavigate('host')}
               />
+            </motion.div>
+          )}
+
+          {currentView === 'restaurant' && (
+            <motion.div
+              key="restaurant"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <RestaurantManagementPage />
             </motion.div>
           )}
 

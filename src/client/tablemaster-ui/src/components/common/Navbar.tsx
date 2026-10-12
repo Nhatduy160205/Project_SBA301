@@ -2,7 +2,7 @@ import React from 'react';
 import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut } from 'lucide-react';
 import type { AuthUser } from '../../types';
 
-export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'admin';
+export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'admin' | 'restaurant';
 
 interface NavbarProps {
   currentView: ActiveView;
@@ -41,7 +41,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Center Nav Links */}
-        <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-[#44403C]">
+        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-[#44403C]">
           <button
             onClick={() => onNavigate('landing')}
             className={`transition-all py-1.5 cursor-pointer ${
@@ -83,7 +83,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <span className="text-sm">📱</span>
-            <span>App Phục Vụ (Tại Bàn)</span>
+            <span>App Phục Vụ</span>
+          </button>
+          <button
+            onClick={() => onNavigate('restaurant')}
+            className={`transition-all py-1.5 flex items-center gap-1.5 cursor-pointer ${
+              currentView === 'restaurant'
+                ? 'text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
+                : 'text-[#78716C] hover:text-[#1C1917]'
+            }`}
+          >
+            <Building2 className="w-4 h-4 text-[#C4A480]" />
+            <span>Quản Lý Nhà Hàng</span>
           </button>
           <button
             onClick={() => onNavigate('admin')}
@@ -100,6 +111,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right CTA Button & Auth */}
         <div className="flex items-center gap-3">
+          {backendConnected === true && (
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>Backend: 8083 Online</span>
+            </div>
+          )}
+          {backendConnected === false && (
+            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+              <span>Backend: Offline</span>
+            </div>
+          )}
           <button
             onClick={() => onNavigate('booking')}
             className="btn-tan px-5 py-2.5 text-xs font-semibold shadow-2xs flex items-center gap-2 cursor-pointer active:scale-95"
