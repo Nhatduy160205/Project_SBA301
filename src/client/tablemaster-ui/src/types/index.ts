@@ -96,3 +96,12 @@ export interface TableOrderRecord {
   depositAmount: number;
   items: OrderItem[];
 }
+
+export interface AuthUser {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  role: 'ROLE_ADMIN' | 'ROLE_MANAGER' | 'ROLE_WAITER' | 'ROLE_HOST' | 'ROLE_CUSTOMER';
+  isActive: boolean;
+}

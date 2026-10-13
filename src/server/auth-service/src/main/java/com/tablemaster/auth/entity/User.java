@@ -33,9 +33,10 @@ public class User {
     @Column(name = "full_name", nullable = false, length = 100)
     private String fullName;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false, length = 30)
     @Builder.Default
-    private String role = "ROLE_CUSTOMER";
+    private UserRole role = UserRole.ROLE_CUSTOMER;
 
     @Column(name = "is_active", nullable = false)
     @Builder.Default
