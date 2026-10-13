@@ -218,10 +218,57 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public UserDto getCurrentUser(String userIdStr) {
-        UUID userId = UUID.fromString(userIdStr);
+        UUID userId = parseUserId(userIdStr);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
         return mapToUserDto(user);
+    }
+
+    @Transactional
+    public UserDto updateCurrentUser(String userIdStr, UpdateProfileRequest request) {
+        UUID userId = parseUserId(userIdStr);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        if (Boolean.FALSE.equals(user.getIsActive())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "User account is disabled");
+        }
+
+        if (request.getFullName() != null) {
+            String trimmedName = request.getFullName().trim();
+            if (trimmedName.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Họ và tên không được để trống");
+            }
+            if (trimmedName.length() > 100) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Họ và tên không được vượt quá 100 ký tự");
+            }
+            user.setFullName(trimmedName);
+        }
+
+        if (request.getAvatarUrl() != null) {
+            String avatar = request.getAvatarUrl().trim();
+            if (!avatar.isEmpty() && !avatar.matches("^https?://\\S+$")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Avatar URL phải bắt đầu bằng http:// hoặc https://");
+            }
+            user.setAvatarUrl(avatar.isEmpty() ? null : avatar);
+        }
+
+        if (request.getDietaryPreferences() != null) {
+            user.setDietaryPreferences(request.getDietaryPreferences().trim());
+        }
+
+        userRepository.save(user);
+        log.info("Updated profile and dietary preferences for user {}", userId);
+
+        return mapToUserDto(user);
+    }
+
+    private UUID parseUserId(String userIdStr) {
+        try {
+            return UUID.fromString(userIdStr);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid user identity in token");
+        }
     }
 
     private Optional<User> findUserByIdentifier(String identifier) {
@@ -246,6 +293,9 @@ public class AuthService {
                 .phone(user.getPhoneNumber())
                 .role(user.getRole())
                 .isActive(user.getIsActive())
+                .loyaltyPoints(user.getLoyaltyPoints() != null ? user.getLoyaltyPoints() : 0)
+                .avatarUrl(user.getAvatarUrl())
+                .dietaryPreferences(user.getDietaryPreferences())
                 .build();
     }
 

@@ -243,4 +243,95 @@ class AuthServiceTest {
         assertThat(tokenToRevoke.getIsRevoked()).isTrue();
         verify(refreshTokenRepository, times(1)).save(tokenToRevoke);
     }
+
+    @Test
+    @DisplayName("Scenario 12: Successfully update profile and dietary preferences")
+    void testUpdateProfileSuccess() {
+        UUID userId = activeAdminUser.getId();
+        UpdateProfileRequest request = UpdateProfileRequest.builder()
+                .fullName("Nguyễn Văn A (Updated)")
+                .avatarUrl("https://example.com/avatar.jpg")
+                .dietaryPreferences("Dị ứng tôm cua, ăn chay ngày rằm")
+                .build();
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(activeAdminUser));
+        when(userRepository.save(any(User.class))).thenReturn(activeAdminUser);
+
+        UserDto updatedDto = authService.updateCurrentUser(userId.toString(), request);
+
+        assertThat(updatedDto).isNotNull();
+        assertThat(updatedDto.getFullName()).isEqualTo("Nguyễn Văn A (Updated)");
+        assertThat(updatedDto.getAvatarUrl()).isEqualTo("https://example.com/avatar.jpg");
+        assertThat(updatedDto.getDietaryPreferences()).isEqualTo("Dị ứng tôm cua, ăn chay ngày rằm");
+        verify(userRepository, times(1)).save(activeAdminUser);
+    }
+
+    @Test
+    @DisplayName("Scenario 13: Updating profile for disabled account should throw FORBIDDEN")
+    void testUpdateProfileDisabledUser() {
+        UUID userId = inactiveUser.getId();
+        UpdateProfileRequest request = UpdateProfileRequest.builder()
+                .fullName("New Name")
+                .build();
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(inactiveUser));
+
+        assertThatThrownBy(() -> authService.updateCurrentUser(userId.toString(), request))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
+    @DisplayName("Scenario 14: Blank full name is rejected with BAD_REQUEST")
+    void testUpdateProfileBlankName() {
+        UUID userId = activeAdminUser.getId();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(activeAdminUser));
+
+        UpdateProfileRequest request = UpdateProfileRequest.builder().fullName("   ").build();
+
+        assertThatThrownBy(() -> authService.updateCurrentUser(userId.toString(), request))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("Scenario 15: Invalid avatar URL is rejected with BAD_REQUEST")
+    void testUpdateProfileInvalidAvatar() {
+        UUID userId = activeAdminUser.getId();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(activeAdminUser));
+
+        UpdateProfileRequest request = UpdateProfileRequest.builder().avatarUrl("javascript:alert(1)").build();
+
+        assertThatThrownBy(() -> authService.updateCurrentUser(userId.toString(), request))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    @DisplayName("Scenario 16: Partial update keeps untouched fields and empty dietary text clears it")
+    void testUpdateProfilePartial() {
+        UUID userId = activeAdminUser.getId();
+        activeAdminUser.setDietaryPreferences("Dị ứng đậu phộng");
+        when(userRepository.findById(userId)).thenReturn(Optional.of(activeAdminUser));
+        when(userRepository.save(any(User.class))).thenReturn(activeAdminUser);
+
+        UpdateProfileRequest request = UpdateProfileRequest.builder().dietaryPreferences("").build();
+        UserDto dto = authService.updateCurrentUser(userId.toString(), request);
+
+        assertThat(dto.getFullName()).isEqualTo("Chủ Nhà Hàng (Admin)");
+        assertThat(dto.getDietaryPreferences()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Scenario 17: Malformed user id in token yields UNAUTHORIZED, not a 500")
+    void testMalformedUserId() {
+        assertThatThrownBy(() -> authService.getCurrentUser("not-a-uuid"))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
 }

@@ -77,6 +77,7 @@ entity "users" as users {
   * **is_active** : BOOLEAN = TRUE
   **loyalty_points** : INT = 0
   **avatar_url** : TEXT
+  **dietary_preferences** : TEXT
   **created_at** : TIMESTAMP WITH TIME ZONE
   **updated_at** : TIMESTAMP WITH TIME ZONE
 }
@@ -129,6 +130,7 @@ CREATE TABLE users (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     loyalty_points INT DEFAULT 0,             -- Điểm tích lũy thành viên VIP
     avatar_url TEXT,
+    dietary_preferences TEXT,       -- Ghi chú dị ứng, chế độ ăn, món yêu thích (tối đa 1000 ký tự ở tầng API)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -144,6 +146,7 @@ CREATE TABLE users (
 | `role` | `VARCHAR(30)` | `NOT NULL` | Phân quyền RBAC: `ROLE_CUSTOMER`, `ROLE_HOST`, `ROLE_WAITER`, `ROLE_MANAGER`, `ROLE_ADMIN`. |
 | `is_active` | `BOOLEAN` | `DEFAULT TRUE` | Khóa tài khoản khi nhân viên nghỉ việc hoặc chặn khách gian lận. |
 | `loyalty_points` | `INT` | `DEFAULT 0` | Điểm tích lũy đổi voucher/quà tặng của nhà hàng. |
+| `dietary_preferences` | `TEXT` | *Nullable* | Ghi chú tự do của khách: dị ứng, chế độ ăn, món yêu thích. Cập nhật qua `PUT /api/v1/auth/me`. |
 
 ---
 
@@ -403,6 +406,7 @@ CREATE TABLE users (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     loyalty_points INT DEFAULT 0,
     avatar_url TEXT,
+    dietary_preferences TEXT,       -- Ghi chú dị ứng, chế độ ăn, món yêu thích (tối đa 1000 ký tự ở tầng API)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
