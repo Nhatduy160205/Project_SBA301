@@ -1,6 +1,6 @@
 package com.tablemaster.analytics.repository;
 
-import com.tablemaster.analytics.entity.LoyaltyTier;
+import com.tablemaster.analytics.enums.LoyaltyTier;
 import com.tablemaster.analytics.entity.VipCustomerInsight;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;

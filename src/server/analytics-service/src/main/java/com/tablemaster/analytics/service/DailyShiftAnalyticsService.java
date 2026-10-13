@@ -1,7 +1,7 @@
 package com.tablemaster.analytics.service;
 
-import com.tablemaster.analytics.dto.DailyShiftSummaryResponse;
-import com.tablemaster.analytics.dto.ShiftMetricItemResponse;
+import com.tablemaster.analytics.dto.response.DailyShiftSummaryResponse;
+import com.tablemaster.analytics.dto.response.ShiftMetricItemResponse;
 import com.tablemaster.analytics.entity.DailyShiftMetric;
 import com.tablemaster.analytics.repository.DailyShiftMetricRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,9 +23,9 @@ public class DailyShiftAnalyticsService {
 
     private final DailyShiftMetricRepository shiftMetricRepository;
 
-    private static final int DEFAULT_AVAILABLE_SEATS = 40;
-    private static final double DEFAULT_SLOT_HOURS = 2.0;
-    private static final int DEFAULT_TOTAL_TABLES = 18;
+    private static final int TOTAL_RESTAURANT_SEATS = 40;
+    private static final int SHIFT_DURATION_HOURS = 2;
+    private static final int TOTAL_TABLES = 18;
 
     @Transactional(readOnly = true)
     public DailyShiftSummaryResponse getDailySummary(LocalDate date) {
@@ -35,7 +35,7 @@ public class DailyShiftAnalyticsService {
 
         List<DailyShiftMetric> metrics = shiftMetricRepository.findAllByMetricDateOrderByCreatedAtAsc(date);
         List<ShiftMetricItemResponse> shiftResponses = metrics.stream()
-                .map(this::mapToItemResponse)
+                .map(this::mapToShiftResponse)
                 .collect(Collectors.toList());
 
         BigDecimal totalRevenue = BigDecimal.ZERO;
@@ -43,26 +43,33 @@ public class DailyShiftAnalyticsService {
         int totalBookings = 0;
         int totalSeated = 0;
         int totalNoShows = 0;
-        BigDecimal sumRevpash = BigDecimal.ZERO;
-        float sumOccupancy = 0.0f;
 
         for (DailyShiftMetric m : metrics) {
-            BigDecimal shiftRevenue = m.getTotalFoodRevenue().add(m.getNoShowPenaltyIncome());
-            totalRevenue = totalRevenue.add(shiftRevenue);
+            BigDecimal shiftTotal = m.getTotalFoodRevenue().add(m.getNoShowPenaltyIncome());
+            totalRevenue = totalRevenue.add(shiftTotal);
             totalDeposits = totalDeposits.add(m.getTotalDepositCollected());
             totalBookings += m.getTotalBookings();
             totalSeated += m.getTotalSeated();
             totalNoShows += m.getTotalNoShows();
-            sumRevpash = sumRevpash.add(m.getRevpashScore());
-            sumOccupancy += (m.getOccupancyRate() != null ? m.getOccupancyRate() : 0.0f);
         }
 
-        int count = metrics.size();
-        BigDecimal avgRevpash = count > 0 ? sumRevpash.divide(BigDecimal.valueOf(count), 2, RoundingMode.HALF_UP)
-                : BigDecimal.ZERO;
-        float avgOccupancy = count > 0 ? (sumOccupancy / count) : 0.0f;
-        int totalFinished = totalSeated + totalNoShows;
-        float noShowRate = totalFinished > 0 ? ((float) totalNoShows / totalFinished * 100.0f) : 0.0f;
+        BigDecimal avgRevpash = BigDecimal.ZERO;
+        Float avgOccupancy = 0.0f;
+        Float noShowRate = 0.0f;
+
+        if (!metrics.isEmpty()) {
+            BigDecimal totalRevpash = metrics.stream()
+                    .map(DailyShiftMetric::getRevpashScore)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            avgRevpash = totalRevpash.divide(BigDecimal.valueOf(metrics.size()), 2, RoundingMode.HALF_UP);
+
+            double sumOccupancy = metrics.stream().mapToDouble(DailyShiftMetric::getOccupancyRate).sum();
+            avgOccupancy = (float) (sumOccupancy / metrics.size());
+        }
+
+        if (totalBookings > 0) {
+            noShowRate = ((float) totalNoShows / totalBookings) * 100.0f;
+        }
 
         return DailyShiftSummaryResponse.builder()
                 .date(date)
@@ -80,108 +87,101 @@ public class DailyShiftAnalyticsService {
 
     @Transactional(readOnly = true)
     public List<DailyShiftSummaryResponse> getSummaryRange(LocalDate startDate, LocalDate endDate) {
-        if (startDate == null)
+        if (startDate == null) {
             startDate = LocalDate.now().minusDays(7);
-        if (endDate == null)
+        }
+        if (endDate == null) {
             endDate = LocalDate.now();
-
-        LocalDate current = startDate;
-        List<DailyShiftSummaryResponse> result = new java.util.ArrayList<>();
-        while (!current.isAfter(endDate)) {
-            result.add(getDailySummary(current));
-            current = current.plusDays(1);
         }
-        return result;
+
+        List<DailyShiftMetric> allMetrics = shiftMetricRepository.findAllByMetricDateBetweenOrderByMetricDateAsc(startDate, endDate);
+        return allMetrics.stream()
+                .map(DailyShiftMetric::getMetricDate)
+                .distinct()
+                .map(this::getDailySummary)
+                .collect(Collectors.toList());
     }
 
     @Transactional
-    public DailyShiftMetric getOrCreateShiftMetric(LocalDate date, UUID timeSlotId, String slotName) {
-        return shiftMetricRepository.findByMetricDateAndTimeSlotId(date, timeSlotId)
-                .orElseGet(() -> {
-                    log.info("Creating initial DailyShiftMetric for date={} slot={}", date, slotName);
-                    return shiftMetricRepository.save(DailyShiftMetric.builder()
-                            .metricDate(date)
-                            .timeSlotId(timeSlotId)
-                            .slotName(slotName != null ? slotName : "Ca chuẩn (" + timeSlotId + ")")
-                            .totalBookings(0)
-                            .totalSeated(0)
-                            .totalNoShows(0)
-                            .totalDepositCollected(BigDecimal.ZERO)
-                            .noShowPenaltyIncome(BigDecimal.ZERO)
-                            .totalFoodRevenue(BigDecimal.ZERO)
-                            .revpashScore(BigDecimal.ZERO)
-                            .occupancyRate(0.0f)
-                            .build());
-                });
-    }
+    public DailyShiftMetric recordBookingCompletion(LocalDate date, UUID timeSlotId, String slotName, BigDecimal billAmount, int guestCount) {
+        DailyShiftMetric metric = getOrCreateMetric(date, timeSlotId, slotName);
 
-    @Transactional
-    public DailyShiftMetric recordBookingDeposit(LocalDate date, UUID timeSlotId, String slotName,
-            BigDecimal depositAmount) {
-        DailyShiftMetric metric = getOrCreateShiftMetric(date, timeSlotId, slotName);
-        metric.setTotalBookings(metric.getTotalBookings() + 1);
-        if (depositAmount != null) {
-            metric.setTotalDepositCollected(metric.getTotalDepositCollected().add(depositAmount));
-        }
+        metric.setTotalSeated(metric.getTotalSeated() + 1);
+        metric.setTotalFoodRevenue(metric.getTotalFoodRevenue().add(billAmount));
+
+        metric.setRevpashScore(calculateRevpash(metric.getTotalFoodRevenue().add(metric.getNoShowPenaltyIncome())));
+        metric.setOccupancyRate(calculateOccupancy(metric.getTotalSeated()));
+
         return shiftMetricRepository.save(metric);
     }
 
     @Transactional
-    public DailyShiftMetric recordBookingCompletion(LocalDate date, UUID timeSlotId, String slotName,
-            BigDecimal foodBill, int guestCount) {
-        DailyShiftMetric metric = getOrCreateShiftMetric(date, timeSlotId, slotName);
-        metric.setTotalSeated(metric.getTotalSeated() + 1);
-        if (foodBill != null) {
-            metric.setTotalFoodRevenue(metric.getTotalFoodRevenue().add(foodBill));
-        }
+    public DailyShiftMetric recordBookingDeposit(LocalDate date, UUID timeSlotId, String slotName, BigDecimal depositAmount) {
+        DailyShiftMetric metric = getOrCreateMetric(date, timeSlotId, slotName);
 
-        recalculateMetrics(metric);
+        metric.setTotalBookings(metric.getTotalBookings() + 1);
+        metric.setTotalDepositCollected(metric.getTotalDepositCollected().add(depositAmount));
+
         return shiftMetricRepository.save(metric);
     }
 
     @Transactional
     public DailyShiftMetric recordNoShow(LocalDate date, UUID timeSlotId, String slotName, BigDecimal penaltyAmount) {
-        DailyShiftMetric metric = getOrCreateShiftMetric(date, timeSlotId, slotName);
-        metric.setTotalNoShows(metric.getTotalNoShows() + 1);
-        if (penaltyAmount != null) {
-            metric.setNoShowPenaltyIncome(metric.getNoShowPenaltyIncome().add(penaltyAmount));
-        }
+        DailyShiftMetric metric = getOrCreateMetric(date, timeSlotId, slotName);
 
-        recalculateMetrics(metric);
+        metric.setTotalNoShows(metric.getTotalNoShows() + 1);
+        metric.setNoShowPenaltyIncome(metric.getNoShowPenaltyIncome().add(penaltyAmount));
+
+        metric.setRevpashScore(calculateRevpash(metric.getTotalFoodRevenue().add(metric.getNoShowPenaltyIncome())));
+
         return shiftMetricRepository.save(metric);
     }
 
-    private void recalculateMetrics(DailyShiftMetric metric) {
-        // Formula: RevPASH = (totalFoodRevenue + noShowPenaltyIncome) /
-        // (totalAvailableSeats * slotDurationHours)
-        BigDecimal totalShiftRevenue = metric.getTotalFoodRevenue().add(metric.getNoShowPenaltyIncome());
-        double totalSeatHours = DEFAULT_AVAILABLE_SEATS * DEFAULT_SLOT_HOURS;
-        if (totalSeatHours > 0) {
-            BigDecimal revpash = totalShiftRevenue.divide(BigDecimal.valueOf(totalSeatHours), 2, RoundingMode.HALF_UP);
-            metric.setRevpashScore(revpash);
-        }
-
-        // Occupancy Rate (%) = (totalSeated / totalTables) * 100
-        float occupancy = ((float) metric.getTotalSeated() / DEFAULT_TOTAL_TABLES) * 100.0f;
-        metric.setOccupancyRate(Math.min(occupancy, 100.0f));
+    private DailyShiftMetric getOrCreateMetric(LocalDate date, UUID timeSlotId, String slotName) {
+        return shiftMetricRepository.findByMetricDateAndTimeSlotId(date, timeSlotId)
+                .orElseGet(() -> DailyShiftMetric.builder()
+                        .metricDate(date)
+                        .timeSlotId(timeSlotId)
+                        .slotName(slotName != null ? slotName : "Ca chuẩn")
+                        .totalBookings(0)
+                        .totalSeated(0)
+                        .totalNoShows(0)
+                        .totalDepositCollected(BigDecimal.ZERO)
+                        .noShowPenaltyIncome(BigDecimal.ZERO)
+                        .totalFoodRevenue(BigDecimal.ZERO)
+                        .revpashScore(BigDecimal.ZERO)
+                        .occupancyRate(0.0f)
+                        .build());
     }
 
-    public ShiftMetricItemResponse mapToItemResponse(DailyShiftMetric metric) {
-        BigDecimal totalShiftRevenue = metric.getTotalFoodRevenue().add(metric.getNoShowPenaltyIncome());
+    private BigDecimal calculateRevpash(BigDecimal totalRevenue) {
+        int availableSeatHours = TOTAL_RESTAURANT_SEATS * SHIFT_DURATION_HOURS;
+        if (availableSeatHours == 0) return BigDecimal.ZERO;
+        return totalRevenue.divide(BigDecimal.valueOf(availableSeatHours), 2, RoundingMode.HALF_UP);
+    }
+
+    private Float calculateOccupancy(int totalSeated) {
+        if (TOTAL_TABLES == 0) return 0.0f;
+        float rate = ((float) totalSeated / TOTAL_TABLES) * 100.0f;
+        return Math.min(100.0f, Math.round(rate * 10.0f) / 10.0f);
+    }
+
+    private ShiftMetricItemResponse mapToShiftResponse(DailyShiftMetric m) {
+        BigDecimal totalShiftRev = m.getTotalFoodRevenue().add(m.getNoShowPenaltyIncome());
         return ShiftMetricItemResponse.builder()
-                .id(metric.getId())
-                .metricDate(metric.getMetricDate())
-                .timeSlotId(metric.getTimeSlotId())
-                .slotName(metric.getSlotName())
-                .totalBookings(metric.getTotalBookings())
-                .totalSeated(metric.getTotalSeated())
-                .totalNoShows(metric.getTotalNoShows())
-                .totalDepositCollected(metric.getTotalDepositCollected())
-                .noShowPenaltyIncome(metric.getNoShowPenaltyIncome())
-                .totalFoodRevenue(metric.getTotalFoodRevenue())
-                .totalShiftRevenue(totalShiftRevenue)
-                .revpashScore(metric.getRevpashScore())
-                .occupancyRate(metric.getOccupancyRate())
+                .id(m.getId())
+                .metricDate(m.getMetricDate())
+                .timeSlotId(m.getTimeSlotId())
+                .slotName(m.getSlotName())
+                .totalBookings(m.getTotalBookings())
+                .totalSeated(m.getTotalSeated())
+                .totalNoShows(m.getTotalNoShows())
+                .totalDepositCollected(m.getTotalDepositCollected())
+                .noShowPenaltyIncome(m.getNoShowPenaltyIncome())
+                .totalFoodRevenue(m.getTotalFoodRevenue())
+                .totalShiftRevenue(totalShiftRev)
+                .revpashScore(m.getRevpashScore())
+                .occupancyRate(m.getOccupancyRate())
                 .build();
     }
 }

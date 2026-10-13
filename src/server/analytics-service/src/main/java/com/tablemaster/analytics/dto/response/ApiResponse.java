@@ -1,8 +1,11 @@
-package com.tablemaster.analytics.dto;
+package com.tablemaster.analytics.dto.response;
 
 import lombok.*;
 import java.time.ZonedDateTime;
 
+/**
+ * Chuẩn hóa cấu trúc phản hồi dữ liệu API cho toàn bộ Analytics Microservice
+ */
 @Getter
 @Setter
 @NoArgsConstructor
