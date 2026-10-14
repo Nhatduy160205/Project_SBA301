@@ -3,7 +3,7 @@ package com.tablemaster.restaurant.service;
 import com.tablemaster.restaurant.dto.MenuItemDto;
 import com.tablemaster.restaurant.entity.MenuCategory;
 import com.tablemaster.restaurant.entity.MenuItem;
-import com.tablemaster.restaurant.exception.BadRequestException;
+import com.tablemaster.restaurant.exception.ErrorCode;
 import com.tablemaster.restaurant.exception.ResourceNotFoundException;
 import com.tablemaster.restaurant.repository.MenuCategoryRepository;
 import com.tablemaster.restaurant.repository.MenuItemRepository;
@@ -49,7 +49,7 @@ public class MenuItemService {
     @Transactional(readOnly = true)
     public MenuItemDto getMenuItemById(UUID id) {
         MenuItem item = menuItemRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy món ăn với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.MENU_ITEM_NOT_FOUND));
         String catName = categoryRepository.findById(item.getCategoryId())
                 .map(MenuCategory::getName).orElse("");
         return mapToDto(item, catName);
@@ -58,7 +58,7 @@ public class MenuItemService {
     @Transactional
     public MenuItemDto createMenuItem(MenuItemDto dto) {
         MenuCategory category = categoryRepository.findById(dto.getCategoryId())
-                .orElseThrow(() -> new BadRequestException("Danh mục món với ID " + dto.getCategoryId() + " không tồn tại"));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.CATEGORY_NOT_FOUND));
 
         MenuItem item = MenuItem.builder()
                 .categoryId(dto.getCategoryId())
@@ -77,10 +77,10 @@ public class MenuItemService {
     @Transactional
     public MenuItemDto updateMenuItem(UUID id, MenuItemDto dto) {
         MenuItem item = menuItemRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy món ăn với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.MENU_ITEM_NOT_FOUND));
 
         MenuCategory category = categoryRepository.findById(dto.getCategoryId())
-                .orElseThrow(() -> new BadRequestException("Danh mục món với ID " + dto.getCategoryId() + " không tồn tại"));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.CATEGORY_NOT_FOUND));
 
         item.setCategoryId(dto.getCategoryId());
         item.setName(dto.getName());
@@ -97,7 +97,7 @@ public class MenuItemService {
     @Transactional
     public MenuItemDto toggleActive(UUID id) {
         MenuItem item = menuItemRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy món ăn với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.MENU_ITEM_NOT_FOUND));
         item.setIsActive(!item.getIsActive());
         String catName = categoryRepository.findById(item.getCategoryId()).map(MenuCategory::getName).orElse("");
         return mapToDto(menuItemRepository.save(item), catName);
@@ -106,7 +106,7 @@ public class MenuItemService {
     @Transactional
     public void deleteMenuItem(UUID id) {
         if (!menuItemRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Không tìm thấy món ăn với ID: " + id);
+            throw new ResourceNotFoundException(ErrorCode.MENU_ITEM_NOT_FOUND);
         }
         menuItemRepository.deleteById(id);
     }
