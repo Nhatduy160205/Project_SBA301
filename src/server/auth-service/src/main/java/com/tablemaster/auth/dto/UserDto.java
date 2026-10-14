@@ -20,4 +20,7 @@ public class UserDto {
     private String phone;
     private UserRole role;
     private Boolean isActive;
+    private Integer loyaltyPoints;
+    private String avatarUrl;
+    private String dietaryPreferences;
 }
