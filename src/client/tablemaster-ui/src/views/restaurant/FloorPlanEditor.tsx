@@ -1,19 +1,20 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  ZoomIn,
-  ZoomOut,
-  RotateCcw,
-  Save,
   Plus,
   Trash2,
   Edit3,
   X,
-  Compass,
   Layers,
   Sparkles,
-  Maximize2,
   Eye,
   EyeOff,
+  Users,
+  Search,
+  Coffee,
+  CheckCircle2,
+  AlertCircle,
+  LayoutGrid,
+  Maximize2,
 } from 'lucide-react';
 import type { FloorPlan, Table } from '../../services/restaurantApi';
 import { restaurantApi } from '../../services/restaurantApi';
@@ -36,15 +37,8 @@ export const FloorPlanEditor: React.FC<FloorPlanEditorProps> = ({
   const currentFloor = floorPlans.find((f) => f.id === selectedFloorId) || floorPlans[0];
   const [tables, setTables] = useState<Table[]>([]);
   const [selectedTable, setSelectedTable] = useState<Table | null>(null);
-  const [zoomLevel, setZoomLevel] = useState<number>(1);
-  const [snapToGrid, setSnapToGrid] = useState<boolean>(true);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState<boolean>(false);
-
-  // Dragging state
-  const [draggingTableId, setDraggingTableId] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const [selectedZone, setSelectedZone] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Table Modal
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
@@ -65,84 +59,8 @@ export const FloorPlanEditor: React.FC<FloorPlanEditorProps> = ({
     if (currentFloor) {
       setTables(currentFloor.tables || []);
       setSelectedTable(null);
-      setHasUnsavedChanges(false);
     }
   }, [currentFloor]);
-
-  // Handle Dragging
-  const handleMouseDown = (e: React.MouseEvent, table: Table) => {
-    e.stopPropagation();
-    setSelectedTable(table);
-    setDraggingTableId(table.id);
-
-    const canvasRect = canvasRef.current?.getBoundingClientRect();
-    if (!canvasRect) return;
-
-    // Calculate mouse position relative to table top-left
-    const mouseX = (e.clientX - canvasRect.left) / zoomLevel;
-    const mouseY = (e.clientY - canvasRect.top) / zoomLevel;
-
-    setDragOffset({
-      x: mouseX - table.posX,
-      y: mouseY - table.posY,
-    });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!draggingTableId || !canvasRef.current) return;
-
-    const canvasRect = canvasRef.current.getBoundingClientRect();
-    const mouseX = (e.clientX - canvasRect.left) / zoomLevel;
-    const mouseY = (e.clientY - canvasRect.top) / zoomLevel;
-
-    let newX = mouseX - dragOffset.x;
-    let newY = mouseY - dragOffset.y;
-
-    const gridSize = currentFloor?.gridSize || 20;
-    if (snapToGrid) {
-      newX = Math.round(newX / gridSize) * gridSize;
-      newY = Math.round(newY / gridSize) * gridSize;
-    }
-
-    // Boundary constraints
-    newX = Math.max(10, Math.min(newX, (currentFloor?.widthPx || 1600) - 100));
-    newY = Math.max(10, Math.min(newY, (currentFloor?.heightPx || 900) - 100));
-
-    setTables((prev) =>
-      prev.map((t) => (t.id === draggingTableId ? { ...t, posX: newX, posY: newY } : t))
-    );
-    setHasUnsavedChanges(true);
-  };
-
-  const handleMouseUp = () => {
-    setDraggingTableId(null);
-  };
-
-  // Save all table positions
-  const handleSavePositions = async () => {
-    if (!currentFloor) return;
-    setIsSaving(true);
-    try {
-      await restaurantApi.batchUpdatePositions(
-        tables.map((t) => ({
-          id: t.id,
-          posX: t.posX,
-          posY: t.posY,
-          width: t.width,
-          height: t.height,
-          shape: t.shape,
-          rotation: t.rotation,
-        }))
-      );
-      setHasUnsavedChanges(false);
-      onShowToast('Đã lưu sơ đồ và tọa độ bàn thành công!', 'success');
-      await onRefreshData();
-    } catch (err: any) {
-      onShowToast(err.message || 'Lỗi khi lưu tọa độ bàn', 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   // Toggle publish
   const handleTogglePublish = async () => {
@@ -161,7 +79,7 @@ export const FloorPlanEditor: React.FC<FloorPlanEditorProps> = ({
     setModalMode('create');
     setTableFormData({
       tableCode: `T-${(tables.length + 1).toString().padStart(2, '0')}`,
-      zoneType: 'STANDARD',
+      zoneType: selectedZone !== 'ALL' ? selectedZone : 'STANDARD',
       minCapacity: 2,
       maxCapacity: 4,
       customDeposit: 200000,
@@ -213,13 +131,13 @@ export const FloorPlanEditor: React.FC<FloorPlanEditorProps> = ({
           shape: tableFormData.shape,
           width: tableFormData.width,
           height: tableFormData.height,
-          posX: 150,
-          posY: 150,
+          posX: 100,
+          posY: 100,
           isActive: tableFormData.isActive,
         });
         setTables((prev) => [...prev, newTable]);
         setSelectedTable(newTable);
-        onShowToast(`Đã thêm bàn ${newTable.tableCode} vào sơ đồ!`, 'success');
+        onShowToast(`Đã thêm bàn ${newTable.tableCode} thành công!`, 'success');
       } else if (selectedTable) {
         const updated = await restaurantApi.updateTable(selectedTable.id, {
           floorPlanId: currentFloor.id,
@@ -248,7 +166,7 @@ export const FloorPlanEditor: React.FC<FloorPlanEditorProps> = ({
 
   // Delete Table
   const handleDeleteTable = async (tableId: string) => {
-    if (!confirm('Bạn có chắc chắn muốn xóa bàn này khỏi sơ đồ mặt bằng?')) return;
+    if (!confirm('Bạn có chắc chắn muốn xóa bàn này khỏi hệ thống?')) return;
     try {
       await restaurantApi.deleteTable(tableId);
       setTables((prev) => prev.filter((t) => t.id !== tableId));
@@ -272,24 +190,80 @@ export const FloorPlanEditor: React.FC<FloorPlanEditorProps> = ({
     }
   };
 
+  // Filtered tables by Zone and Search query
+  const filteredTables = tables.filter((table) => {
+    const matchZone = selectedZone === 'ALL' || table.zoneType === selectedZone;
+    const matchQuery =
+      searchQuery.trim() === '' ||
+      table.tableCode.toLowerCase().includes(searchQuery.toLowerCase().trim());
+    return matchZone && matchQuery;
+  });
+
+  // Zone metadata helper
+  const getZoneBadge = (zone: string) => {
+    switch (zone) {
+      case 'VIP':
+        return {
+          label: 'Phòng VIP',
+          badgeClass: 'bg-amber-100 text-amber-900 border-amber-300',
+          boxBorder: 'border-amber-400/80 hover:border-amber-500',
+          headerBg: 'bg-amber-50/80 text-amber-950',
+        };
+      case 'WINDOW_VIEW':
+        return {
+          label: 'View Mặt Kính',
+          badgeClass: 'bg-sky-100 text-sky-900 border-sky-300',
+          boxBorder: 'border-sky-400/80 hover:border-sky-500',
+          headerBg: 'bg-sky-50/80 text-sky-950',
+        };
+      case 'OUTDOOR':
+        return {
+          label: 'Ngoài Trời',
+          badgeClass: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+          boxBorder: 'border-emerald-400/80 hover:border-emerald-500',
+          headerBg: 'bg-emerald-50/80 text-emerald-950',
+        };
+      case 'BAR_SIDE':
+        return {
+          label: 'Cạnh Quầy Bar',
+          badgeClass: 'bg-purple-100 text-purple-900 border-purple-300',
+          boxBorder: 'border-purple-400/80 hover:border-purple-500',
+          headerBg: 'bg-purple-50/80 text-purple-950',
+        };
+      default:
+        return {
+          label: 'Tiêu Chuẩn',
+          badgeClass: 'bg-[#FAF4EB] text-[#8C6A43] border-[#E0D7C9]',
+          boxBorder: 'border-[#E8DFD1] hover:border-[#C4A480]',
+          headerBg: 'bg-[#FAF7F2] text-[#2C221E]',
+        };
+    }
+  };
+
+  // Stats calculation
+  const totalTables = tables.length;
+  const activeTables = tables.filter((t) => t.isActive).length;
+  const vipTables = tables.filter((t) => t.zoneType === 'VIP').length;
+  const totalMaxCapacity = tables.reduce((acc, t) => acc + (t.maxCapacity || 0), 0);
+
   return (
     <div className="space-y-6">
       {/* Top Controls Toolbar */}
-      <div className="bg-white border border-[#EBE5DC] rounded-2xl p-4 sm:p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-white border border-[#EBE5DC] rounded-3xl p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
         {/* Floor Switcher */}
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-[#8C6A43] uppercase tracking-wider flex items-center gap-1.5 mr-2">
             <Layers className="w-4 h-4" />
-            <span>Mặt Bằng:</span>
+            <span>Mặt Bằng Tầng:</span>
           </span>
-          <div className="flex items-center gap-1.5 bg-[#FAF7F2] p-1 rounded-xl border border-[#E0D7C9]/70">
+          <div className="flex items-center gap-1.5 bg-[#FAF7F2] p-1 rounded-2xl border border-[#E0D7C9]/70">
             {floorPlans.map((floor) => (
               <button
                 key={floor.id}
                 onClick={() => onSelectFloorId(floor.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   currentFloor?.id === floor.id
-                    ? 'bg-gradient-to-r from-[#C4A480] to-[#B3936F] text-white shadow-2xs'
+                    ? 'bg-gradient-to-r from-[#C4A480] to-[#B3936F] text-white shadow-xs'
                     : 'text-[#6B5E54] hover:text-[#1C1917]'
                 }`}
               >
@@ -300,316 +274,370 @@ export const FloorPlanEditor: React.FC<FloorPlanEditorProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Snap to grid switch */}
-          <button
-            onClick={() => setSnapToGrid(!snapToGrid)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 cursor-pointer transition-colors ${
-              snapToGrid
-                ? 'bg-[#FAF4EB] border-[#C4A480] text-[#8C6A43]'
-                : 'bg-white border-[#EBE5DC] text-[#78716C]'
-            }`}
-          >
-            <span>Hít Lưới 20px:</span>
-            <span className="font-bold">{snapToGrid ? 'BẬT' : 'TẮT'}</span>
-          </button>
-
+        <div className="flex flex-wrap items-center gap-3">
           {/* Add Table Button */}
           <button
             onClick={openAddTableModal}
-            className="btn-tan-outline px-4 py-1.5 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            className="btn-tan px-4 py-2 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Thêm Bàn Mới</span>
+            <Plus className="w-4 h-4" />
+            <span>+ Thêm Box Bàn Mới</span>
           </button>
 
           {/* Publish / Unpublish */}
           <button
             onClick={handleTogglePublish}
-            className={`px-4 py-1.5 text-xs font-bold rounded-full flex items-center gap-1.5 cursor-pointer border transition-colors ${
+            className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer border transition-colors ${
               currentFloor?.isPublished
                 ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]'
                 : 'bg-[#FEF2F2] text-[#991B1B] border-[#FECACA]'
             }`}
           >
-            {currentFloor?.isPublished ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            {currentFloor?.isPublished ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
             <span>{currentFloor?.isPublished ? 'Đang Xuất Bản' : 'Bản Nháp'}</span>
-          </button>
-
-          {/* Save Layout Positions Button */}
-          <button
-            onClick={handleSavePositions}
-            disabled={isSaving || !hasUnsavedChanges}
-            className={`px-5 py-2 rounded-full text-xs font-bold flex items-center gap-2 cursor-pointer transition-all shadow-xs ${
-              hasUnsavedChanges
-                ? 'bg-gradient-to-r from-[#3D7058] to-[#2D5A44] text-white hover:brightness-105 animate-pulse'
-                : 'bg-[#E8DFD1] text-[#78716C] cursor-not-allowed opacity-60'
-            }`}
-          >
-            <Save className="w-4 h-4" />
-            <span>{isSaving ? 'Đang Lưu...' : hasUnsavedChanges ? 'Lưu Vị Trí Bàn *' : 'Đã Lưu Vị Trí'}</span>
           </button>
         </div>
       </div>
 
-      {/* Main Floor Blueprint Workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Interactive Canvas Area (Span 3 cols) */}
-        <div className="lg:col-span-3 bg-white border border-[#EBE5DC] rounded-3xl p-4 shadow-sm overflow-hidden flex flex-col">
-          {/* Canvas Sub-header */}
-          <div className="flex items-center justify-between pb-3 px-2 border-b border-[#EBE5DC]/60 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#3D7058] animate-ping" />
-              <span className="font-serif font-bold text-[#1C1917] text-sm">{currentFloor?.name}</span>
-              <span className="text-[#78716C] font-mono text-[11px]">
-                ({currentFloor?.widthPx || 1600}px × {currentFloor?.heightPx || 900}px) • {tables.length} Bàn
-              </span>
-            </div>
+      {/* Quick KPI Stats Summary Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white border border-[#EBE5DC] rounded-2xl p-4 shadow-xs">
+          <span className="text-[10px] font-bold text-[#78716C] uppercase tracking-wider block">Tổng Số Bàn</span>
+          <div className="text-xl sm:text-2xl font-serif font-bold text-[#1C1917] mt-1">{totalTables} Box</div>
+          <span className="text-[10px] text-[#8C6A43] font-semibold mt-0.5 block">{currentFloor?.name}</span>
+        </div>
 
-            {/* Zoom Controls */}
-            <div className="flex items-center gap-1 bg-[#FAF7F2] p-1 rounded-xl border border-[#E0D7C9]/60">
-              <button
-                onClick={() => setZoomLevel((z) => Math.max(0.6, z - 0.1))}
-                className="p-1.5 text-[#78716C] hover:text-[#1C1917] rounded-lg cursor-pointer"
-                title="Thu nhỏ"
-              >
-                <ZoomOut className="w-3.5 h-3.5" />
-              </button>
-              <span className="text-[10px] font-mono font-bold px-1.5 text-[#8C6A43]">
-                {Math.round(zoomLevel * 100)}%
+        <div className="bg-white border border-[#EBE5DC] rounded-2xl p-4 shadow-xs">
+          <span className="text-[10px] font-bold text-[#78716C] uppercase tracking-wider block">Bàn Đang Hoạt Động</span>
+          <div className="text-xl sm:text-2xl font-serif font-bold text-[#3D7058] mt-1">{activeTables} Box</div>
+          <span className="text-[10px] text-[#3D7058] font-semibold mt-0.5 block">Sẵn sàng phục vụ</span>
+        </div>
+
+        <div className="bg-white border border-[#EBE5DC] rounded-2xl p-4 shadow-xs">
+          <span className="text-[10px] font-bold text-[#78716C] uppercase tracking-wider block">Khu Vực VIP</span>
+          <div className="text-xl sm:text-2xl font-serif font-bold text-amber-700 mt-1">{vipTables} Box</div>
+          <span className="text-[10px] text-amber-600 font-semibold mt-0.5 block">Salon tiệc riêng tư</span>
+        </div>
+
+        <div className="bg-white border border-[#EBE5DC] rounded-2xl p-4 shadow-xs">
+          <span className="text-[10px] font-bold text-[#78716C] uppercase tracking-wider block">Công Suất Chứa Tối Đa</span>
+          <div className="text-xl sm:text-2xl font-serif font-bold text-[#8C6A43] mt-1">{totalMaxCapacity} Khách</div>
+          <span className="text-[10px] text-[#78716C] font-semibold mt-0.5 block">Tổng ghế ngồi</span>
+        </div>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="bg-white border border-[#EBE5DC] rounded-2xl p-3 sm:p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        {/* Zone Filter Tabs */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-bold text-[#78716C] mr-1 hidden sm:inline">Khu Vực:</span>
+          {[
+            { id: 'ALL', label: 'Tất Cả' },
+            { id: 'STANDARD', label: 'Tiêu Chuẩn' },
+            { id: 'VIP', label: 'Phòng VIP' },
+            { id: 'WINDOW_VIEW', label: 'View Mặt Kính' },
+            { id: 'OUTDOOR', label: 'Ngoài Trời' },
+            { id: 'BAR_SIDE', label: 'Cạnh Bar' },
+          ].map((z) => (
+            <button
+              key={z.id}
+              onClick={() => setSelectedZone(z.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                selectedZone === z.id
+                  ? 'bg-[#2C221E] text-white font-bold shadow-2xs'
+                  : 'bg-[#FAF7F2] text-[#6B5E54] hover:bg-[#F2ECE1] hover:text-[#1C1917]'
+              }`}
+            >
+              {z.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Search Input */}
+        <div className="relative w-full sm:w-56">
+          <Search className="w-3.5 h-3.5 text-[#78716C] absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Tìm theo mã box..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-[#E0D7C9] bg-[#FAF7F2] focus:outline-hidden focus:border-[#C4A480]"
+          />
+        </div>
+      </div>
+
+      {/* Main Table Box Workspace (Grid + Detail Panel) */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+        {/* Table Boxes Grid (Span 3 Cols) */}
+        <div className="lg:col-span-3 bg-white border border-[#EBE5DC] rounded-3xl p-5 sm:p-6 shadow-sm min-h-[500px]">
+          <div className="flex items-center justify-between pb-4 border-b border-[#EBE5DC] mb-5">
+            <div className="flex items-center gap-2">
+              <LayoutGrid className="w-5 h-5 text-[#8C6A43]" />
+              <h3 className="font-serif text-lg font-bold text-[#1C1917]">
+                Danh Sách Box Bàn — {currentFloor?.name}
+              </h3>
+              <span className="text-xs text-[#78716C] font-semibold bg-[#FAF7F2] px-2.5 py-0.5 rounded-full border border-[#E0D7C9]">
+                {filteredTables.length} / {tables.length} Box
               </span>
-              <button
-                onClick={() => setZoomLevel((z) => Math.min(1.4, z + 0.1))}
-                className="p-1.5 text-[#78716C] hover:text-[#1C1917] rounded-lg cursor-pointer"
-                title="Phóng to"
-              >
-                <ZoomIn className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => setZoomLevel(1)}
-                className="p-1.5 text-[#78716C] hover:text-[#1C1917] rounded-lg cursor-pointer"
-                title="Đặt lại zoom"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-              </button>
             </div>
           </div>
 
-          {/* Canvas Viewport */}
-          <div
-            className="relative w-full h-[580px] overflow-auto rounded-2xl mt-3 select-none floor-blueprint-bg border border-[#E8DFD1]/80 shadow-inner"
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-          >
-            {/* Compass watermark */}
-            <div className="absolute bottom-4 right-5 pointer-events-none opacity-20 flex flex-col items-center">
-              <Compass className="w-14 h-14 text-[#8C6A43]" />
-              <span className="text-[9px] font-serif font-bold text-[#8C6A43] tracking-widest mt-0.5">NORTH • BẮC</span>
+          {filteredTables.length === 0 ? (
+            <div className="py-20 text-center text-[#78716C] space-y-3">
+              <Coffee className="w-10 h-10 text-[#C4A480]/60 mx-auto" />
+              <p className="text-sm font-semibold">Chưa có box bàn nào trong khu vực này.</p>
+              <button
+                onClick={openAddTableModal}
+                className="btn-tan px-4 py-2 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Thêm Box Bàn Mới Ngay</span>
+              </button>
             </div>
-
-            {/* Inner Scaled Canvas */}
-            <div
-              ref={canvasRef}
-              className="relative transition-transform duration-75 origin-top-left"
-              style={{
-                width: `${currentFloor?.widthPx || 1600}px`,
-                height: `${currentFloor?.heightPx || 900}px`,
-                transform: `scale(${zoomLevel})`,
-              }}
-              onClick={() => setSelectedTable(null)}
-            >
-              {/* Floor Landmark Decor (Panoramic glass window, Bar counter) */}
-              <div className="absolute top-2 left-6 right-6 py-2 px-6 bg-gradient-to-r from-sky-100/60 via-sky-50/40 to-sky-100/60 rounded-xl border border-sky-200/80 flex items-center justify-between pointer-events-none">
-                <span className="text-[11px] font-bold text-sky-800 tracking-wider uppercase font-sans">
-                  ✨ Vách Kính Toàn Cảnh Panoramic • Mặt Tiền Hướng Phố
-                </span>
-                <span className="text-[10px] text-sky-700 bg-white/80 px-2 py-0.5 rounded-full border border-sky-300">
-                  Phố Đi Bộ Nguyễn Huệ
-                </span>
-              </div>
-
-              <div className="absolute left-6 top-24 bottom-24 w-16 bg-gradient-to-b from-[#2C221E] to-[#1C1917] rounded-2xl border border-amber-900/40 flex flex-col items-center justify-center p-2 text-white pointer-events-none shadow-md">
-                <span
-                  className="text-[10px] uppercase font-bold tracking-widest text-[#C4A480] transform -rotate-90 whitespace-nowrap"
-                  style={{ writingMode: 'vertical-rl' }}
-                >
-                  Quầy Bar & Mixology
-                </span>
-              </div>
-
-              {/* Render Draggable Tables */}
-              {tables.map((table) => {
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredTables.map((table) => {
                 const isSelected = selectedTable?.id === table.id;
-                const isDragging = draggingTableId === table.id;
-                const isCircle = table.shape === 'CIRCLE';
-                const isSquare = table.shape === 'SQUARE';
+                const zoneInfo = getZoneBadge(table.zoneType);
 
                 return (
                   <div
                     key={table.id}
-                    onMouseDown={(e) => handleMouseDown(e, table)}
-                    style={{
-                      left: `${table.posX}px`,
-                      top: `${table.posY}px`,
-                      width: `${table.width}px`,
-                      height: `${table.height}px`,
-                    }}
-                    className={`absolute flex flex-col items-center justify-center cursor-grab active:cursor-grabbing transition-shadow select-none ${
-                      isCircle
-                        ? 'rounded-full'
-                        : isSquare
-                        ? 'rounded-2xl'
-                        : 'rounded-xl'
-                    } ${
+                    onClick={() => setSelectedTable(table)}
+                    className={`rounded-2xl border-2 transition-all p-4.5 cursor-pointer flex flex-col justify-between select-none relative group ${
                       isSelected
-                        ? 'ring-4 ring-[#C4A480] shadow-xl z-30'
-                        : 'shadow-md hover:shadow-lg z-20'
-                    } ${
-                      isDragging ? 'opacity-80 scale-105 z-40' : ''
-                    } ${
-                      table.isActive
-                        ? table.zoneType === 'VIP'
-                          ? 'bg-gradient-to-br from-amber-100 to-amber-50 border-2 border-amber-400 text-amber-900'
-                          : table.zoneType === 'WINDOW_VIEW'
-                          ? 'bg-gradient-to-br from-sky-50 to-blue-50 border-2 border-sky-400 text-sky-950'
-                          : table.zoneType === 'OUTDOOR'
-                          ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-2 border-emerald-400 text-emerald-950'
-                          : 'bg-white border-2 border-[#C4A480] text-[#2C221E]'
-                        : 'bg-gray-100 border-2 border-dashed border-gray-400 text-gray-500 opacity-60'
-                    }`}
+                        ? 'border-[#C4A480] bg-[#FAF6F0] ring-4 ring-[#C4A480]/20 shadow-md scale-[1.02]'
+                        : `bg-white ${zoneInfo.boxBorder} shadow-2xs hover:shadow-md`
+                    } ${!table.isActive ? 'opacity-70 bg-gray-50' : ''}`}
                   >
-                    {/* Table Code */}
-                    <span className="font-serif font-bold text-xs leading-none">
-                      {table.tableCode}
-                    </span>
+                    {/* Top Row: Code & Active Status */}
+                    <div>
+                      <div className="flex items-center justify-between pb-3 border-b border-[#EBE5DC]/70">
+                        <div className="flex items-center gap-2">
+                          <span className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#FAF7F2] to-[#EFE7DC] border border-[#E0D7C9] text-[#8C6A43] font-mono font-black text-sm flex items-center justify-center shadow-2xs">
+                            {table.tableCode}
+                          </span>
+                          <div>
+                            <span className="text-[10px] font-bold uppercase text-[#8C6A43] block leading-tight">
+                              Box Bàn
+                            </span>
+                            <span className="font-serif font-bold text-sm text-[#1C1917] leading-none">
+                              {table.tableCode}
+                            </span>
+                          </div>
+                        </div>
 
-                    {/* Capacity badge */}
-                    <span className="text-[10px] font-semibold text-[#8C6A43] mt-1 leading-none">
-                      {table.minCapacity}-{table.maxCapacity} Ghế
-                    </span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                            table.isActive
+                              ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]'
+                              : 'bg-[#FEF2F2] text-[#991B1B] border-[#FECACA]'
+                          }`}
+                        >
+                          {table.isActive ? (
+                            <>
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Hoạt Động</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle className="w-3 h-3" />
+                              <span>Tạm Ngừng</span>
+                            </>
+                          )}
+                        </span>
+                      </div>
 
-                    {/* Zone small label */}
-                    <span className="text-[8px] font-bold uppercase tracking-wider text-[#78716C] mt-0.5">
-                      {table.zoneType === 'WINDOW_VIEW' && 'View Phố'}
-                      {table.zoneType === 'VIP' && 'VIP'}
-                      {table.zoneType === 'OUTDOOR' && 'Ngoài Trời'}
-                      {table.zoneType === 'BAR_SIDE' && 'Cạnh Bar'}
-                      {table.zoneType === 'STANDARD' && 'Chuẩn'}
-                    </span>
+                      {/* Middle Attributes Grid */}
+                      <div className="grid grid-cols-2 gap-2 my-3 text-xs">
+                        <div className="bg-[#FAF7F2] p-2 rounded-xl border border-[#EBE5DC]">
+                          <span className="text-[10px] text-[#78716C] block flex items-center gap-1">
+                            <Users className="w-3 h-3 text-[#8C6A43]" />
+                            <span>Sức Chứa:</span>
+                          </span>
+                          <span className="font-bold text-[#1C1917]">
+                            {table.minCapacity} - {table.maxCapacity} Khách
+                          </span>
+                        </div>
+
+                        <div className="bg-[#FAF7F2] p-2 rounded-xl border border-[#EBE5DC]">
+                          <span className="text-[10px] text-[#78716C] block">Khu Vực:</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md border inline-block mt-0.5 ${zoneInfo.badgeClass}`}>
+                            {zoneInfo.label}
+                          </span>
+                        </div>
+
+                        <div className="bg-[#FAF7F2] p-2 rounded-xl border border-[#EBE5DC]">
+                          <span className="text-[10px] text-[#78716C] block">Hình Dáng:</span>
+                          <span className="font-semibold text-[#1C1917]">
+                            {table.shape === 'RECT' && 'Chữ Nhật'}
+                            {table.shape === 'SQUARE' && 'Hình Vuông'}
+                            {table.shape === 'CIRCLE' && 'Bàn Tròn'}
+                          </span>
+                        </div>
+
+                        <div className="bg-[#FAF7F2] p-2 rounded-xl border border-[#EBE5DC]">
+                          <span className="text-[10px] text-[#78716C] block">Tiền Cọc Riêng:</span>
+                          <span className="font-bold text-[#3D7058] text-[11px]">
+                            {table.customDeposit
+                              ? `${new Intl.NumberFormat('vi-VN').format(table.customDeposit)}đ`
+                              : 'Theo quán'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Footer Quick Actions */}
+                    <div className="pt-2.5 border-t border-[#EBE5DC]/80 flex items-center justify-between gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditTableModal(table);
+                        }}
+                        className="flex-1 py-1.5 px-2 bg-white hover:bg-[#FAF7F2] border border-[#E0D7C9] text-[#2C221E] font-semibold text-xs rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Edit3 className="w-3 h-3 text-[#8C6A43]" />
+                        <span>Chỉnh Sửa</span>
+                      </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleTableActive(table.id);
+                        }}
+                        className={`py-1.5 px-2.5 text-xs font-semibold rounded-xl border cursor-pointer transition-colors ${
+                          table.isActive
+                            ? 'border-amber-200 text-amber-800 bg-amber-50 hover:bg-amber-100'
+                            : 'border-emerald-200 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'
+                        }`}
+                        title={table.isActive ? 'Tạm ngừng hoạt động' : 'Kích hoạt lại'}
+                      >
+                        {table.isActive ? 'Tắt' : 'Bật'}
+                      </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteTable(table.id);
+                        }}
+                        className="p-1.5 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 cursor-pointer transition-colors"
+                        title="Xóa box bàn"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Right Inspector & Detail Panel (Span 1 col) */}
-        <div className="bg-white border border-[#EBE5DC] rounded-3xl p-5 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between pb-3 border-b border-[#EBE5DC]">
-              <h3 className="font-serif font-bold text-base text-[#1C1917]">
-                Thông Tin Bàn
-              </h3>
-              <Sparkles className="w-4 h-4 text-[#C4A480]" />
-            </div>
-
-            {selectedTable ? (
-              <div className="mt-4 space-y-4">
-                <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E0D7C9]/60 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase text-[#8C6A43] tracking-wider block">
-                        Đang Chọn
-                      </span>
-                      <h4 className="font-serif text-xl font-bold text-[#1C1917]">
-                        Bàn {selectedTable.tableCode}
-                      </h4>
-                    </div>
-                    <span
-                      className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                        selectedTable.isActive
-                          ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]'
-                          : 'bg-[#FEF2F2] text-[#991B1B] border-[#FECACA]'
-                      }`}
-                    >
-                      {selectedTable.isActive ? 'Đang Hoạt Động' : 'Ngừng Phục Vụ'}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-white p-2.5 rounded-xl border border-[#EBE5DC]">
-                      <span className="text-[10px] text-[#78716C] block">Sức Chứa:</span>
-                      <span className="font-bold text-[#1C1917]">
-                        {selectedTable.minCapacity} - {selectedTable.maxCapacity} Khách
-                      </span>
-                    </div>
-
-                    <div className="bg-white p-2.5 rounded-xl border border-[#EBE5DC]">
-                      <span className="text-[10px] text-[#78716C] block">Khu Vực:</span>
-                      <span className="font-bold text-[#8C6A43]">{selectedTable.zoneType}</span>
-                    </div>
-
-                    <div className="bg-white p-2.5 rounded-xl border border-[#EBE5DC]">
-                      <span className="text-[10px] text-[#78716C] block">Hình Dạng:</span>
-                      <span className="font-bold text-[#1C1917]">
-                        {selectedTable.shape === 'RECT' && 'Chữ Nhật'}
-                        {selectedTable.shape === 'SQUARE' && 'Hình Vuông'}
-                        {selectedTable.shape === 'CIRCLE' && 'Bàn Tròn'}
-                      </span>
-                    </div>
-
-                    <div className="bg-white p-2.5 rounded-xl border border-[#EBE5DC]">
-                      <span className="text-[10px] text-[#78716C] block">Kích Thước:</span>
-                      <span className="font-bold text-[#1C1917]">
-                        {selectedTable.width} × {selectedTable.height}px
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="text-[11px] text-[#78716C] font-mono bg-white p-2 rounded-xl border border-[#EBE5DC] flex items-center justify-between">
-                    <span>Tọa Độ Mặt Bằng:</span>
-                    <span className="font-bold text-[#8C6A43]">
-                      X: {Math.round(selectedTable.posX)}px | Y: {Math.round(selectedTable.posY)}px
-                    </span>
-                  </div>
-                </div>
-
-                {/* Table Actions */}
-                <div className="space-y-2 pt-2">
-                  <button
-                    onClick={() => openEditTableModal(selectedTable)}
-                    className="w-full btn-tan py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    <span>Chỉnh Sửa Thông Tin Bàn</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleToggleTableActive(selectedTable.id)}
-                    className="w-full py-2 text-xs font-semibold rounded-xl border border-[#EBE5DC] hover:bg-[#FAF7F2] text-[#44403C] transition-colors cursor-pointer"
-                  >
-                    {selectedTable.isActive ? 'Tạm Ngừng Hoạt Động Bàn' : 'Kích Hoạt Lại Bàn'}
-                  </button>
-
-                  <button
-                    onClick={() => handleDeleteTable(selectedTable.id)}
-                    className="w-full py-2 text-xs font-semibold rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Xóa Bàn Khỏi Sơ Đồ</span>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="py-16 text-center text-[#78716C] space-y-2">
-                <Maximize2 className="w-8 h-8 text-[#C4A480]/60 mx-auto" />
-                <p className="text-xs">Chạm vào một bàn bất kỳ trên sơ đồ để kéo thả hoặc chỉnh sửa thông số.</p>
-              </div>
-            )}
+        {/* Right Inspector & Detail Panel (Span 1 Col) */}
+        <div className="bg-white border border-[#EBE5DC] rounded-3xl p-5 shadow-sm space-y-5 sticky top-28">
+          <div className="flex items-center justify-between pb-3 border-b border-[#EBE5DC]">
+            <h3 className="font-serif font-bold text-base text-[#1C1917]">
+              Chi Tiết Box Bàn
+            </h3>
+            <Sparkles className="w-4 h-4 text-[#C4A480]" />
           </div>
 
+          {selectedTable ? (
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E0D7C9]/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-[#8C6A43] tracking-wider block">
+                      Đang Chọn
+                    </span>
+                    <h4 className="font-serif text-xl font-bold text-[#1C1917]">
+                      Bàn {selectedTable.tableCode}
+                    </h4>
+                  </div>
+                  <span
+                    className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                      selectedTable.isActive
+                        ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]'
+                        : 'bg-[#FEF2F2] text-[#991B1B] border-[#FECACA]'
+                    }`}
+                  >
+                    {selectedTable.isActive ? 'Đang Hoạt Động' : 'Ngừng Phục Vụ'}
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between py-1 border-b border-[#EBE5DC]">
+                    <span className="text-[#78716C]">Tầng:</span>
+                    <span className="font-bold text-[#1C1917]">{currentFloor?.name}</span>
+                  </div>
+
+                  <div className="flex justify-between py-1 border-b border-[#EBE5DC]">
+                    <span className="text-[#78716C]">Khu Vực:</span>
+                    <span className="font-bold text-[#8C6A43]">{getZoneBadge(selectedTable.zoneType).label}</span>
+                  </div>
+
+                  <div className="flex justify-between py-1 border-b border-[#EBE5DC]">
+                    <span className="text-[#78716C]">Sức Chứa:</span>
+                    <span className="font-bold text-[#1C1917]">
+                      {selectedTable.minCapacity} - {selectedTable.maxCapacity} Khách
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between py-1 border-b border-[#EBE5DC]">
+                    <span className="text-[#78716C]">Hình Dáng:</span>
+                    <span className="font-bold text-[#1C1917]">
+                      {selectedTable.shape === 'RECT' && 'Chữ Nhật'}
+                      {selectedTable.shape === 'SQUARE' && 'Hình Vuông'}
+                      {selectedTable.shape === 'CIRCLE' && 'Bàn Tròn'}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between py-1">
+                    <span className="text-[#78716C]">Tiền Cọc Riêng:</span>
+                    <span className="font-bold text-[#3D7058]">
+                      {selectedTable.customDeposit
+                        ? `${new Intl.NumberFormat('vi-VN').format(selectedTable.customDeposit)} VNĐ`
+                        : 'Theo Nhà Hàng'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="space-y-2 pt-1">
+                <button
+                  onClick={() => openEditTableModal(selectedTable)}
+                  className="w-full btn-tan py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Chỉnh Sửa Thông Tin Bàn</span>
+                </button>
+
+                <button
+                  onClick={() => handleToggleTableActive(selectedTable.id)}
+                  className="w-full py-2 text-xs font-semibold rounded-xl border border-[#EBE5DC] hover:bg-[#FAF7F2] text-[#44403C] transition-colors cursor-pointer"
+                >
+                  {selectedTable.isActive ? 'Tạm Ngừng Hoạt Động Bàn' : 'Kích Hoạt Lại Bàn'}
+                </button>
+
+                <button
+                  onClick={() => handleDeleteTable(selectedTable.id)}
+                  className="w-full py-2 text-xs font-semibold rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Xóa Bàn Khỏi Hệ Thống</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="py-16 text-center text-[#78716C] space-y-2">
+              <Maximize2 className="w-8 h-8 text-[#C4A480]/60 mx-auto" />
+              <p className="text-xs">Chạm vào một Box bàn bất kỳ để xem thông số và chỉnh sửa nhanh.</p>
+            </div>
+          )}
+
           <div className="pt-4 border-t border-[#EBE5DC] text-[11px] text-[#78716C]">
-            💡 <span className="font-semibold text-[#8C6A43]">Mẹo:</span> Kéo thả bàn để thay đổi vị trí. Nhấn <strong>Lưu Vị Trí Bàn</strong> ở thanh công cụ để đồng bộ cơ sở dữ liệu.
+            💡 <span className="font-semibold text-[#8C6A43]">Mẹo:</span> Bạn có thể lọc nhanh theo từng khu vực (VIP, View Kính, Ngoài trời...) ở thanh trên cùng để quản lý các Box bàn tập trung.
           </div>
         </div>
       </div>
@@ -620,7 +648,7 @@ export const FloorPlanEditor: React.FC<FloorPlanEditorProps> = ({
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#EBE5DC] space-y-5 animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between pb-3 border-b border-[#EBE5DC]">
               <h3 className="font-serif text-lg font-bold text-[#1C1917]">
-                {modalMode === 'create' ? '+ Thêm Bàn Mới Vào Sơ Đồ' : `Chỉnh Sửa Bàn ${tableFormData.tableCode}`}
+                {modalMode === 'create' ? '+ Thêm Box Bàn Mới' : `Chỉnh Sửa Box Bàn ${tableFormData.tableCode}`}
               </h3>
               <button
                 onClick={() => setIsTableModalOpen(false)}
@@ -652,7 +680,7 @@ export const FloorPlanEditor: React.FC<FloorPlanEditorProps> = ({
                     className="w-full px-3 py-2.5 rounded-xl border border-[#E0D7C9] focus:outline-hidden focus:border-[#C4A480] bg-[#FAF7F2]"
                   >
                     <option value="STANDARD">Tiêu Chuẩn (Standard)</option>
-                    <option value="WINDOW_VIEW">Mặt Kính View Phố (Window)</option>
+                    <option value="WINDOW_VIEW">Mặt Kính View Phố</option>
                     <option value="VIP">Phòng VIP Riêng Tư</option>
                     <option value="OUTDOOR">Ngoài Trời (Outdoor)</option>
                     <option value="BAR_SIDE">Cạnh Quầy Bar</option>
@@ -701,32 +729,6 @@ export const FloorPlanEditor: React.FC<FloorPlanEditorProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-[#2C221E] block mb-1">Chiều Rộng (px)</label>
-                  <input
-                    type="number"
-                    min={40}
-                    max={300}
-                    value={tableFormData.width}
-                    onChange={(e) => setTableFormData({ ...tableFormData, width: parseInt(e.target.value) || 80 })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#E0D7C9] focus:outline-hidden focus:border-[#C4A480] bg-[#FAF7F2]"
-                  />
-                </div>
-
-                <div>
-                  <label className="font-bold text-[#2C221E] block mb-1">Chiều Cao (px)</label>
-                  <input
-                    type="number"
-                    min={40}
-                    max={300}
-                    value={tableFormData.height}
-                    onChange={(e) => setTableFormData({ ...tableFormData, height: parseInt(e.target.value) || 80 })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#E0D7C9] focus:outline-hidden focus:border-[#C4A480] bg-[#FAF7F2]"
-                  />
-                </div>
-              </div>
-
               <div>
                 <label className="font-bold text-[#2C221E] block mb-1">Tiền Cọc Bàn Riêng (VNĐ)</label>
                 <input
@@ -763,7 +765,7 @@ export const FloorPlanEditor: React.FC<FloorPlanEditorProps> = ({
                   type="submit"
                   className="btn-tan px-6 py-2 text-xs font-bold shadow-xs cursor-pointer"
                 >
-                  {modalMode === 'create' ? 'Tạo Bàn' : 'Lưu Thay Đổi'}
+                  {modalMode === 'create' ? 'Tạo Box Bàn' : 'Lưu Thay Đổi'}
                 </button>
               </div>
             </form>

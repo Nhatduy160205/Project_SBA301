@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: postgrespassword
       POSTGRES_MULTIPLE_DATABASES: tablemaster_auth,tablemaster_restaurant,tablemaster_booking,tablemaster_payment,tablemaster_analytics
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infrastructure/db-init:/docker-entrypoint-initdb.d

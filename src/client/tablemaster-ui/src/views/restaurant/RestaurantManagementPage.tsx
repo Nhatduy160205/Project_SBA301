@@ -413,10 +413,10 @@ export const RestaurantManagementPage: React.FC = () => {
             >
               <div className="flex items-center gap-3">
                 <Grid className="w-4 h-4" />
-                <span>Trình Vẽ Sơ Đồ 2D</span>
+                <span>Sơ Đồ Bàn (Box View)</span>
               </div>
               <span className="text-[10px] bg-[#3D7058] text-white px-2 py-0.5 rounded-full font-bold">
-                Kéo Thả
+                Dạng Box
               </span>
             </button>
 
@@ -538,7 +538,7 @@ export const RestaurantManagementPage: React.FC = () => {
             <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#1C1917] tracking-tight">
               {activeTab === 'overview' && 'Hồ Sơ Nhà Hàng & Thiết Lập Cọc'}
               {activeTab === 'floor-plans' && 'Danh Sách Sơ Đồ Mặt Bằng & Tầng'}
-              {activeTab === 'floor-editor' && 'Trình Biên Tập Sơ Đồ 2D Tương Tác'}
+              {activeTab === 'floor-editor' && 'Bố Cục Bàn Dạng Box Theo Tầng'}
               {activeTab === 'tables' && 'Quản Lý Danh Sách & Thuộc Tính Bàn'}
               {activeTab === 'time-slots' && 'Quản Lý Khung Giờ & Công Suất Ca Trực'}
               {activeTab === 'menu' && 'Quản Lý Thực Đơn & Danh Mục Món Ăn'}
@@ -836,7 +836,7 @@ export const RestaurantManagementPage: React.FC = () => {
                       className="flex-1 btn-tan py-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
                     >
                       <Grid className="w-3.5 h-3.5" />
-                      <span>Vẽ Sơ Đồ 2D</span>
+                      <span>Bố Cục Box Bàn</span>
                     </button>
 
                     <button
