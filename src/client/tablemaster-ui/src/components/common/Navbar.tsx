@@ -1,4 +1,5 @@
-import { Calendar, LayoutDashboard, Shield, Compass, Building2, LogIn, LogOut } from 'lucide-react';
+import React from 'react';
+import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut } from 'lucide-react';
 import type { AuthUser } from '../../types';
 
 export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'admin' | 'restaurant';
@@ -6,19 +7,19 @@ export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'admin' | '
 interface NavbarProps {
   currentView: ActiveView;
   onNavigate: (view: ActiveView) => void;
-  backendConnected?: boolean | null;
   currentUser?: AuthUser | null;
-  onOpenLogin?: () => void;
-  onLogout?: () => void;
+  onOpenLogin: () => void;
+  onLogout: () => void;
+  onOpenProfile?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentView,
   onNavigate,
-  backendConnected,
   currentUser,
-  onOpenLogin = () => {},
-  onLogout = () => {},
+  onOpenLogin,
+  onLogout,
+  onOpenProfile,
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full bg-[#FBF8F3]/95 backdrop-blur-md border-b border-[#E8DFD1] transition-all">
@@ -135,7 +136,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* User Auth Section */}
           {currentUser ? (
             <div className="flex items-center gap-2 pl-2 border-l border-[#E8DFD1]">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#F2ECE1] border border-[#E8DFD1]">
+              <div
+                onClick={onOpenProfile}
+                title="Hồ sơ cá nhân"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#F2ECE1] border border-[#E8DFD1] cursor-pointer hover:bg-[#EBE3D3] transition-colors"
+              >
                 <div className="w-6 h-6 rounded-full bg-[#8C6A43] text-white flex items-center justify-center text-xs font-bold font-serif">
                   {currentUser.fullName.charAt(0)}
                 </div>
