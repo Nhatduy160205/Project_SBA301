@@ -1,5 +1,4 @@
-import React from 'react';
-import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut } from 'lucide-react';
+import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut, Building2 } from 'lucide-react';
 import type { AuthUser } from '../../types';
 
 export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'admin' | 'restaurant';
@@ -11,6 +10,7 @@ interface NavbarProps {
   onOpenLogin: () => void;
   onLogout: () => void;
   onOpenProfile?: () => void;
+  backendConnected?: boolean | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -20,6 +20,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenLogin,
   onLogout,
   onOpenProfile,
+  backendConnected,
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full bg-[#FBF8F3]/95 backdrop-blur-md border-b border-[#E8DFD1] transition-all">
@@ -148,8 +149,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="text-xs font-bold text-[#1C1917] leading-tight truncate max-w-[120px]">
                     {currentUser.fullName}
                   </div>
-                  <div className="text-[9px] font-mono text-[#8C6A43] font-semibold leading-none">
-                    {currentUser.role.replace('ROLE_', '')}
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[9px] font-mono text-[#8C6A43] font-semibold leading-none">
+                      {currentUser.role.replace('ROLE_', '')}
+                    </span>
+                    {currentUser.vipTier && (
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${
+                        currentUser.vipTier === 'DIAMOND' ? 'bg-cyan-100 text-cyan-800 border border-cyan-300' :
+                        currentUser.vipTier === 'GOLD' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                        currentUser.vipTier === 'SILVER' ? 'bg-slate-200 text-slate-800 border border-slate-300' :
+                        'bg-orange-100 text-orange-800 border border-orange-300'
+                      }`}>
+                        {currentUser.vipTierName || currentUser.vipTier}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

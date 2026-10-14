@@ -4,6 +4,7 @@ import com.tablemaster.auth.dto.*;
 import com.tablemaster.auth.entity.RefreshToken;
 import com.tablemaster.auth.entity.User;
 import com.tablemaster.auth.entity.UserRole;
+import com.tablemaster.auth.entity.VipTier;
 import com.tablemaster.auth.repository.RefreshTokenRepository;
 import com.tablemaster.auth.repository.UserRepository;
 import com.tablemaster.auth.security.JwtTokenProvider;
@@ -285,7 +286,29 @@ public class AuthService {
         return userRepository.findByPhoneNumber(identifier);
     }
 
+    @Transactional(readOnly = true)
+    public LoyaltyWalletDto getLoyaltyWallet(String userIdStr) {
+        UUID userId = parseUserId(userIdStr);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        int points = user.getLoyaltyPoints() != null ? user.getLoyaltyPoints() : 0;
+        VipTier tier = VipTier.fromPoints(points);
+
+        return LoyaltyWalletDto.builder()
+                .userId(user.getId())
+                .loyaltyPoints(points)
+                .vipTier(tier)
+                .vipTierName(tier.getDisplayName())
+                .pointsToNextTier(tier.getNextTierPoints(points))
+                .depositDiscountPercent(tier.getDepositDiscountPercent())
+                .build();
+    }
+
     public UserDto mapToUserDto(User user) {
+        int points = user.getLoyaltyPoints() != null ? user.getLoyaltyPoints() : 0;
+        VipTier tier = VipTier.fromPoints(points);
+
         return UserDto.builder()
                 .id(user.getId())
                 .fullName(user.getFullName())
@@ -293,7 +316,9 @@ public class AuthService {
                 .phone(user.getPhoneNumber())
                 .role(user.getRole())
                 .isActive(user.getIsActive())
-                .loyaltyPoints(user.getLoyaltyPoints() != null ? user.getLoyaltyPoints() : 0)
+                .loyaltyPoints(points)
+                .vipTier(tier)
+                .vipTierName(tier.getDisplayName())
                 .avatarUrl(user.getAvatarUrl())
                 .dietaryPreferences(user.getDietaryPreferences())
                 .build();

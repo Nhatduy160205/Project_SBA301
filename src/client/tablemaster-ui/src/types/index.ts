@@ -105,6 +105,17 @@ export interface AuthUser {
   role: 'ROLE_ADMIN' | 'ROLE_MANAGER' | 'ROLE_WAITER' | 'ROLE_HOST' | 'ROLE_CUSTOMER';
   isActive: boolean;
   loyaltyPoints?: number;
+  vipTier?: 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND';
+  vipTierName?: string;
   avatarUrl?: string | null;
   dietaryPreferences?: string | null;
+}
+
+export interface LoyaltyWallet {
+  userId: string;
+  loyaltyPoints: number;
+  vipTier: 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND';
+  vipTierName: string;
+  pointsToNextTier: number;
+  depositDiscountPercent: number;
 }

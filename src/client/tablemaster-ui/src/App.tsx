@@ -18,7 +18,7 @@ import { AdminStudioPage } from './views/AdminStudioPage';
 import { RestaurantManagementPage } from './views/restaurant/RestaurantManagementPage';
 import { INITIAL_TABLES, INITIAL_BOOKINGS, INITIAL_TABLE_ORDERS } from './data/mockData';
 import type { TableItem, TableStatus, BookingDetails, TableOrderRecord, AuthUser } from './types';
-
+import { bookingApi } from './services/bookingApi';
 
 export function App() {
   const [currentView, setCurrentView] = useState<ActiveView>('landing');
@@ -310,6 +310,7 @@ export function App() {
         onOpenLogin={() => setIsLoginModalOpen(true)}
         onLogout={handleLogout}
         onOpenProfile={() => setIsProfileModalOpen(true)}
+        backendConnected={backendConnected}
       />
 
       {/* Main View Transition Container */}

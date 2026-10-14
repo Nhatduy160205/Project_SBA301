@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, User, Image as ImageIcon, Utensils, ShieldAlert, CheckCircle2, Star } from 'lucide-react';
-import type { AuthUser } from '../../types';
+import { X, User, Image as ImageIcon, Utensils, ShieldAlert, CheckCircle2, Star, Crown } from 'lucide-react';
+import type { AuthUser, LoyaltyWallet } from '../../types';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -30,6 +30,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [fullName, setFullName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [dietary, setDietary] = useState('');
+  const [wallet, setWallet] = useState<LoyaltyWallet | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -41,6 +42,18 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
       setDietary(user.dietaryPreferences ?? '');
       setErrorMsg(null);
       setSuccessMsg(null);
+
+      const accessToken = localStorage.getItem('tm_access_token');
+      if (accessToken) {
+        fetch('/api/v1/auth/loyalty', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data) setWallet(data);
+          })
+          .catch(() => {});
+      }
     }
   }, [isOpen, user]);
 
@@ -138,14 +151,52 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </button>
 
           <h2 className="font-serif text-xl font-bold text-amber-100 mb-1">Hồ Sơ &amp; Sở Thích Ẩm Thực</h2>
-          <p className="text-[11px] text-stone-400 mb-5">
+          <p className="text-[11px] text-stone-400 mb-4">
             {user.email} • {user.phone}
-            {typeof user.loyaltyPoints === 'number' && (
-              <span className="ml-2 inline-flex items-center gap-1 text-[#C4A480] font-semibold">
-                <Star className="w-3 h-3" /> {user.loyaltyPoints} điểm
-              </span>
-            )}
           </p>
+
+          {/* VIP & Loyalty Wallet Card */}
+          <div className="mb-5 p-3.5 rounded-2xl bg-gradient-to-r from-stone-900 via-stone-850 to-stone-900 border border-[#C4A480]/30 shadow-inner">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`p-2 rounded-xl ${
+                    (wallet?.vipTier || user.vipTier) === 'DIAMOND'
+                      ? 'bg-cyan-950 text-cyan-300 border border-cyan-800/60'
+                      : (wallet?.vipTier || user.vipTier) === 'GOLD'
+                      ? 'bg-amber-950 text-amber-300 border border-amber-800/60'
+                      : (wallet?.vipTier || user.vipTier) === 'SILVER'
+                      ? 'bg-slate-800 text-slate-200 border border-slate-700'
+                      : 'bg-stone-800 text-[#C4A480] border border-[#C4A480]/30'
+                  }`}
+                >
+                  <Crown className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-amber-100 flex items-center gap-2">
+                    <span>Hạng VIP: {wallet?.vipTierName || user.vipTierName || 'Đồng'}</span>
+                    {(wallet?.depositDiscountPercent ?? 0) > 0 && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-700/80 font-semibold">
+                        Giảm {wallet?.depositDiscountPercent}% cọc
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-stone-400 mt-0.5">
+                    {wallet?.pointsToNextTier && wallet.pointsToNextTier > 0
+                      ? `Cần thêm ${wallet.pointsToNextTier} điểm để lên hạng tiếp theo`
+                      : 'Đã đạt hạng thành viên cao nhất'}
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-base font-bold text-[#C4A480] flex items-center justify-end gap-1">
+                  <Star className="w-3.5 h-3.5 fill-[#C4A480]" />
+                  <span>{wallet?.loyaltyPoints ?? user.loyaltyPoints ?? 0}</span>
+                </div>
+                <div className="text-[9px] uppercase tracking-wider text-stone-400 font-semibold">Điểm tích lũy</div>
+              </div>
+            </div>
+          </div>
 
           {errorMsg && (
             <div className="mb-4 p-3 rounded-xl bg-red-950/60 border border-red-800/60 text-red-300 text-xs flex items-center gap-2">

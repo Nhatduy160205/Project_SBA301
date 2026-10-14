@@ -4,6 +4,7 @@ import com.tablemaster.auth.dto.*;
 import com.tablemaster.auth.entity.RefreshToken;
 import com.tablemaster.auth.entity.User;
 import com.tablemaster.auth.entity.UserRole;
+import com.tablemaster.auth.entity.VipTier;
 import com.tablemaster.auth.repository.RefreshTokenRepository;
 import com.tablemaster.auth.repository.UserRepository;
 import com.tablemaster.auth.security.JwtTokenProvider;
@@ -351,5 +352,61 @@ class AuthServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.getUser().getEmail()).isEqualTo("admin@primebistro.vn");
         verify(userRepository, times(1)).findByEmail("admin@primebistro.vn");
+    }
+
+    @Test
+    @DisplayName("Scenario 19: VIP tier calculation across boundaries")
+    void testVipTierCalculations() {
+        assertThat(VipTier.fromPoints(null)).isEqualTo(VipTier.BRONZE);
+        assertThat(VipTier.fromPoints(0)).isEqualTo(VipTier.BRONZE);
+        assertThat(VipTier.fromPoints(499)).isEqualTo(VipTier.BRONZE);
+        assertThat(VipTier.BRONZE.getNextTierPoints(499)).isEqualTo(1);
+        assertThat(VipTier.BRONZE.getDepositDiscountPercent()).isEqualTo(0);
+
+        assertThat(VipTier.fromPoints(500)).isEqualTo(VipTier.SILVER);
+        assertThat(VipTier.fromPoints(999)).isEqualTo(VipTier.SILVER);
+        assertThat(VipTier.SILVER.getNextTierPoints(500)).isEqualTo(500);
+        assertThat(VipTier.SILVER.getDepositDiscountPercent()).isEqualTo(5);
+
+        assertThat(VipTier.fromPoints(1000)).isEqualTo(VipTier.GOLD);
+        assertThat(VipTier.fromPoints(2499)).isEqualTo(VipTier.GOLD);
+        assertThat(VipTier.GOLD.getNextTierPoints(1000)).isEqualTo(1500);
+        assertThat(VipTier.GOLD.getDepositDiscountPercent()).isEqualTo(10);
+
+        assertThat(VipTier.fromPoints(2500)).isEqualTo(VipTier.DIAMOND);
+        assertThat(VipTier.fromPoints(5000)).isEqualTo(VipTier.DIAMOND);
+        assertThat(VipTier.DIAMOND.getNextTierPoints(2500)).isEqualTo(0);
+        assertThat(VipTier.DIAMOND.getDepositDiscountPercent()).isEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("Scenario 20: getLoyaltyWallet returns correct wallet details and discount")
+    void testGetLoyaltyWallet() {
+        UUID userId = activeAdminUser.getId();
+        activeAdminUser.setLoyaltyPoints(1200);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(activeAdminUser));
+
+        LoyaltyWalletDto wallet = authService.getLoyaltyWallet(userId.toString());
+
+        assertThat(wallet).isNotNull();
+        assertThat(wallet.getUserId()).isEqualTo(userId);
+        assertThat(wallet.getLoyaltyPoints()).isEqualTo(1200);
+        assertThat(wallet.getVipTier()).isEqualTo(VipTier.GOLD);
+        assertThat(wallet.getVipTierName()).isEqualTo("Vàng");
+        assertThat(wallet.getDepositDiscountPercent()).isEqualTo(10);
+        assertThat(wallet.getPointsToNextTier()).isEqualTo(1300);
+    }
+
+    @Test
+    @DisplayName("Scenario 21: getLoyaltyWallet throws NOT_FOUND when user does not exist")
+    void testGetLoyaltyWalletUserNotFound() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.findById(userId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.getLoyaltyWallet(userId.toString()))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);
     }
 }
