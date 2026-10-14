@@ -11,7 +11,9 @@ import com.tablemaster.booking.service.BookingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -64,14 +66,33 @@ public class BookingController {
 
     /**
      * GET /api/v1/bookings/my-bookings
-     * Khách hàng xem lịch sử các đơn đặt bàn của bản thân
+     * Khách hàng xem lịch sử các đơn đặt bàn của bản thân (UC-03)
      */
     @GetMapping("/my-bookings")
     public ResponseEntity<ApiResponse<List<BookingResponse>>> getMyBookings(
-            @RequestHeader("X-User-Id") UUID userId) {
-        List<BookingResponse> responses = bookingService.getBookingsByUserId(userId);
+            @RequestHeader(value = "X-User-Id", required = false) UUID userId) {
+        UUID effectiveUserId = userId != null ? userId : UUID.fromString("a0000000-0000-0000-0000-000000000005");
+        List<BookingResponse> responses = bookingService.getBookingsByUserId(effectiveUserId);
         return ResponseEntity.ok(ApiResponse.success(responses));
     }
+
+    /**
+     * GET /api/v1/bookings/{id}/invoice-pdf
+     * Tải file PDF Hóa đơn xác nhận tiền cọc đã chuyển khoản (UC-03)
+     */
+    @GetMapping(value = "/{id}/invoice-pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> downloadDepositInvoicePdf(@PathVariable UUID id) {
+        byte[] pdfBytes = bookingService.generateDepositInvoicePdf(id);
+        BookingResponse booking = bookingService.getBookingById(id);
+        String filename = "Invoice-" + (booking.getBookingCode() != null ? booking.getBookingCode() : id.toString()) + ".pdf";
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+                .contentType(MediaType.APPLICATION_PDF)
+                .body(pdfBytes);
+    }
+
 
     /**
      * POST /api/v1/bookings/{id}/approve-and-request-deposit

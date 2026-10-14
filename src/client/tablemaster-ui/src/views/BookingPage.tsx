@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar,
@@ -13,6 +13,7 @@ import {
   Phone,
   Mail,
   FileText,
+  X,
   ChevronDown,
   ChevronUp,
   Plus,
@@ -114,13 +115,20 @@ interface BookingPageProps {
   initialFloor?: 1 | 2 | 3;
   onUpdateTableStatus: (tableId: string, newStatus: TableItem['status']) => void;
   onAddBooking: (newBooking: BookingDetails) => void;
+  rebookData?: BookingDetails | null;
+  onClearRebook?: () => void;
 }
 
 export const BookingPage: React.FC<BookingPageProps> = ({
   tables,
   onUpdateTableStatus,
   onAddBooking,
+  rebookData,
+  onClearRebook,
 }) => {
+  // Toast thông báo Re-book 1 chạm
+  const [rebookToast, setRebookToast] = useState<string | null>(null);
+
   // Step 1: Time & Party
   const [showSection1, setShowSection1] = useState<boolean>(true);
   const [selectedDate, setSelectedDate] = useState<string>(() => formatDateToISO(new Date()));
@@ -138,6 +146,29 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   // Step 3: Pre-orders
   const [selectedDishes, setSelectedDishes] = useState<Record<string, number>>({});
   const [showPreOrderSection, setShowPreOrderSection] = useState<boolean>(true);
+
+  // Tự động khôi phục dữ liệu khi khách bấm "Đặt lại bàn này" (Re-book 1-Chạm)
+  useEffect(() => {
+    if (rebookData) {
+      if (rebookData.partySize) setPartySize(rebookData.partySize);
+      if (rebookData.customerName) setCustomerName(rebookData.customerName);
+      if (rebookData.phone) setCustomerPhone(rebookData.phone);
+      if (rebookData.email) setCustomerEmail(rebookData.email);
+      if (rebookData.notes) setCustomNotes(rebookData.notes);
+
+      if (rebookData.preOrders && rebookData.preOrders.length > 0) {
+        const dishMap: Record<string, number> = {};
+        rebookData.preOrders.forEach((p) => {
+          if (p.dish && p.dish.id) {
+            dishMap[p.dish.id] = p.quantity;
+          }
+        });
+        setSelectedDishes(dishMap);
+      }
+
+      setRebookToast(`Đã tự động tải cấu hình bàn & món ăn cũ từ đơn ${rebookData.bookingId}. Quý khách chỉ cần chọn ngày giờ phù hợp để hoàn tất.`);
+    }
+  }, [rebookData]);
   const [selectedMenuCategory, setSelectedMenuCategory] = useState<string>('ALL');
   const [expandedComboIds, setExpandedComboIds] = useState<Record<string, boolean>>({ 'combo-1': true });
 
@@ -235,7 +266,6 @@ export const BookingPage: React.FC<BookingPageProps> = ({
 
     setIsSubmitting(true);
     let realBookingCode = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
-    let createdBackendUUID = '';
 
     // GỌI BACKEND THẬT QUA REST API: POST /api/v1/bookings/request
     try {
@@ -259,7 +289,6 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       const res = await bookingApi.createBooking(payload);
       if (res.success && res.data) {
         realBookingCode = res.data.bookingCode;
-        createdBackendUUID = res.data.id;
         setBackendBookingUUID(res.data.id);
         console.log('✅ [Backend API] Đã tạo thành công đơn đặt bàn trên PostgreSQL:', res.data);
       }
@@ -328,6 +357,25 @@ export const BookingPage: React.FC<BookingPageProps> = ({
 
   return (
     <div className="w-full max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
+      {/* Re-book Notification Banner (UC-03) */}
+      {rebookToast && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 flex items-center justify-between text-xs text-amber-900 shadow-sm animate-in fade-in duration-300">
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="font-semibold">{rebookToast}</span>
+          </div>
+          <button
+            onClick={() => {
+              setRebookToast(null);
+              if (onClearRebook) onClearRebook();
+            }}
+            className="p-1 text-amber-600 hover:text-amber-900 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Top Hero Banner - Official Restaurant Brand & Info */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#1A1412] via-[#261E1A] to-[#1A1412] p-8 sm:p-10 text-white shadow-2xl border border-[#3E312B]">
         <div className="absolute -right-16 -top-16 w-96 h-96 bg-[#C4A480]/15 rounded-full blur-3xl pointer-events-none" />
