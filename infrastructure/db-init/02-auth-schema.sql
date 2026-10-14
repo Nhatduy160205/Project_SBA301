@@ -15,6 +15,7 @@ CREATE TABLE users (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     loyalty_points INT DEFAULT 0,
     avatar_url TEXT,
+    dietary_preferences TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -35,7 +36,7 @@ CREATE INDEX idx_users_role ON users(role) WHERE is_active = TRUE;
 CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id, is_revoked);
 
 -- Seed Data
-INSERT INTO users (id, phone_number, email, password_hash, full_name, role, loyalty_points) VALUES
+INSERT INTO users (id, phone_number, email, password_hash, full_name, role, loyalty_points) VALUES 
 ('a0000000-0000-0000-0000-000000000001', '+84900000001', 'admin@primebistro.vn', '$2a$10$gC7kFVQNOCOoVuo0I/U3x.9Y6DYmxvNqv.4FrkulnLo1V7wyjg90a', 'Chủ Nhà Hàng (Admin)', 'ROLE_ADMIN', 0),
 ('a0000000-0000-0000-0000-000000000002', '+84900000002', 'manager@primebistro.vn', '$2a$10$gC7kFVQNOCOoVuo0I/U3x.9Y6DYmxvNqv.4FrkulnLo1V7wyjg90a', 'Quản Lý Ca Trực', 'ROLE_MANAGER', 0),
 ('a0000000-0000-0000-0000-000000000003', '+84900000003', 'host@primebistro.vn', '$2a$10$gC7kFVQNOCOoVuo0I/U3x.9Y6DYmxvNqv.4FrkulnLo1V7wyjg90a', 'Lễ Tân Sảnh Tầng 1', 'ROLE_HOST', 0),

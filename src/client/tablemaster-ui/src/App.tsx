@@ -9,6 +9,7 @@ import {
 import { Navbar } from './components/common/Navbar';
 import type { ActiveView } from './components/common/Navbar';
 import { LoginModal } from './components/common/LoginModal';
+import { ProfileModal } from './components/common/ProfileModal';
 import { LandingPage } from './views/LandingPage';
 import { BookingPage } from './views/BookingPage';
 import { HostTabletPage } from './views/HostTabletPage';
@@ -17,7 +18,6 @@ import { AdminStudioPage } from './views/AdminStudioPage';
 import { RestaurantManagementPage } from './views/restaurant/RestaurantManagementPage';
 import { INITIAL_TABLES, INITIAL_BOOKINGS, INITIAL_TABLE_ORDERS } from './data/mockData';
 import type { TableItem, TableStatus, BookingDetails, TableOrderRecord, AuthUser } from './types';
-import { bookingApi } from './services/bookingApi';
 
 
 export function App() {
@@ -78,6 +78,7 @@ export function App() {
     }
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const handleLogout = async () => {
     const refreshToken = localStorage.getItem('tm_refresh_token');
@@ -305,10 +306,10 @@ export function App() {
       <Navbar
         currentView={currentView}
         onNavigate={handleNavigate}
-        backendConnected={backendConnected}
         currentUser={currentUser}
         onOpenLogin={() => setIsLoginModalOpen(true)}
         onLogout={handleLogout}
+        onOpenProfile={() => setIsProfileModalOpen(true)}
       />
 
       {/* Main View Transition Container */}
@@ -493,6 +494,14 @@ export function App() {
         onLoginSuccess={(user) => {
           setCurrentUser(user);
         }}
+      />
+
+      {/* Profile & Dietary Preferences Modal */}
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        user={currentUser}
+        onClose={() => setIsProfileModalOpen(false)}
+        onProfileUpdated={(user) => setCurrentUser(user)}
       />
     </div>
   );
