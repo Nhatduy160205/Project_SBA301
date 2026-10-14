@@ -273,7 +273,7 @@ public class AuthService {
 
     private Optional<User> findUserByIdentifier(String identifier) {
         if (PhoneNumberUtil.isEmail(identifier)) {
-            return userRepository.findByEmail(identifier);
+            return userRepository.findByEmail(identifier.trim().toLowerCase());
         }
 
         String normalizedPhone = PhoneNumberUtil.normalizePhoneNumber(identifier);

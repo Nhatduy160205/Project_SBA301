@@ -334,4 +334,22 @@ class AuthServiceTest {
                 .extracting(e -> ((ResponseStatusException) e).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
     }
+
+    @Test
+    @DisplayName("Scenario 18: Case-insensitive email login successfully matches lowercased registered user")
+    void testCaseInsensitiveEmailLogin() {
+        LoginRequest request = new LoginRequest("  ADMIN@PrimeBistro.VN  ", rawPassword);
+
+        when(userRepository.findByEmail("admin@primebistro.vn")).thenReturn(Optional.of(activeAdminUser));
+        when(passwordEncoder.matches(rawPassword, encodedPassword)).thenReturn(true);
+        when(jwtTokenProvider.generateAccessToken(anyString(), anyString(), anyString())).thenReturn("mock-access-token");
+        when(jwtTokenProvider.generateRefreshTokenString()).thenReturn("mock-refresh-token");
+        when(jwtTokenProvider.getRefreshTokenExpirationMs()).thenReturn(2592000000L);
+
+        AuthResponse response = authService.login(request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getUser().getEmail()).isEqualTo("admin@primebistro.vn");
+        verify(userRepository, times(1)).findByEmail("admin@primebistro.vn");
+    }
 }
