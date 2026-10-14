@@ -104,4 +104,7 @@ export interface AuthUser {
   phone: string;
   role: 'ROLE_ADMIN' | 'ROLE_MANAGER' | 'ROLE_WAITER' | 'ROLE_HOST' | 'ROLE_CUSTOMER';
   isActive: boolean;
+  loyaltyPoints?: number;
+  avatarUrl?: string | null;
+  dietaryPreferences?: string | null;
 }

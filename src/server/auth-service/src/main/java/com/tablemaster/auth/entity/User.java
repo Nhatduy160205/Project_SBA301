@@ -49,6 +49,9 @@ public class User {
     @Column(name = "avatar_url", columnDefinition = "TEXT")
     private String avatarUrl;
 
+    @Column(name = "dietary_preferences", columnDefinition = "TEXT")
+    private String dietaryPreferences;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private ZonedDateTime createdAt;

@@ -54,4 +54,15 @@ public class AuthController {
         UserDto currentUser = authService.getCurrentUser(userIdStr);
         return ResponseEntity.ok(currentUser);
     }
+
+    @PutMapping("/me")
+    public ResponseEntity<UserDto> updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getPrincipal() == null) {
+            return ResponseEntity.status(401).build();
+        }
+        String userIdStr = authentication.getPrincipal().toString();
+        UserDto updatedUser = authService.updateCurrentUser(userIdStr, request);
+        return ResponseEntity.ok(updatedUser);
+    }
 }
