@@ -4,6 +4,7 @@ import com.tablemaster.restaurant.dto.TableDto;
 import com.tablemaster.restaurant.entity.TableEntity;
 import com.tablemaster.restaurant.exception.BadRequestException;
 import com.tablemaster.restaurant.exception.ConflictException;
+import com.tablemaster.restaurant.exception.ErrorCode;
 import com.tablemaster.restaurant.exception.ResourceNotFoundException;
 import com.tablemaster.restaurant.repository.FloorPlanRepository;
 import com.tablemaster.restaurant.repository.TableRepository;
@@ -42,14 +43,14 @@ public class TableService {
     @Transactional(readOnly = true)
     public TableDto getTableById(UUID id) {
         TableEntity table = tableRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bàn với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TABLE_NOT_FOUND));
         return mapToDto(table);
     }
 
     @Transactional(readOnly = true)
     public TableDto getTableByCode(String code) {
         TableEntity table = tableRepository.findByTableCode(code)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bàn với mã: " + code));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TABLE_NOT_FOUND));
         return mapToDto(table);
     }
 
@@ -80,7 +81,7 @@ public class TableService {
     @Transactional
     public TableDto updateTable(UUID id, TableDto dto) {
         TableEntity table = tableRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bàn với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TABLE_NOT_FOUND));
 
         validateTable(dto, id);
 
@@ -124,7 +125,7 @@ public class TableService {
     @Transactional
     public TableDto toggleActive(UUID id) {
         TableEntity table = tableRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy bàn với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TABLE_NOT_FOUND));
         table.setIsActive(!table.getIsActive());
         return mapToDto(tableRepository.save(table));
     }
@@ -132,18 +133,18 @@ public class TableService {
     @Transactional
     public void deleteTable(UUID id) {
         if (!tableRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Không tìm thấy bàn với ID: " + id);
+            throw new ResourceNotFoundException(ErrorCode.TABLE_NOT_FOUND);
         }
         tableRepository.deleteById(id);
     }
 
     private void validateTable(TableDto dto, UUID currentId) {
         if (!floorPlanRepository.existsById(dto.getFloorPlanId())) {
-            throw new BadRequestException("Sơ đồ tầng với ID " + dto.getFloorPlanId() + " không tồn tại");
+            throw new ResourceNotFoundException(ErrorCode.FLOOR_PLAN_NOT_FOUND);
         }
 
         if (dto.getMinCapacity() > dto.getMaxCapacity()) {
-            throw new BadRequestException("Sức chứa tối thiểu không thể lớn hơn sức chứa tối đa (" + dto.getMinCapacity() + " > " + dto.getMaxCapacity() + ")");
+            throw new BadRequestException(ErrorCode.TABLE_CAPACITY_INVALID);
         }
 
         String code = dto.getTableCode().trim().toUpperCase();
@@ -152,7 +153,7 @@ public class TableService {
                 : tableRepository.existsByTableCodeAndIdNot(code, currentId);
 
         if (exists) {
-            throw new ConflictException("Mã bàn '" + code + "' đã tồn tại trong hệ thống");
+            throw new ConflictException(ErrorCode.TABLE_CODE_ALREADY_EXISTS);
         }
     }
 

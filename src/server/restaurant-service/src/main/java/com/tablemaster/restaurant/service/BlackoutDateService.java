@@ -3,6 +3,7 @@ package com.tablemaster.restaurant.service;
 import com.tablemaster.restaurant.dto.BlackoutDateDto;
 import com.tablemaster.restaurant.entity.BlackoutDate;
 import com.tablemaster.restaurant.exception.ConflictException;
+import com.tablemaster.restaurant.exception.ErrorCode;
 import com.tablemaster.restaurant.exception.ResourceNotFoundException;
 import com.tablemaster.restaurant.repository.BlackoutDateRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +31,7 @@ public class BlackoutDateService {
     @Transactional(readOnly = true)
     public BlackoutDateDto getBlackoutDateById(UUID id) {
         BlackoutDate entity = blackoutDateRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ngày lễ/ngày đặc biệt với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.BLACKOUT_DATE_NOT_FOUND));
         return mapToDto(entity);
     }
 
@@ -42,7 +43,7 @@ public class BlackoutDateService {
     @Transactional
     public BlackoutDateDto createBlackoutDate(BlackoutDateDto dto) {
         if (blackoutDateRepository.existsByEventDate(dto.getEventDate())) {
-            throw new ConflictException("Đã tồn tại cấu hình sự kiện cho ngày: " + dto.getEventDate());
+            throw new ConflictException(ErrorCode.BLACKOUT_DATE_ALREADY_EXISTS);
         }
 
         BlackoutDate entity = BlackoutDate.builder()
@@ -61,10 +62,10 @@ public class BlackoutDateService {
     @Transactional
     public BlackoutDateDto updateBlackoutDate(UUID id, BlackoutDateDto dto) {
         BlackoutDate entity = blackoutDateRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ngày lễ/ngày đặc biệt với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.BLACKOUT_DATE_NOT_FOUND));
 
         if (!entity.getEventDate().equals(dto.getEventDate()) && blackoutDateRepository.existsByEventDateAndIdNot(dto.getEventDate(), id)) {
-            throw new ConflictException("Đã tồn tại cấu hình sự kiện cho ngày: " + dto.getEventDate());
+            throw new ConflictException(ErrorCode.BLACKOUT_DATE_ALREADY_EXISTS);
         }
 
         entity.setEventDate(dto.getEventDate());
@@ -81,7 +82,7 @@ public class BlackoutDateService {
     @Transactional
     public void deleteBlackoutDate(UUID id) {
         if (!blackoutDateRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Không tìm thấy ngày lễ/ngày đặc biệt với ID: " + id);
+            throw new ResourceNotFoundException(ErrorCode.BLACKOUT_DATE_NOT_FOUND);
         }
         blackoutDateRepository.deleteById(id);
     }

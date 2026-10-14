@@ -2,6 +2,7 @@ package com.tablemaster.restaurant.service;
 
 import com.tablemaster.restaurant.dto.RestaurantProfileDto;
 import com.tablemaster.restaurant.entity.RestaurantProfile;
+import com.tablemaster.restaurant.exception.ErrorCode;
 import com.tablemaster.restaurant.exception.ResourceNotFoundException;
 import com.tablemaster.restaurant.repository.RestaurantProfileRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,14 +20,14 @@ public class RestaurantProfileService {
     @Transactional(readOnly = true)
     public RestaurantProfileDto getProfile() {
         RestaurantProfile profile = profileRepository.findFirstByOrderByIdAsc()
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông tin cấu hình nhà hàng"));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.RESTAURANT_PROFILE_NOT_FOUND));
         return mapToDto(profile);
     }
 
     @Transactional(readOnly = true)
     public RestaurantProfileDto getProfileById(UUID id) {
         RestaurantProfile profile = profileRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thông tin nhà hàng với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.RESTAURANT_NOT_FOUND));
         return mapToDto(profile);
     }
 
