@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut } from 'lucide-react';
+import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut, Building2, History } from 'lucide-react';
 import type { AuthUser } from '../../types';
 
 export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'admin' | 'restaurant';
@@ -11,6 +11,8 @@ interface NavbarProps {
   onOpenLogin: () => void;
   onLogout: () => void;
   onOpenProfile?: () => void;
+  onOpenHistory?: () => void;
+  backendConnected?: boolean | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -20,6 +22,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenLogin,
   onLogout,
   onOpenProfile,
+  onOpenHistory,
+  backendConnected,
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full bg-[#FBF8F3]/95 backdrop-blur-md border-b border-[#E8DFD1] transition-all">
@@ -109,6 +113,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             <LayoutDashboard className="w-4 h-4 text-[#C4A480]" />
             <span>Dashboard</span>
           </button>
+          {onOpenHistory && (
+            <button
+              onClick={onOpenHistory}
+              className="transition-all py-1.5 flex items-center gap-1.5 cursor-pointer text-[#78716C] hover:text-[#1C1917]"
+            >
+              <History className="w-4 h-4 text-[#C4A480]" />
+              <span>Lịch Sử Đơn & Cọc</span>
+            </button>
+          )}
         </nav>
 
         {/* Right CTA Button & Auth */}
@@ -124,6 +137,16 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="w-2 h-2 rounded-full bg-rose-500"></span>
               <span>Backend: Offline</span>
             </div>
+          )}
+          {onOpenHistory && (
+            <button
+              onClick={onOpenHistory}
+              title="Xem Lịch sử Đơn, Hóa đơn Cọc & Mã Vé QR"
+              className="px-3.5 py-2.5 rounded-full border border-[#E8DFD1] bg-white hover:bg-[#FAF7F2] text-[#8C6A43] text-xs font-semibold shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition"
+            >
+              <History className="w-4 h-4 text-[#8C6A43]" />
+              <span className="hidden sm:inline">Lịch Sử & Cọc</span>
+            </button>
           )}
           <button
             onClick={() => onNavigate('booking')}

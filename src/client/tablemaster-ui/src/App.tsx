@@ -10,6 +10,7 @@ import { Navbar } from './components/common/Navbar';
 import type { ActiveView } from './components/common/Navbar';
 import { LoginModal } from './components/common/LoginModal';
 import { ProfileModal } from './components/common/ProfileModal';
+import { BookingHistoryModal } from './components/common/BookingHistoryModal';
 import { LandingPage } from './views/LandingPage';
 import { BookingPage } from './views/BookingPage';
 import { HostTabletPage } from './views/HostTabletPage';
@@ -18,6 +19,7 @@ import { AdminStudioPage } from './views/AdminStudioPage';
 import { RestaurantManagementPage } from './views/restaurant/RestaurantManagementPage';
 import { INITIAL_TABLES, INITIAL_BOOKINGS, INITIAL_TABLE_ORDERS } from './data/mockData';
 import type { TableItem, TableStatus, BookingDetails, TableOrderRecord, AuthUser } from './types';
+import { bookingApi, type BackendBooking } from './services/bookingApi';
 
 
 export function App() {
@@ -27,16 +29,18 @@ export function App() {
   const [bookings, setBookings] = useState<BookingDetails[]>(INITIAL_BOOKINGS);
   const [tableOrders, setTableOrders] = useState<Record<string, TableOrderRecord>>(INITIAL_TABLE_ORDERS);
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
+  const [rebookData, setRebookData] = useState<BookingDetails | null>(null);
 
   useEffect(() => {
     bookingApi
       .getAllBookings()
-      .then((res) => {
+      .then((res: any) => {
         if (res.success && Array.isArray(res.data)) {
           setBackendConnected(true);
           console.log('✅ [App] Đã kết nối với Backend Spring Boot (8083)! Có', res.data.length, 'đơn trong DB');
           if (res.data.length > 0) {
-            const mapped: BookingDetails[] = res.data.map((b) => ({
+            const mapped: BookingDetails[] = res.data.map((b: BackendBooking) => ({
               bookingId: b.bookingCode || b.id.substring(0, 8),
               customerName: b.guestName,
               phone: b.guestPhone,
@@ -62,7 +66,7 @@ export function App() {
           }
         }
       })
-      .catch((err) => {
+      .catch((err: any) => {
         console.warn('⚠️ [App] Chưa thể kết nối Backend:', err);
         setBackendConnected(false);
       });
@@ -310,6 +314,8 @@ export function App() {
         onOpenLogin={() => setIsLoginModalOpen(true)}
         onLogout={handleLogout}
         onOpenProfile={() => setIsProfileModalOpen(true)}
+        onOpenHistory={() => setIsHistoryModalOpen(true)}
+        backendConnected={backendConnected}
       />
 
       {/* Main View Transition Container */}
@@ -340,6 +346,8 @@ export function App() {
                 initialFloor={targetFloor}
                 onUpdateTableStatus={handleUpdateTableStatus}
                 onAddBooking={handleAddBooking}
+                rebookData={rebookData}
+                onClearRebook={() => setRebookData(null)}
               />
             </motion.div>
           )}
@@ -502,6 +510,18 @@ export function App() {
         user={currentUser}
         onClose={() => setIsProfileModalOpen(false)}
         onProfileUpdated={(user) => setCurrentUser(user)}
+      />
+
+      {/* Booking History, E-Invoices & QR Pass Modal (UC-03) */}
+      <BookingHistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+        currentUser={currentUser}
+        localBookings={bookings}
+        onRebook={(booking) => {
+          setRebookData(booking);
+          handleNavigate('booking');
+        }}
       />
     </div>
   );

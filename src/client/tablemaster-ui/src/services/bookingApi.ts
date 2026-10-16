@@ -152,6 +152,52 @@ export const bookingApi = {
   },
 
   /**
+   * 3b. Khách hàng xem lịch sử các đơn đặt bàn của mình (UC-03)
+   * GET /api/v1/bookings/my-bookings
+   */
+  async getMyBookings(userId?: string): Promise<ApiResponse<BackendBooking[]>> {
+    const targetUserId = userId || SEED_DATA.USER_ID;
+    const res = await fetch(`${BASE_URL}/my-bookings`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Id': targetUserId,
+      },
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ message: `Lỗi ${res.status}` }));
+      throw new Error(err.message || 'Không thể tải lịch sử đơn đặt bàn');
+    }
+
+    return res.json();
+  },
+
+  /**
+   * 3c. Tải hóa đơn cọc điện tử dạng PDF (UC-03)
+   * GET /api/v1/bookings/{id}/invoice-pdf
+   */
+  async downloadInvoicePdf(bookingId: string, bookingCode: string = 'Invoice'): Promise<void> {
+    const res = await fetch(`${BASE_URL}/${bookingId}/invoice-pdf`, {
+      method: 'GET',
+    });
+
+    if (!res.ok) {
+      throw new Error('Không thể tải hóa đơn cọc điện tử. Vui lòng thử lại sau.');
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Invoice-${bookingCode}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  },
+
+  /**
    * 4. Lễ tân duyệt đơn và yêu cầu cọc
    * POST /api/v1/bookings/{id}/approve-and-request-deposit
    */
