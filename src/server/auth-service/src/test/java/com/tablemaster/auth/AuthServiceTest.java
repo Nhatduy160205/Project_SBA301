@@ -409,4 +409,102 @@ class AuthServiceTest {
                 .extracting(e -> ((ResponseStatusException) e).getStatusCode())
                 .isEqualTo(HttpStatus.NOT_FOUND);
     }
+
+    @Test
+    @DisplayName("Scenario 22: Awarding points (+600) upgrades tier from Bronze to Silver")
+    void testAdjustLoyaltyPointsUpgradeTier() {
+        UUID userId = activeAdminUser.getId();
+        activeAdminUser.setLoyaltyPoints(0);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(activeAdminUser));
+        when(userRepository.save(any(User.class))).thenReturn(activeAdminUser);
+
+        LoyaltyAdjustRequest request = LoyaltyAdjustRequest.builder()
+                .pointsDelta(600)
+                .reason("ORDER_EARNED")
+                .referenceId("BILL-001")
+                .build();
+
+        LoyaltyWalletDto wallet = authService.adjustLoyaltyPoints(userId.toString(), request);
+
+        assertThat(wallet).isNotNull();
+        assertThat(wallet.getLoyaltyPoints()).isEqualTo(600);
+        assertThat(wallet.getVipTier()).isEqualTo(VipTier.SILVER);
+        assertThat(wallet.getDepositDiscountPercent()).isEqualTo(5);
+        assertThat(wallet.getPointsToNextTier()).isEqualTo(400);
+        assertThat(activeAdminUser.getLoyaltyPoints()).isEqualTo(600);
+        verify(userRepository, times(1)).save(activeAdminUser);
+    }
+
+    @Test
+    @DisplayName("Scenario 23: Deducting points (-200) degrades tier if falling below threshold")
+    void testAdjustLoyaltyPointsDeduct() {
+        UUID userId = activeAdminUser.getId();
+        activeAdminUser.setLoyaltyPoints(600);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(activeAdminUser));
+        when(userRepository.save(any(User.class))).thenReturn(activeAdminUser);
+
+        LoyaltyAdjustRequest request = LoyaltyAdjustRequest.builder()
+                .pointsDelta(-200)
+                .reason("REDEEM_DISCOUNT")
+                .build();
+
+        LoyaltyWalletDto wallet = authService.adjustLoyaltyPoints(userId.toString(), request);
+
+        assertThat(wallet.getLoyaltyPoints()).isEqualTo(400);
+        assertThat(wallet.getVipTier()).isEqualTo(VipTier.BRONZE);
+        assertThat(wallet.getDepositDiscountPercent()).isEqualTo(0);
+        verify(userRepository, times(1)).save(activeAdminUser);
+    }
+
+    @Test
+    @DisplayName("Scenario 24: Deducting more than current balance throws BAD_REQUEST and does not save")
+    void testAdjustLoyaltyPointsInsufficientBalance() {
+        UUID userId = activeAdminUser.getId();
+        activeAdminUser.setLoyaltyPoints(100);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(activeAdminUser));
+
+        LoyaltyAdjustRequest request = LoyaltyAdjustRequest.builder()
+                .pointsDelta(-150)
+                .reason("REDEEM_DISCOUNT")
+                .build();
+
+        assertThatThrownBy(() -> authService.adjustLoyaltyPoints(userId.toString(), request))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("Scenario 25: Zero points delta is rejected with BAD_REQUEST")
+    void testAdjustLoyaltyPointsZeroDelta() {
+        LoyaltyAdjustRequest request = LoyaltyAdjustRequest.builder().pointsDelta(0).build();
+
+        assertThatThrownBy(() -> authService.adjustLoyaltyPoints(activeAdminUser.getId().toString(), request))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("Scenario 26: Adjusting points on disabled account throws FORBIDDEN")
+    void testAdjustLoyaltyPointsDisabledAccount() {
+        UUID userId = inactiveUser.getId();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(inactiveUser));
+
+        LoyaltyAdjustRequest request = LoyaltyAdjustRequest.builder().pointsDelta(50).build();
+
+        assertThatThrownBy(() -> authService.adjustLoyaltyPoints(userId.toString(), request))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+
+        verify(userRepository, never()).save(any(User.class));
+    }
 }

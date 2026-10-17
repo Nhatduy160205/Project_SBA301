@@ -305,6 +305,63 @@ public class AuthService {
                 .build();
     }
 
+    @Transactional
+    public LoyaltyWalletDto adjustLoyaltyPoints(String userIdStr, LoyaltyAdjustRequest request) {
+        if (request == null || request.getPointsDelta() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Yêu cầu điều chỉnh điểm không hợp lệ");
+        }
+        if (request.getPointsDelta() == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Số điểm điều chỉnh phải khác 0");
+        }
+
+        UUID userId = parseUserId(userIdStr);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+
+        if (Boolean.FALSE.equals(user.getIsActive())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tài khoản người dùng đã bị vô hiệu hóa");
+        }
+
+        int currentPoints = user.getLoyaltyPoints() != null ? user.getLoyaltyPoints() : 0;
+        int newPoints = currentPoints + request.getPointsDelta();
+
+        if (newPoints < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Số dư điểm tích lũy không đủ để thực hiện giao dịch (Hiện có: " + currentPoints + ", cần trừ: " + Math.abs(request.getPointsDelta()) + ")");
+        }
+
+        user.setLoyaltyPoints(newPoints);
+        userRepository.save(user);
+
+        VipTier oldTier = VipTier.fromPoints(currentPoints);
+        VipTier newTier = VipTier.fromPoints(newPoints);
+
+        log.info("Adjusted loyalty points for user {}: delta={}, oldPoints={}, newPoints={}, reason={}, refId={}",
+                userId, request.getPointsDelta(), currentPoints, newPoints, request.getReason(), request.getReferenceId());
+
+        if (oldTier != newTier) {
+            log.info("User {} tier changed: {} -> {}", userId, oldTier, newTier);
+        }
+
+        return LoyaltyWalletDto.builder()
+                .userId(user.getId())
+                .loyaltyPoints(newPoints)
+                .vipTier(newTier)
+                .vipTierName(newTier.getDisplayName())
+                .pointsToNextTier(newTier.getNextTierPoints(newPoints))
+                .depositDiscountPercent(newTier.getDepositDiscountPercent())
+                .build();
+    }
+
+    @Transactional
+    public LoyaltyWalletDto adjustLoyaltyPoints(UUID userId, int pointsDelta, String reason, String referenceId) {
+        return adjustLoyaltyPoints(userId.toString(), LoyaltyAdjustRequest.builder()
+                .pointsDelta(pointsDelta)
+                .reason(reason)
+                .referenceId(referenceId)
+                .build());
+    }
+
     public UserDto mapToUserDto(User user) {
         int points = user.getLoyaltyPoints() != null ? user.getLoyaltyPoints() : 0;
         VipTier tier = VipTier.fromPoints(points);
