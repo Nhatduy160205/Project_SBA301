@@ -5,6 +5,9 @@ import lombok.*;
 
 import java.math.BigDecimal;
 
+/**
+ * Request DTO mô phỏng sự kiện báo khách bỏ bàn (No-Show)
+ */
 @Getter
 @Setter
 @NoArgsConstructor

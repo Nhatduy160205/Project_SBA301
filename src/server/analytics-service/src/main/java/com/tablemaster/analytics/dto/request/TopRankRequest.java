@@ -4,6 +4,10 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.*;
 
+/**
+ * Request DTO phục vụ phân trang và giới hạn bảng xếp hạng
+ * Ngăn chặn DoS do yêu cầu số lượng bản ghi quá lớn
+ */
 @Getter
 @Setter
 @NoArgsConstructor

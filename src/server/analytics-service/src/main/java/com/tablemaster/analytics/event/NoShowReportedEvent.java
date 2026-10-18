@@ -6,6 +6,10 @@ import lombok.*;
 
 import java.math.BigDecimal;
 
+/**
+ * Sự kiện khách bỏ bàn (No-Show) không đến nhận chỗ
+ * Được bắn qua Kafka topic: booking.no-show
+ */
 @Getter
 @Setter
 @NoArgsConstructor
@@ -19,7 +23,7 @@ public class NoShowReportedEvent {
     private String bookingId;
 
     @Pattern(regexp = "^\\d{4}-\\d{2}-\\d{2}$", message = "Ngày phải theo định dạng YYYY-MM-DD")
-    private String date;
+    private String date; // YYYY-MM-DD
 
     private String slotId;
     private String slotName;

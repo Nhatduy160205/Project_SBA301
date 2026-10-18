@@ -6,6 +6,10 @@ import lombok.*;
 
 import java.math.BigDecimal;
 
+/**
+ * Sự kiện thanh toán tiền cọc thành công
+ * Được bắn qua Kafka topic: payment.deposit.success
+ */
 @Getter
 @Setter
 @NoArgsConstructor
@@ -25,7 +29,7 @@ public class DepositPaidSuccessEvent {
     private String userId;
 
     @Pattern(regexp = "^\\d{4}-\\d{2}-\\d{2}$", message = "Ngày phải theo định dạng YYYY-MM-DD")
-    private String date;
+    private String date; // YYYY-MM-DD
 
     private String slotId;
     private String slotName;

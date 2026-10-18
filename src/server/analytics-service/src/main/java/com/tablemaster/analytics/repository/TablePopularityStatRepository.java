@@ -10,9 +10,14 @@ import java.util.UUID;
 
 @Repository
 public interface TablePopularityStatRepository extends JpaRepository<TablePopularityStat, UUID> {
+
     Optional<TablePopularityStat> findByTableId(UUID tableId);
+
     Optional<TablePopularityStat> findByTableCode(String tableCode);
+
     List<TablePopularityStat> findAllByOrderByTotalRevenueGeneratedDesc();
+
     List<TablePopularityStat> findTop5ByOrderByTotalRevenueGeneratedDesc();
+
     List<TablePopularityStat> findAllByZoneTypeOrderByTotalReservationsDesc(String zoneType);
 }

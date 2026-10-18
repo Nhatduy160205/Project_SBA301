@@ -6,6 +6,9 @@ import org.springframework.format.annotation.DateTimeFormat;
 
 import java.time.LocalDate;
 
+/**
+ * Request DTO lọc dữ liệu thống kê doanh thu theo khoảng thời gian
+ */
 @Getter
 @Setter
 @NoArgsConstructor

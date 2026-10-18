@@ -22,7 +22,7 @@ public class ShiftMetricItemResponse {
     private BigDecimal totalDepositCollected;
     private BigDecimal noShowPenaltyIncome;
     private BigDecimal totalFoodRevenue;
-    private BigDecimal totalShiftRevenue;
+    private BigDecimal totalShiftRevenue; // totalFoodRevenue + noShowPenaltyIncome
     private BigDecimal revpashScore;
     private Float occupancyRate;
 }

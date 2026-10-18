@@ -5,6 +5,9 @@ import lombok.*;
 
 import java.math.BigDecimal;
 
+/**
+ * Request DTO mô phỏng sự kiện thanh toán cọc thành công
+ */
 @Getter
 @Setter
 @NoArgsConstructor

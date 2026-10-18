@@ -18,7 +18,7 @@ public class TableHeatmapResponse {
     private Integer totalReservations;
     private Integer cancelCount;
     private BigDecimal totalRevenueGenerated;
-    private Double heatScore;
-    private String heatLevel;
-    private String colorHex;
+    private Double heatScore; // 0 - 100
+    private String heatLevel; // "HOT", "WARM", "NORMAL", "COOL"
+    private String colorHex;  // for 2D Canvas / Heatmap rendering
 }

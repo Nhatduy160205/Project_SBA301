@@ -88,16 +88,16 @@ public class TablePopularityService {
 
         if (score >= 80.0) {
             heatLevel = "HOT";
-            colorHex = "#EF4444";
+            colorHex = "#EF4444"; // Đỏ rực
         } else if (score >= 50.0) {
             heatLevel = "WARM";
-            colorHex = "#F59E0B";
+            colorHex = "#F59E0B"; // Cam vàng
         } else if (score >= 20.0) {
             heatLevel = "NORMAL";
-            colorHex = "#10B981";
+            colorHex = "#10B981"; // Xanh lá
         } else {
             heatLevel = "COOL";
-            colorHex = "#3B82F6";
+            colorHex = "#3B82F6"; // Xanh lam
         }
 
         return TableHeatmapResponse.builder()

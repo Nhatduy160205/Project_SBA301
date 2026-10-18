@@ -12,6 +12,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
 
+/**
+ * Bộ xử lý ngoại lệ tập trung (Global Exception Handler)
+ * Tăng cường bảo mật:
+ * 1. Chuẩn hóa lỗi Validation đầu vào (CWE-20)
+ * 2. Ngăn chặn rò rỉ thông tin hệ thống / Stack Trace (CWE-209: Information Exposure)
+ */
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
@@ -44,6 +50,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public ApiResponse<Void> handleGeneralException(Exception ex) {
+        // Ghi log chi tiết trên server nội bộ nhưng không leak stack trace cho client
         log.error("[System Error] Unhandled exception occurred: ", ex);
         return ApiResponse.error(500, "Đã có lỗi hệ thống xảy ra. Vui lòng thử lại sau.");
     }
