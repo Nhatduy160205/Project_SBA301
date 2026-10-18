@@ -12,7 +12,6 @@ interface NavbarProps {
   onLogout: () => void;
   onOpenProfile?: () => void;
   onOpenHistory?: () => void;
-  backendConnected?: boolean | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -23,7 +22,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   onOpenProfile,
   onOpenHistory,
-  backendConnected,
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full bg-[#FBF8F3]/95 backdrop-blur-md border-b border-[#E8DFD1] transition-all">
@@ -126,18 +124,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right CTA Button & Auth */}
         <div className="flex items-center gap-3">
-          {backendConnected === true && (
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>Backend: 8083 Online</span>
-            </div>
-          )}
-          {backendConnected === false && (
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-              <span>Backend: Offline</span>
-            </div>
-          )}
           {onOpenHistory && (
             <button
               onClick={onOpenHistory}

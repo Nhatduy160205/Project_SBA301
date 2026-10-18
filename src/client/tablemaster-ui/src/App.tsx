@@ -28,7 +28,6 @@ export function App() {
   const [tables, setTables] = useState<TableItem[]>(INITIAL_TABLES);
   const [bookings, setBookings] = useState<BookingDetails[]>(INITIAL_BOOKINGS);
   const [tableOrders, setTableOrders] = useState<Record<string, TableOrderRecord>>(INITIAL_TABLE_ORDERS);
-  const [backendConnected, setBackendConnected] = useState<boolean | null>(null);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
   const [rebookData, setRebookData] = useState<BookingDetails | null>(null);
 
@@ -37,7 +36,6 @@ export function App() {
       .getAllBookings()
       .then((res: any) => {
         if (res.success && Array.isArray(res.data)) {
-          setBackendConnected(true);
           console.log('✅ [App] Đã kết nối với Backend Spring Boot (8083)! Có', res.data.length, 'đơn trong DB');
           if (res.data.length > 0) {
             const mapped: BookingDetails[] = res.data.map((b: BackendBooking) => ({
@@ -68,7 +66,6 @@ export function App() {
       })
       .catch((err: any) => {
         console.warn('⚠️ [App] Chưa thể kết nối Backend:', err);
-        setBackendConnected(false);
       });
   }, []);
 
@@ -315,7 +312,6 @@ export function App() {
         onLogout={handleLogout}
         onOpenProfile={() => setIsProfileModalOpen(true)}
         onOpenHistory={() => setIsHistoryModalOpen(true)}
-        backendConnected={backendConnected}
       />
 
       {/* Main View Transition Container */}
