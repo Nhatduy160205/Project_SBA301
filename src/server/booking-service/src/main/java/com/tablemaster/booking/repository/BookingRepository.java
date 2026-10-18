@@ -41,6 +41,26 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
             @Param("slotId") UUID slotId,
             @Param("statuses") List<BookingStatus> statuses);
 
+    // Tìm tất cả bàn đã được đặt trong ngày + danh sách ca giờ
+    @Query("SELECT bt.id.tableId FROM BookingTable bt " +
+            "JOIN bt.booking b " +
+            "WHERE b.bookingDate = :date " +
+            "AND b.timeSlotId IN :slotIds " +
+            "AND b.status IN :statuses")
+    List<UUID> findBookedTableIdsBySlots(
+            @Param("date") LocalDate date,
+            @Param("slotIds") List<UUID> slotIds,
+            @Param("statuses") List<BookingStatus> statuses);
+
+    // Tìm tất cả bàn đã được đặt trong ngày (toàn bộ các ca)
+    @Query("SELECT bt.id.tableId FROM BookingTable bt " +
+            "JOIN bt.booking b " +
+            "WHERE b.bookingDate = :date " +
+            "AND b.status IN :statuses")
+    List<UUID> findBookedTableIdsByDate(
+            @Param("date") LocalDate date,
+            @Param("statuses") List<BookingStatus> statuses);
+
     // Tìm các đơn quá hạn cọc (AWAITING_PAYMENT + hết deadline) → Auto expire
     @Query("SELECT b FROM Booking b WHERE b.status = 'AWAITING_PAYMENT' " +
             "AND b.paymentDeadline IS NOT NULL AND b.paymentDeadline < :now")
