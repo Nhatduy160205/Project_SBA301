@@ -11,10 +11,7 @@ import java.util.UUID;
 
 @Repository
 public interface DailyShiftMetricRepository extends JpaRepository<DailyShiftMetric, UUID> {
-
     Optional<DailyShiftMetric> findByMetricDateAndTimeSlotId(LocalDate metricDate, UUID timeSlotId);
-
     List<DailyShiftMetric> findAllByMetricDateOrderByCreatedAtAsc(LocalDate metricDate);
-
     List<DailyShiftMetric> findAllByMetricDateBetweenOrderByMetricDateAsc(LocalDate startDate, LocalDate endDate);
 }

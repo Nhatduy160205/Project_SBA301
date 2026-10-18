@@ -1,4 +1,4 @@
-package com.tablemaster.analytics.dto;
+package com.tablemaster.analytics.dto.response;
 
 import lombok.*;
 
@@ -22,7 +22,7 @@ public class ShiftMetricItemResponse {
     private BigDecimal totalDepositCollected;
     private BigDecimal noShowPenaltyIncome;
     private BigDecimal totalFoodRevenue;
-    private BigDecimal totalShiftRevenue; // totalFoodRevenue + noShowPenaltyIncome
+    private BigDecimal totalShiftRevenue;
     private BigDecimal revpashScore;
     private Float occupancyRate;
 }

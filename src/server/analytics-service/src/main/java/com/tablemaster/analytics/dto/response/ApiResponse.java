@@ -1,4 +1,4 @@
-package com.tablemaster.analytics.dto;
+package com.tablemaster.analytics.dto.response;
 
 import lombok.*;
 import java.time.ZonedDateTime;
