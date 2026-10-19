@@ -10,6 +10,7 @@ import { Navbar } from './components/common/Navbar';
 import type { ActiveView } from './components/common/Navbar';
 import { LoginModal } from './components/common/LoginModal';
 import { ProfileModal } from './components/common/ProfileModal';
+import { ReviewModal } from './components/common/ReviewModal';
 import { BookingHistoryModal } from './components/common/BookingHistoryModal';
 import { LandingPage } from './views/LandingPage';
 import { BookingPage } from './views/BookingPage';
@@ -20,7 +21,6 @@ import { RestaurantManagementPage } from './views/restaurant/RestaurantManagemen
 import { INITIAL_TABLES, INITIAL_BOOKINGS, INITIAL_TABLE_ORDERS } from './data/mockData';
 import type { TableItem, TableStatus, BookingDetails, TableOrderRecord, AuthUser } from './types';
 import { bookingApi, type BackendBooking } from './services/bookingApi';
-
 
 export function App() {
   const [currentView, setCurrentView] = useState<ActiveView>('landing');
@@ -80,6 +80,7 @@ export function App() {
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
 
   const handleLogout = async () => {
     const refreshToken = localStorage.getItem('tm_refresh_token');
@@ -311,6 +312,7 @@ export function App() {
         onOpenLogin={() => setIsLoginModalOpen(true)}
         onLogout={handleLogout}
         onOpenProfile={() => setIsProfileModalOpen(true)}
+        onOpenReview={() => setIsReviewModalOpen(true)}
         onOpenHistory={() => setIsHistoryModalOpen(true)}
       />
 
@@ -506,6 +508,22 @@ export function App() {
         user={currentUser}
         onClose={() => setIsProfileModalOpen(false)}
         onProfileUpdated={(user) => setCurrentUser(user)}
+      />
+
+      {/* Post-dining Review & Rating Modal (UC-14) */}
+      <ReviewModal
+        isOpen={isReviewModalOpen}
+        user={currentUser}
+        onClose={() => setIsReviewModalOpen(false)}
+        onOpenLogin={() => setIsLoginModalOpen(true)}
+        onReviewSubmitted={(_review, updatedPoints) => {
+          if (currentUser) {
+            setCurrentUser({
+              ...currentUser,
+              loyaltyPoints: updatedPoints,
+            });
+          }
+        }}
       />
 
       {/* Booking History, E-Invoices & QR Pass Modal (UC-03) */}

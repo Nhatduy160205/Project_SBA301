@@ -1,5 +1,4 @@
-import React from 'react';
-import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut, Building2, History } from 'lucide-react';
+import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut, Building2, Star, History } from 'lucide-react';
 import type { AuthUser } from '../../types';
 
 export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'admin' | 'restaurant';
@@ -11,6 +10,7 @@ interface NavbarProps {
   onOpenLogin: () => void;
   onLogout: () => void;
   onOpenProfile?: () => void;
+  onOpenReview?: () => void;
   onOpenHistory?: () => void;
 }
 
@@ -21,6 +21,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenLogin,
   onLogout,
   onOpenProfile,
+  onOpenReview,
   onOpenHistory,
 }) => {
   return (
@@ -142,6 +143,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>Đặt Bàn Ngay</span>
           </button>
 
+          {onOpenReview && (
+            <button
+              onClick={onOpenReview}
+              title="Đánh giá chất lượng phục vụ & nhận +50 điểm loyalty"
+              className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-full border border-amber-300 bg-amber-50/80 hover:bg-amber-100 text-amber-900 text-xs font-semibold shadow-2xs cursor-pointer active:scale-95 transition"
+            >
+              <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+              <span>Đánh Giá</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-amber-200/90 text-amber-900 text-[9px] font-bold">+50đ</span>
+            </button>
+          )}
+
           {/* User Auth Section */}
           {currentUser ? (
             <div className="flex items-center gap-2 pl-2 border-l border-[#E8DFD1]">
@@ -157,8 +170,20 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="text-xs font-bold text-[#1C1917] leading-tight truncate max-w-[120px]">
                     {currentUser.fullName}
                   </div>
-                  <div className="text-[9px] font-mono text-[#8C6A43] font-semibold leading-none">
-                    {currentUser.role.replace('ROLE_', '')}
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[9px] font-mono text-[#8C6A43] font-semibold leading-none">
+                      {currentUser.role.replace('ROLE_', '')}
+                    </span>
+                    {currentUser.vipTier && (
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider ${
+                        currentUser.vipTier === 'DIAMOND' ? 'bg-cyan-100 text-cyan-800 border border-cyan-300' :
+                        currentUser.vipTier === 'GOLD' ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                        currentUser.vipTier === 'SILVER' ? 'bg-slate-200 text-slate-800 border border-slate-300' :
+                        'bg-orange-100 text-orange-800 border border-orange-300'
+                      }`}>
+                        {currentUser.vipTierName || currentUser.vipTier}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

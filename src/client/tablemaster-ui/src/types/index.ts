@@ -105,6 +105,41 @@ export interface AuthUser {
   role: 'ROLE_ADMIN' | 'ROLE_MANAGER' | 'ROLE_WAITER' | 'ROLE_HOST' | 'ROLE_CUSTOMER';
   isActive: boolean;
   loyaltyPoints?: number;
+  vipTier?: 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND';
+  vipTierName?: string;
   avatarUrl?: string | null;
   dietaryPreferences?: string | null;
+}
+
+export interface LoyaltyWallet {
+  userId: string;
+  loyaltyPoints: number;
+  vipTier: 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND';
+  vipTierName: string;
+  pointsToNextTier: number;
+  depositDiscountPercent: number;
+}
+
+export interface ReviewItem {
+  id: string;
+  userId: string;
+  customerName: string;
+  customerAvatar?: string | null;
+  bookingId?: string | null;
+  foodRating: number;
+  serviceRating: number;
+  ambianceRating: number;
+  overallRating: number;
+  comment?: string | null;
+  pointsAwarded: number;
+  createdAt: string;
+}
+
+export interface CreateReviewPayload {
+  bookingId?: string;
+  foodRating: number;
+  serviceRating: number;
+  ambianceRating: number;
+  overallRating?: number;
+  comment?: string;
 }
