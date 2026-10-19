@@ -1,6 +1,6 @@
 # TÀI LIỆU THIẾT KẾ CƠ SỞ DỮ LIỆU & KIẾN TRÚC ĐỊNH DANH (AUTH SERVICE)
 # DỊCH VỤ: AUTH & IDENTITY SERVICE (`tablemaster_auth`)
-## HỆ THỐNG: TABLEMASTER – NỀN TẢNG ĐẶT BÀN & ĐIỀU PHỐI MẶT BẰNG 2D
+## HỆ THỐNG: TABLEMASTER – NỀN TẢNG ĐẶT BÀN & QUẢN LÝ BÀN ĂN NHÀ HÀNG
 
 > **Mã tài liệu:** DB-SPEC-AUTH-01  
 > **Phiên bản:** 2.1.0 (Bản cập nhật Kiến trúc Hybrid Auth & Seamless Phone Identity)  
@@ -179,14 +179,14 @@ CREATE TABLE refresh_tokens (
 
 | Quyền hạn / Nghiệp vụ | `ROLE_CUSTOMER` (Thực khách) | `ROLE_HOST` (Lễ tân sảnh) | `ROLE_WAITER` (Phục vụ bàn) | `ROLE_MANAGER` (Quản lý ca) | `ROLE_ADMIN` (Chủ nhà hàng) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Xem Sơ đồ 2D & Đặt giữ bàn** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Xem Danh mục Bàn & Đặt chỗ** | ✅ | ✅ | ✅ | ✅ | ✅ |
 | **Quét Camera QR Check-in khách** | ❌ | ✅ | ❌ | ✅ | ✅ |
 | **Xếp khách vãng lai (Walk-in)** | ❌ | ✅ | ❌ | ✅ | ✅ |
 | **Chuyển bàn / Ghép bàn tại sảnh** | ❌ | ✅ | ❌ | ✅ | ✅ |
 | **Gọi thêm món tại bàn (Mobile App)**| ❌ | ❌ | ✅ | ✅ | ✅ |
 | **Duyệt hoàn tiền cọc (Refund)** | ❌ | ❌ | ❌ | ✅ | ✅ |
 | **Khóa / Mở bàn khẩn cấp** | ❌ | ❌ | ❌ | ✅ | ✅ |
-| **Chỉnh sửa Sơ đồ 2D (Floor Builder)** | ❌ | ❌ | ❌ | ❌ | ✅ |
+| **Quản lý Danh mục Bàn ăn & Ca giờ** | ❌ | ❌ | ❌ | ❌ | ✅ |
 | **Cấu hình Menu, Mức cọc & Ca giờ** | ❌ | ❌ | ❌ | ❌ | ✅ |
 | **Xem Báo cáo Doanh thu & RevPASH** | ❌ | ❌ | ❌ | ❌ | ✅ |
 

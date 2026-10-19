@@ -5,6 +5,7 @@ import com.tablemaster.restaurant.dto.MenuItemDto;
 import com.tablemaster.restaurant.entity.MenuCategory;
 import com.tablemaster.restaurant.entity.MenuItem;
 import com.tablemaster.restaurant.exception.BadRequestException;
+import com.tablemaster.restaurant.exception.ErrorCode;
 import com.tablemaster.restaurant.exception.ResourceNotFoundException;
 import com.tablemaster.restaurant.repository.MenuCategoryRepository;
 import com.tablemaster.restaurant.repository.MenuItemRepository;
@@ -44,7 +45,7 @@ public class MenuCategoryService {
     @Transactional(readOnly = true)
     public MenuCategoryDto getCategoryById(UUID id, boolean includeItems) {
         MenuCategory cat = categoryRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy danh mục món với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.CATEGORY_NOT_FOUND));
 
         MenuCategoryDto dto = mapToDto(cat);
         if (includeItems) {
@@ -69,7 +70,7 @@ public class MenuCategoryService {
     @Transactional
     public MenuCategoryDto updateCategory(UUID id, MenuCategoryDto dto) {
         MenuCategory category = categoryRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy danh mục món với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.CATEGORY_NOT_FOUND));
 
         category.setName(dto.getName());
         if (dto.getDisplayOrder() != null) category.setDisplayOrder(dto.getDisplayOrder());
@@ -82,7 +83,7 @@ public class MenuCategoryService {
     @Transactional
     public MenuCategoryDto toggleActive(UUID id) {
         MenuCategory category = categoryRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy danh mục món với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.CATEGORY_NOT_FOUND));
         category.setIsActive(!category.getIsActive());
         return mapToDto(categoryRepository.save(category));
     }
@@ -90,11 +91,11 @@ public class MenuCategoryService {
     @Transactional
     public void deleteCategory(UUID id) {
         if (!categoryRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Không tìm thấy danh mục món với ID: " + id);
+            throw new ResourceNotFoundException(ErrorCode.CATEGORY_NOT_FOUND);
         }
         long itemCount = itemRepository.countByCategoryId(id);
         if (itemCount > 0) {
-            throw new BadRequestException("Không thể xóa danh mục đang có " + itemCount + " món ăn. Vui lòng chuyển hoặc xóa các món ăn trước.");
+            throw new BadRequestException(ErrorCode.CATEGORY_HAS_ITEMS);
         }
         categoryRepository.deleteById(id);
     }

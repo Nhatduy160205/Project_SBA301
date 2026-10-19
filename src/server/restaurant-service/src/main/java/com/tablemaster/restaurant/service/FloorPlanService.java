@@ -5,6 +5,7 @@ import com.tablemaster.restaurant.dto.TableDto;
 import com.tablemaster.restaurant.entity.FloorPlan;
 import com.tablemaster.restaurant.entity.TableEntity;
 import com.tablemaster.restaurant.exception.ConflictException;
+import com.tablemaster.restaurant.exception.ErrorCode;
 import com.tablemaster.restaurant.exception.ResourceNotFoundException;
 import com.tablemaster.restaurant.repository.FloorPlanRepository;
 import com.tablemaster.restaurant.repository.TableRepository;
@@ -42,7 +43,7 @@ public class FloorPlanService {
     @Transactional(readOnly = true)
     public FloorPlanDto getFloorPlanById(UUID id, boolean includeTables) {
         FloorPlan plan = floorPlanRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sơ đồ tầng với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.FLOOR_PLAN_NOT_FOUND));
 
         FloorPlanDto dto = mapToDto(plan);
         if (includeTables) {
@@ -55,7 +56,7 @@ public class FloorPlanService {
     @Transactional(readOnly = true)
     public FloorPlanDto getFloorPlanByNumber(Integer floorNumber, boolean includeTables) {
         FloorPlan plan = floorPlanRepository.findByFloorNumber(floorNumber)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sơ đồ cho tầng số: " + floorNumber));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.FLOOR_PLAN_NOT_FOUND));
 
         FloorPlanDto dto = mapToDto(plan);
         if (includeTables) {
@@ -68,7 +69,7 @@ public class FloorPlanService {
     @Transactional
     public FloorPlanDto createFloorPlan(FloorPlanDto dto) {
         floorPlanRepository.findByFloorNumber(dto.getFloorNumber()).ifPresent(existing -> {
-            throw new ConflictException("Đã tồn tại sơ đồ cho tầng số: " + dto.getFloorNumber());
+            throw new ConflictException(ErrorCode.FLOOR_PLAN_ALREADY_EXISTS);
         });
 
         String layoutMeta = (dto.getLayoutMetadata() != null && !dto.getLayoutMetadata().trim().isEmpty())
@@ -92,11 +93,11 @@ public class FloorPlanService {
     @Transactional
     public FloorPlanDto updateFloorPlan(UUID id, FloorPlanDto dto) {
         FloorPlan plan = floorPlanRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sơ đồ tầng với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.FLOOR_PLAN_NOT_FOUND));
 
         if (!plan.getFloorNumber().equals(dto.getFloorNumber())) {
             floorPlanRepository.findByFloorNumber(dto.getFloorNumber()).ifPresent(existing -> {
-                throw new ConflictException("Đã tồn tại sơ đồ cho tầng số: " + dto.getFloorNumber());
+                throw new ConflictException(ErrorCode.FLOOR_PLAN_ALREADY_EXISTS);
             });
             plan.setFloorNumber(dto.getFloorNumber());
         }
@@ -115,7 +116,7 @@ public class FloorPlanService {
     @Transactional
     public FloorPlanDto updateLayoutMetadata(UUID id, String layoutMetadata) {
         FloorPlan plan = floorPlanRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sơ đồ tầng với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.FLOOR_PLAN_NOT_FOUND));
         String validMeta = (layoutMetadata != null && !layoutMetadata.trim().isEmpty())
                 ? layoutMetadata
                 : "{\"walls\":[], \"windows\":[], \"doors\":[], \"facilities\":[]}";
@@ -126,7 +127,7 @@ public class FloorPlanService {
     @Transactional
     public FloorPlanDto togglePublished(UUID id) {
         FloorPlan plan = floorPlanRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy sơ đồ tầng với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.FLOOR_PLAN_NOT_FOUND));
         plan.setIsPublished(!plan.getIsPublished());
         return mapToDto(floorPlanRepository.save(plan));
     }
@@ -134,7 +135,7 @@ public class FloorPlanService {
     @Transactional
     public void deleteFloorPlan(UUID id) {
         if (!floorPlanRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Không tìm thấy sơ đồ tầng với ID: " + id);
+            throw new ResourceNotFoundException(ErrorCode.FLOOR_PLAN_NOT_FOUND);
         }
         floorPlanRepository.deleteById(id);
     }

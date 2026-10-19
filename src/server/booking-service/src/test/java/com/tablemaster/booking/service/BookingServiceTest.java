@@ -44,6 +44,9 @@ class BookingServiceTest {
     @Mock
     private BookingEventProducer bookingEventProducer;
 
+    @Mock
+    private InvoicePdfService invoicePdfService;
+
     @InjectMocks
     private BookingServiceImpl bookingService;
 
@@ -145,5 +148,50 @@ class BookingServiceTest {
 
         CheckInRequest request = new CheckInRequest(qrToken);
         assertThrows(InvalidBookingStateException.class, () -> bookingService.checkIn(request));
+    }
+
+    @Test
+    void getBookingsByUserId_Success() {
+        Booking booking = Booking.builder()
+                .id(UUID.randomUUID())
+                .bookingCode("BK2610090001")
+                .userId(userId)
+                .guestName("Nguyễn Văn A")
+                .guestPhone("0987654321")
+                .status(BookingStatus.CONFIRMED)
+                .build();
+
+        when(bookingRepository.findByUserIdOrderByCreatedAtDesc(userId))
+                .thenReturn(List.of(booking));
+
+        List<BookingResponse> responses = bookingService.getBookingsByUserId(userId);
+
+        assertNotNull(responses);
+        assertEquals(1, responses.size());
+        assertEquals("BK2610090001", responses.get(0).getBookingCode());
+        verify(bookingRepository, times(1)).findByUserIdOrderByCreatedAtDesc(userId);
+    }
+
+    @Test
+    void generateDepositInvoicePdf_Success() {
+        UUID bookingId = UUID.randomUUID();
+        Booking booking = Booking.builder()
+                .id(bookingId)
+                .bookingCode("BK2610090001")
+                .guestName("Nguyễn Văn A")
+                .guestPhone("0987654321")
+                .status(BookingStatus.CONFIRMED)
+                .totalDeposit(BigDecimal.valueOf(200000))
+                .build();
+
+        byte[] fakePdf = new byte[]{1, 2, 3, 4};
+        when(bookingRepository.findById(bookingId)).thenReturn(Optional.of(booking));
+        when(invoicePdfService.generateInvoicePdf(booking)).thenReturn(fakePdf);
+
+        byte[] result = bookingService.generateDepositInvoicePdf(bookingId);
+
+        assertNotNull(result);
+        assertEquals(4, result.length);
+        verify(invoicePdfService, times(1)).generateInvoicePdf(booking);
     }
 }

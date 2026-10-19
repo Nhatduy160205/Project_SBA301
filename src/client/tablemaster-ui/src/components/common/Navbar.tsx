@@ -1,4 +1,4 @@
-import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut, Building2, Star } from 'lucide-react';
+import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut, Building2, Star, History } from 'lucide-react';
 import type { AuthUser } from '../../types';
 
 export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'admin' | 'restaurant';
@@ -11,7 +11,7 @@ interface NavbarProps {
   onLogout: () => void;
   onOpenProfile?: () => void;
   onOpenReview?: () => void;
-  backendConnected?: boolean | null;
+  onOpenHistory?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -22,7 +22,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   onOpenProfile,
   onOpenReview,
-  backendConnected,
+  onOpenHistory,
 }) => {
   return (
     <header className="sticky top-0 z-40 w-full bg-[#FBF8F3]/95 backdrop-blur-md border-b border-[#E8DFD1] transition-all">
@@ -112,21 +112,28 @@ export const Navbar: React.FC<NavbarProps> = ({
             <LayoutDashboard className="w-4 h-4 text-[#C4A480]" />
             <span>Dashboard</span>
           </button>
+          {onOpenHistory && (
+            <button
+              onClick={onOpenHistory}
+              className="transition-all py-1.5 flex items-center gap-1.5 cursor-pointer text-[#78716C] hover:text-[#1C1917]"
+            >
+              <History className="w-4 h-4 text-[#C4A480]" />
+              <span>Lịch Sử Đơn & Cọc</span>
+            </button>
+          )}
         </nav>
 
         {/* Right CTA Button & Auth */}
         <div className="flex items-center gap-3">
-          {backendConnected === true && (
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>Backend: 8083 Online</span>
-            </div>
-          )}
-          {backendConnected === false && (
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-              <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-              <span>Backend: Offline</span>
-            </div>
+          {onOpenHistory && (
+            <button
+              onClick={onOpenHistory}
+              title="Xem Lịch sử Đơn, Hóa đơn Cọc & Mã Vé QR"
+              className="px-3.5 py-2.5 rounded-full border border-[#E8DFD1] bg-white hover:bg-[#FAF7F2] text-[#8C6A43] text-xs font-semibold shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition"
+            >
+              <History className="w-4 h-4 text-[#8C6A43]" />
+              <span className="hidden sm:inline">Lịch Sử & Cọc</span>
+            </button>
           )}
           <button
             onClick={() => onNavigate('booking')}

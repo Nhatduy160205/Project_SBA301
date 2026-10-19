@@ -14,6 +14,15 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(AppException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAppException(AppException ex) {
+        HttpStatus status = (ex.getErrorCode() != null && ex.getErrorCode().getHttpStatus() != null)
+                ? ex.getErrorCode().getHttpStatus()
+                : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleNotFound(ResourceNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -41,7 +50,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.<Map<String, String>>builder()
                         .success(false)
-                        .message("Validation failed")
+                        .message(ErrorCode.VALIDATION_FAILED.getMessage())
                         .data(errors)
                         .timestamp(System.currentTimeMillis())
                         .build());

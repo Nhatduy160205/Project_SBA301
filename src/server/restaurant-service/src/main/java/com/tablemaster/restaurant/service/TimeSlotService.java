@@ -4,6 +4,7 @@ import com.tablemaster.restaurant.dto.TimeSlotDto;
 import com.tablemaster.restaurant.entity.TimeSlot;
 import com.tablemaster.restaurant.exception.BadRequestException;
 import com.tablemaster.restaurant.exception.ConflictException;
+import com.tablemaster.restaurant.exception.ErrorCode;
 import com.tablemaster.restaurant.exception.ResourceNotFoundException;
 import com.tablemaster.restaurant.repository.TimeSlotRepository;
 import lombok.RequiredArgsConstructor;
@@ -31,7 +32,7 @@ public class TimeSlotService {
     @Transactional(readOnly = true)
     public TimeSlotDto getTimeSlotById(UUID id) {
         TimeSlot slot = timeSlotRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khung giờ với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TIME_SLOT_NOT_FOUND));
         return mapToDto(slot);
     }
 
@@ -54,7 +55,7 @@ public class TimeSlotService {
     @Transactional
     public TimeSlotDto updateTimeSlot(UUID id, TimeSlotDto dto) {
         TimeSlot slot = timeSlotRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khung giờ với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TIME_SLOT_NOT_FOUND));
 
         validateTimeSlot(dto, id);
 
@@ -75,7 +76,7 @@ public class TimeSlotService {
     @Transactional
     public void deleteTimeSlot(UUID id) {
         if (!timeSlotRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Không tìm thấy khung giờ với ID: " + id);
+            throw new ResourceNotFoundException(ErrorCode.TIME_SLOT_NOT_FOUND);
         }
         timeSlotRepository.deleteById(id);
     }
@@ -83,20 +84,20 @@ public class TimeSlotService {
     @Transactional
     public TimeSlotDto toggleStatus(UUID id) {
         TimeSlot slot = timeSlotRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khung giờ với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TIME_SLOT_NOT_FOUND));
         slot.setIsActive(!slot.getIsActive());
         return mapToDto(timeSlotRepository.save(slot));
     }
 
     private void validateTimeSlot(TimeSlotDto dto, UUID currentId) {
         if (dto.getStartTime().compareTo(dto.getEndTime()) >= 0) {
-            throw new BadRequestException("Giờ bắt đầu phải trước giờ kết thúc (" + dto.getStartTime() + " < " + dto.getEndTime() + ")");
+            throw new BadRequestException(ErrorCode.TIME_SLOT_INVALID_HOURS);
         }
 
         timeSlotRepository.findByStartTimeAndEndTime(dto.getStartTime(), dto.getEndTime())
                 .ifPresent(existing -> {
                     if (currentId == null || !existing.getId().equals(currentId)) {
-                        throw new ConflictException("Đã tồn tại khung giờ với thời gian từ " + dto.getStartTime() + " đến " + dto.getEndTime());
+                        throw new ConflictException(ErrorCode.TIME_SLOT_ALREADY_EXISTS);
                     }
                 });
     }

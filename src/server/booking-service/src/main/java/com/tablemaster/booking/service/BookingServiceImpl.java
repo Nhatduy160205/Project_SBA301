@@ -38,6 +38,7 @@ public class BookingServiceImpl implements BookingService {
     private final BookingPreorderItemRepository bookingPreorderItemRepository;
     private final TableOperationsAuditRepository tableOperationsAuditRepository;
     private final BookingEventProducer bookingEventProducer;
+    private final InvoicePdfService invoicePdfService;
 
     @Override
     @Transactional
@@ -354,5 +355,13 @@ public class BookingServiceImpl implements BookingService {
             bookingRepository.save(booking);
             bookingEventProducer.publishBookingExpired(booking);
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] generateDepositInvoicePdf(UUID bookingId) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
+        return invoicePdfService.generateInvoicePdf(booking);
     }
 }

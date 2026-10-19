@@ -36,4 +36,7 @@ public interface BookingService {
     BookingResponse transferTable(UUID bookingId, TransferTableRequest request, UUID staffId);
 
     void checkAndExpireBookings();
+
+    byte[] generateDepositInvoicePdf(UUID bookingId);
 }
+
