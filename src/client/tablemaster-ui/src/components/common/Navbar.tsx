@@ -1,4 +1,4 @@
-import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut, Building2 } from 'lucide-react';
+import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut, Building2, Star } from 'lucide-react';
 import type { AuthUser } from '../../types';
 
 export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'admin' | 'restaurant';
@@ -10,6 +10,7 @@ interface NavbarProps {
   onOpenLogin: () => void;
   onLogout: () => void;
   onOpenProfile?: () => void;
+  onOpenReview?: () => void;
   backendConnected?: boolean | null;
 }
 
@@ -20,6 +21,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenLogin,
   onLogout,
   onOpenProfile,
+  onOpenReview,
   backendConnected,
 }) => {
   return (
@@ -133,6 +135,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Compass className="w-4 h-4" />
             <span>Đặt Bàn Ngay</span>
           </button>
+
+          {onOpenReview && (
+            <button
+              onClick={onOpenReview}
+              title="Đánh giá chất lượng phục vụ & nhận +50 điểm loyalty"
+              className="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-full border border-amber-300 bg-amber-50/80 hover:bg-amber-100 text-amber-900 text-xs font-semibold shadow-2xs cursor-pointer active:scale-95 transition"
+            >
+              <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+              <span>Đánh Giá</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-amber-200/90 text-amber-900 text-[9px] font-bold">+50đ</span>
+            </button>
+          )}
 
           {/* User Auth Section */}
           {currentUser ? (

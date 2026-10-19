@@ -10,6 +10,7 @@ import { Navbar } from './components/common/Navbar';
 import type { ActiveView } from './components/common/Navbar';
 import { LoginModal } from './components/common/LoginModal';
 import { ProfileModal } from './components/common/ProfileModal';
+import { ReviewModal } from './components/common/ReviewModal';
 import { LandingPage } from './views/LandingPage';
 import { BookingPage } from './views/BookingPage';
 import { HostTabletPage } from './views/HostTabletPage';
@@ -79,6 +80,7 @@ export function App() {
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
 
   const handleLogout = async () => {
     const refreshToken = localStorage.getItem('tm_refresh_token');
@@ -310,6 +312,7 @@ export function App() {
         onOpenLogin={() => setIsLoginModalOpen(true)}
         onLogout={handleLogout}
         onOpenProfile={() => setIsProfileModalOpen(true)}
+        onOpenReview={() => setIsReviewModalOpen(true)}
         backendConnected={backendConnected}
       />
 
@@ -503,6 +506,22 @@ export function App() {
         user={currentUser}
         onClose={() => setIsProfileModalOpen(false)}
         onProfileUpdated={(user) => setCurrentUser(user)}
+      />
+
+      {/* Post-dining Review & Rating Modal (UC-14) */}
+      <ReviewModal
+        isOpen={isReviewModalOpen}
+        user={currentUser}
+        onClose={() => setIsReviewModalOpen(false)}
+        onOpenLogin={() => setIsLoginModalOpen(true)}
+        onReviewSubmitted={(_review, updatedPoints) => {
+          if (currentUser) {
+            setCurrentUser({
+              ...currentUser,
+              loyaltyPoints: updatedPoints,
+            });
+          }
+        }}
       />
     </div>
   );

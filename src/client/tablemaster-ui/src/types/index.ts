@@ -119,3 +119,27 @@ export interface LoyaltyWallet {
   pointsToNextTier: number;
   depositDiscountPercent: number;
 }
+
+export interface ReviewItem {
+  id: string;
+  userId: string;
+  customerName: string;
+  customerAvatar?: string | null;
+  bookingId?: string | null;
+  foodRating: number;
+  serviceRating: number;
+  ambianceRating: number;
+  overallRating: number;
+  comment?: string | null;
+  pointsAwarded: number;
+  createdAt: string;
+}
+
+export interface CreateReviewPayload {
+  bookingId?: string;
+  foodRating: number;
+  serviceRating: number;
+  ambianceRating: number;
+  overallRating?: number;
+  comment?: string;
+}
