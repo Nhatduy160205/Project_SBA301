@@ -39,7 +39,9 @@ export const TableNode: React.FC<TableNodeProps> = ({
           ? 'bg-gradient-to-br from-amber-50 via-amber-100 to-amber-50 text-amber-950 border-amber-500 ring-4 ring-amber-400/50 shadow-xl shadow-amber-500/25 scale-105 z-20'
           : 'bg-emerald-50 text-emerald-800 border-emerald-400 hover:border-emerald-600 hover:bg-emerald-100/80 shadow-sm';
       case 'HOLDING':
-        return 'bg-amber-50 text-amber-800 border-amber-400 shadow-md ring-2 ring-amber-400/50';
+        return isSelected
+          ? 'bg-gradient-to-br from-amber-100 via-amber-200 to-amber-100 text-amber-950 border-amber-500 ring-4 ring-amber-400/60 shadow-xl shadow-amber-500/30 scale-105 z-20'
+          : 'bg-amber-100/90 text-amber-900 border-amber-400 shadow-md ring-2 ring-amber-400/60 cursor-not-allowed animate-pulse';
       case 'CONFIRMED':
         return 'bg-rose-50 text-rose-800 border-rose-300 cursor-not-allowed opacity-90';
       case 'SEATED':
@@ -56,7 +58,7 @@ export const TableNode: React.FC<TableNodeProps> = ({
       case 'AVAILABLE':
         return 'bg-emerald-500';
       case 'HOLDING':
-        return 'bg-amber-500';
+        return 'bg-amber-500 animate-ping';
       case 'CONFIRMED':
         return 'bg-rose-500';
       case 'SEATED':
@@ -70,7 +72,23 @@ export const TableNode: React.FC<TableNodeProps> = ({
 
   const handleClick = () => {
     if (!interactive) return;
+    if (table.status === 'HOLDING' && !isSelected) {
+      return; // Khách khác đang giữ bàn 5 phút, vô hiệu hóa click
+    }
+    if (table.status === 'CONFIRMED' || table.status === 'SEATED') {
+      return;
+    }
     if (onSelect) onSelect(table);
+  };
+
+  // Tính thời gian đếm ngược còn lại nếu có holdExpiresAt
+  const getRemainingTimeString = () => {
+    if (!table.holdExpiresAt) return '05:00';
+    const remainingMs = Math.max(0, table.holdExpiresAt - Date.now());
+    const totalSec = Math.floor(remainingMs / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
   // Generate chair markers around perimeter
@@ -148,9 +166,9 @@ export const TableNode: React.FC<TableNodeProps> = ({
 
       {/* Floating 5-min timer chip when holding */}
       {table.status === 'HOLDING' && (
-        <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap bg-amber-600 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded-full shadow-md flex items-center gap-1 z-20 animate-bounce">
-          <Clock className="w-2.5 h-2.5" />
-          <span>04:59</span>
+        <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap bg-gradient-to-r from-amber-600 to-amber-700 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded-full shadow-lg border border-amber-400 flex items-center gap-1 z-20 animate-bounce">
+          <Clock className="w-2.5 h-2.5 text-amber-200" />
+          <span>{isSelected ? `Bạn Giữ: ${getRemainingTimeString()}` : `Đang Giữ: ${getRemainingTimeString()}`}</span>
         </div>
       )}
 
