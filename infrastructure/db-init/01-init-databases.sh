@@ -8,6 +8,14 @@ create_user_and_database() {
     psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
         CREATE DATABASE $database;
         GRANT ALL PRIVILEGES ON DATABASE $database TO $POSTGRES_USER;
+        DO \$\$
+        BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'postgres_duy_dao') THEN
+                CREATE ROLE postgres_duy_dao WITH LOGIN SUPERUSER PASSWORD '1234567';
+            END IF;
+        END
+        \$\$;
+        GRANT ALL PRIVILEGES ON DATABASE $database TO postgres_duy_dao;
 EOSQL
 }
 

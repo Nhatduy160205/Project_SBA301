@@ -7,6 +7,7 @@ import {
   Sparkles,
   MapPin,
   CheckCircle2,
+  AlertTriangle,
   Heart,
   ShieldCheck,
   User,
@@ -40,6 +41,7 @@ import { QRPaymentModal } from '../components/common/QRPaymentModal';
 import { AvailabilitySearchEngine } from '../components/booking/AvailabilitySearchEngine';
 import { FloorPlanCanvas } from '../components/floor/FloorPlanCanvas';
 import { SpatialFloor3D } from '../components/floor/SpatialFloor3D';
+import { webSocketFloorService } from '../services/websocketService';
 import {
   bookingApi,
   ensureUUID,
@@ -145,6 +147,13 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   const [currentFloor, setCurrentFloor] = useState<1 | 2 | 3>(initialFloor);
   const [floorViewMode, setFloorViewMode] = useState<'floor2d' | 'floor3d' | 'cards'>('floor2d');
   const [selectedTable, setSelectedTable] = useState<TableAvailabilityDto | null>(null);
+
+  // UC-06: Khóa Giữ bàn 5 phút & Xử lý Tranh chấp (Redlock Concurrency Hold)
+  const [holdToken, setHoldToken] = useState<string | null>(null);
+  const [holdExpiresAt, setHoldExpiresAt] = useState<number | null>(null);
+  const [holdRemainingSeconds, setHoldRemainingSeconds] = useState<number>(300);
+  const [conflictError, setConflictError] = useState<string | null>(null);
+  const [isHoldingTable, setIsHoldingTable] = useState<boolean>(false);
 
   // Step 3: Occasion & Preferences
   const [showSection3, setShowSection3] = useState<boolean>(true);
@@ -274,33 +283,158 @@ export const BookingPage: React.FC<BookingPageProps> = ({
     return null;
   }, [tables, selectedTable]);
 
-  // Handle table selection directly on 2D / 3D Floor Canvas
-  const handleSelectTableFromFloor = (table: TableItem) => {
-    if (table.status !== 'AVAILABLE') return;
+  // Định dạng chuỗi mm:ss cho đồng hồ đếm ngược 05:00
+  const formatCountdown = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
 
-    const dto: TableAvailabilityDto = {
-      tableId: table.id,
-      tableCode: table.code,
-      floorNumber: table.floor,
-      floorName: table.floor === 1
-        ? 'Tầng 1 - Sảnh Vòm & Bar'
-        : table.floor === 2
-        ? 'Tầng 2 - Phòng VIP Riêng Tư'
-        : 'Tầng 3 - Sky Lounge Ngoài Trời',
-      zoneType: table.zone,
-      minCapacity: Math.max(1, table.capacity - 2),
-      maxCapacity: table.capacity,
-      customDeposit: table.depositPrice || 200000,
-      shape: table.shape,
-      isAvailable: true,
-      status: 'AVAILABLE',
-      statusMessage: `Bàn ${table.code} đang trống và sẵn sàng giữ chỗ`,
-      satisfiesCapacityRule: partySize <= table.capacity,
-      isBookedInDb: false,
-      isHeldInRedis: false,
-      recommended: false,
-    };
-    setSelectedTable(dto);
+  // UC-06: Đếm ngược 05:00 (300 giây) khi Redlock giữ bàn thành công
+  useEffect(() => {
+    if (!selectedTable || !holdExpiresAt) {
+      setHoldRemainingSeconds(300);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const diffMs = holdExpiresAt - now;
+      const sec = Math.max(0, Math.floor(diffMs / 1000));
+      setHoldRemainingSeconds(sec);
+
+      if (sec <= 0) {
+        clearInterval(interval);
+        // Hết hạn 300s tự động giải phóng bàn
+        if (selectedTable && holdToken) {
+          bookingApi.releaseHold({
+            tableId: ensureUUID(selectedTable.tableId),
+            holdToken: holdToken,
+            tableCode: selectedTable.tableCode,
+          });
+        }
+        onUpdateTableStatus(selectedTable.tableId, 'AVAILABLE');
+        setSelectedTable(null);
+        setHoldToken(null);
+        setHoldExpiresAt(null);
+        setConflictError('⏰ Đã hết thời hạn 5 phút giữ bàn tạm thời (300 giây). Bàn đã được tự động giải phóng để nhường quyền cho khách hàng khác!');
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [selectedTable, holdExpiresAt, holdToken, onUpdateTableStatus]);
+
+  // UC-06: Lắng nghe WebSocket STOMP đồng bộ thời gian thực đổi màu bàn toàn hệ thống
+  useEffect(() => {
+    const unsubscribe = webSocketFloorService.subscribeToTableUpdates((update) => {
+      if (!update || !update.tableId) return;
+
+      console.log('⚡ [STOMP Floor Sync] Cập nhật bàn:', update);
+
+      if (update.status === 'HOLDING') {
+        // Nếu không phải phiên giữ của chính client này thì cập nhật trạng thái HOLDING (vàng)
+        if (!holdToken || update.holdToken !== holdToken) {
+          onUpdateTableStatus(update.tableId, 'HOLDING');
+        }
+      } else if (update.status === 'AVAILABLE') {
+        onUpdateTableStatus(update.tableId, 'AVAILABLE');
+      } else if (update.status === 'CONFIRMED') {
+        onUpdateTableStatus(update.tableId, 'CONFIRMED');
+      }
+    });
+
+    return () => unsubscribe();
+  }, [holdToken, onUpdateTableStatus]);
+
+  // Handle table selection directly on 2D / 3D Floor Canvas - Kích hoạt Redis Redlock 300s (UC-06, BR-02)
+  const handleSelectTableFromFloor = async (table: TableItem) => {
+    if (table.status !== 'AVAILABLE') {
+      if (table.status === 'HOLDING') {
+        setConflictError(`Bàn ${table.code} hiện đang được khách hàng khác giữ chỗ trong 5 phút. Vui lòng chọn bàn khác!`);
+      }
+      return;
+    }
+
+    setIsHoldingTable(true);
+    setConflictError(null);
+
+    try {
+      // 1. Gọi backend kích hoạt Redis Redlock giữ bàn 300 giây (BR-02)
+      const res = await bookingApi.holdTable({
+        tableId: table.id,
+        tableCode: table.code,
+        bookingDate: selectedDate,
+        timeSlotId: SEED_DATA.TIME_SLOT_ID,
+        guestCount: partySize,
+        floorNumber: table.floor,
+        previousHoldToken: holdToken || undefined,
+        previousTableId: selectedTable?.tableId || undefined,
+      });
+
+      if (res && res.data) {
+        const expiresTime = new Date(res.data.expiresAt).getTime();
+        setHoldToken(res.data.holdToken);
+        setHoldExpiresAt(expiresTime);
+        setHoldRemainingSeconds(res.data.holdDurationSeconds || 300);
+
+        const dto: TableAvailabilityDto = {
+          tableId: table.id,
+          tableCode: table.code,
+          floorNumber: table.floor,
+          floorName: table.floor === 1
+            ? 'Tầng 1 - Sảnh Vòm & Bar'
+            : table.floor === 2
+            ? 'Tầng 2 - Phòng VIP Riêng Tư'
+            : 'Tầng 3 - Sky Lounge Ngoài Trời',
+          zoneType: table.zone,
+          minCapacity: Math.max(1, table.capacity - 2),
+          maxCapacity: table.capacity,
+          customDeposit: table.depositPrice || 200000,
+          shape: table.shape,
+          isAvailable: true,
+          status: 'HELD',
+          statusMessage: `Bàn ${table.code} đang được bạn giữ chỗ 5 phút (Redlock)`,
+          satisfiesCapacityRule: partySize <= table.capacity,
+          isBookedInDb: false,
+          isHeldInRedis: true,
+          recommended: false,
+        };
+
+        setSelectedTable(dto);
+        onUpdateTableStatus(table.id, 'HOLDING');
+      }
+    } catch (err: any) {
+      console.warn('❌ [Redlock Concurrency Hold] Tranh chấp bàn:', err.message);
+      if (err.isConflict || err.status === 409) {
+        setConflictError(err.message || `Bàn ${table.code} vừa có khách hàng khác chọn trước. Vui lòng chọn bàn khác!`);
+        onUpdateTableStatus(table.id, 'HOLDING');
+      } else {
+        setConflictError(`Không thể giữ bàn ${table.code}: ${err.message}`);
+      }
+    } finally {
+      setIsHoldingTable(false);
+    }
+  };
+
+  const handleDeselectTable = async () => {
+    if (!selectedTable) return;
+    const oldId = selectedTable.tableId;
+    const oldCode = selectedTable.tableCode;
+    const oldToken = holdToken;
+
+    setSelectedTable(null);
+    setHoldToken(null);
+    setHoldExpiresAt(null);
+    setHoldRemainingSeconds(300);
+    onUpdateTableStatus(oldId, 'AVAILABLE');
+
+    if (oldToken) {
+      await bookingApi.releaseHold({
+        tableId: oldId,
+        holdToken: oldToken,
+        tableCode: oldCode,
+      });
+    }
   };
 
   const depositRequired = selectedTable?.customDeposit ? Number(selectedTable.customDeposit) : 200000;
@@ -333,7 +467,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
     }
 
     const assignedTable = findMatchingTable();
-    const tableUUID = selectedTable ? selectedTable.tableId : ensureUUID(assignedTable.id);
+    const tableUUID = ensureUUID(selectedTable ? selectedTable.tableId : assignedTable.id);
     const tableCode = selectedTable
       ? `Bàn ${selectedTable.tableCode}`
       : (assignedTable.code || `Bàn ${assignedTable.id}`);
@@ -432,9 +566,24 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       setBookingSuccess(confirmedBooking);
       setIsQRModalOpen(false);
 
+      // Giải phóng phiên giữ tạm thời Redlock khi đã cọc tiền thành công
+      if (selectedTable && holdToken) {
+        bookingApi.releaseHold({
+          tableId: ensureUUID(selectedTable.tableId),
+          holdToken: holdToken,
+          tableCode: selectedTable.tableCode,
+        });
+      }
+      setHoldToken(null);
+      setHoldExpiresAt(null);
+      setHoldRemainingSeconds(300);
+
       const matched = findMatchingTable();
       if (matched) {
         onUpdateTableStatus(matched.id, 'CONFIRMED');
+      }
+      if (selectedTable) {
+        onUpdateTableStatus(selectedTable.tableId, 'CONFIRMED');
       }
     }
   };
@@ -595,6 +744,43 @@ export const BookingPage: React.FC<BookingPageProps> = ({
               className="px-5 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-colors shrink-0 cursor-pointer shadow-md active:scale-95"
             >
               Đặt Thêm Bàn Mới
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 409 Conflict & Redlock Notification Banner (UC-06) */}
+      <AnimatePresence>
+        {conflictError && (
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            className="p-4 rounded-2xl bg-gradient-to-r from-rose-500/15 via-rose-50 to-amber-500/15 border-2 border-rose-400 flex items-center justify-between text-xs text-rose-950 shadow-lg"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center font-bold shrink-0 shadow-sm animate-pulse">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-rose-950 uppercase tracking-wider text-[11px]">
+                    Thông Báo Tranh Chấp Bàn (Redlock 409 Conflict)
+                  </span>
+                  <span className="text-[10px] bg-rose-200 text-rose-900 px-2 py-0.5 rounded-full font-mono font-bold">
+                    BR-02
+                  </span>
+                </div>
+                <p className="text-rose-900 font-medium">
+                  {conflictError}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setConflictError(null)}
+              className="p-1.5 text-rose-700 hover:text-rose-950 hover:bg-rose-100 rounded-lg cursor-pointer transition-colors"
+            >
+              <X className="w-4 h-4" />
             </button>
           </motion.div>
         )}
@@ -850,8 +1036,15 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                         <span>Đã chọn: Bàn {selectedTable.tableCode} ({selectedTable.floorName})</span>
                       </span>
                     ) : (
-                      <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
-                        Click chọn bàn yêu thích trên sơ đồ
+                      <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 flex items-center gap-1.5">
+                        {isHoldingTable ? (
+                          <>
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                            <span>Đang kích hoạt Redis Redlock giữ bàn...</span>
+                          </>
+                        ) : (
+                          <span>Click chọn bàn yêu thích trên sơ đồ</span>
+                        )}
                       </span>
                     )}
                   </div>
@@ -1017,12 +1210,31 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                   initialPartySize={partySize}
                   initialFloor={currentFloor}
                   selectedTableId={selectedTable?.tableId}
-                  onSelectTable={(table, params) => {
-                    setSelectedTable(table);
+                  onSelectTable={async (table, params) => {
                     setSelectedDate(params.date);
                     setPartySize(params.totalGuests);
                     if (table.floorNumber === 1 || table.floorNumber === 2 || table.floorNumber === 3) {
                       setCurrentFloor(table.floorNumber as 1 | 2 | 3);
+                    }
+                    const matched = tables.find((t) => t.id === table.tableId || t.code === table.tableCode);
+                    if (matched) {
+                      await handleSelectTableFromFloor(matched);
+                    } else {
+                      const syntheticTable: TableItem = {
+                        id: table.tableId,
+                        code: table.tableCode,
+                        floor: (table.floorNumber as 1 | 2 | 3) || 1,
+                        shape: (table.shape as any) || 'rect',
+                        capacity: table.maxCapacity || 4,
+                        x: 100,
+                        y: 100,
+                        width: 100,
+                        height: 70,
+                        status: 'AVAILABLE',
+                        zone: (table.zoneType as any) || 'STANDARD',
+                        depositPrice: table.customDeposit || 200000,
+                      };
+                      await handleSelectTableFromFloor(syntheticTable);
                     }
                   }}
                 />
@@ -1046,8 +1258,9 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                       <h4 className="font-serif text-lg font-bold text-stone-900">
                         Bàn {selectedTable.tableCode} • {selectedTable.floorName}
                       </h4>
-                      <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-300">
-                        🟢 Đang Được Chọn
+                      <span className="text-[10px] font-bold text-amber-950 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-400 flex items-center gap-1 shadow-xs">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                        <span>🟡 Đang Khóa Giữ (Redlock 300s)</span>
                       </span>
                     </div>
                     <p className="text-xs text-stone-600">
@@ -1065,7 +1278,23 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 self-end md:self-auto">
+                {/* Redlock Live 05:00 Countdown Box */}
+                <div className="flex items-center gap-3 self-end md:self-auto flex-wrap">
+                  <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 p-2 px-3.5 rounded-2xl border border-amber-300 shadow-md flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-xl bg-slate-950 text-amber-400 flex items-center justify-center shrink-0 font-bold">
+                      <Clock className="w-3.5 h-3.5 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-amber-950">
+                        <ShieldCheck className="w-3 h-3 text-emerald-900" />
+                        <span>Thời gian giữ bàn (BR-02):</span>
+                      </div>
+                      <div className="font-mono text-base font-black text-slate-950 leading-none">
+                        {formatCountdown(holdRemainingSeconds)}
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="text-right">
                     <span className="text-[10px] text-stone-500 block uppercase font-bold">Tiền cọc giữ bàn:</span>
                     <span className="font-serif text-base font-bold text-amber-700">
@@ -1074,9 +1303,9 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => setSelectedTable(null)}
+                    onClick={handleDeselectTable}
                     className="p-2 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
-                    title="Bỏ chọn bàn này"
+                    title="Bỏ chọn & Giải phóng bàn này"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -1611,6 +1840,26 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                   )}
                 </span>
               </div>
+
+              {selectedTable && (
+                <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-950 via-amber-900/60 to-amber-950 border border-amber-500/40 space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <div className="flex items-center gap-1.5 text-amber-300 font-bold">
+                      <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                      <span>Giữ chỗ tạm thời (Redlock):</span>
+                    </div>
+                    <span className="font-mono font-black text-amber-300 text-xs bg-black/50 px-2 py-0.5 rounded border border-amber-500/30">
+                      {formatCountdown(holdRemainingSeconds)}
+                    </span>
+                  </div>
+                  <div className="w-full bg-stone-800 h-1 rounded-full overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-amber-500 to-amber-300 h-full rounded-full transition-all duration-1000"
+                      style={{ width: `${Math.min(100, Math.max(0, (holdRemainingSeconds / 300) * 100))}%` }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {selectedOccasion && (
                 <div className="flex items-center justify-between pt-2 border-t border-stone-800">
