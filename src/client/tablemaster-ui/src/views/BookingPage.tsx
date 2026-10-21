@@ -119,6 +119,7 @@ interface BookingPageProps {
   rebookData?: BookingDetails | null;
   onClearRebook?: () => void;
   currentUser?: AuthUser | null;
+  onUpdateCurrentUser?: (user: AuthUser) => void;
 }
 
 export const BookingPage: React.FC<BookingPageProps> = ({
@@ -129,6 +130,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   rebookData,
   onClearRebook,
   currentUser,
+  onUpdateCurrentUser,
 }) => {
   // Toast thông báo Re-book 1 chạm
   const [rebookToast, setRebookToast] = useState<string | null>(null);
@@ -167,6 +169,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   const [customerName, setCustomerName] = useState<string>('Nguyễn Trần Bảo Anh');
   const [customerPhone, setCustomerPhone] = useState<string>('0909123456');
   const [customerEmail, setCustomerEmail] = useState<string>('baoanh.nguyen@gmail.com');
+  const [useLoyaltyPoints, setUseLoyaltyPoints] = useState<boolean>(false);
 
   // Payment modal state
   const [isQRModalOpen, setIsQRModalOpen] = useState<boolean>(false);
@@ -316,7 +319,23 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   };
 
   const depositRequired = selectedTable?.customDeposit ? Number(selectedTable.customDeposit) : 200000;
-  const grandTotal = depositRequired + dishesTotal;
+
+  // UC-09: Hạng VIP & Chiết khấu cọc (BRONZE: 0%, SILVER: 5%, GOLD: 10%, DIAMOND: 15%)
+  const vipTier = currentUser?.vipTier || 'BRONZE';
+  const vipDiscountPercent = vipTier === 'DIAMOND' ? 15 : vipTier === 'GOLD' ? 10 : vipTier === 'SILVER' ? 5 : 0;
+  const vipTierDiscountAmount = Math.round(depositRequired * (vipDiscountPercent / 100));
+
+  // UC-09: Đổi điểm tích lũy thành viên (1 điểm = 100 đ, tối đa 50% tiền cọc còn lại sau chiết khấu hạng)
+  const remainingDepositAfterTier = depositRequired - vipTierDiscountAmount;
+  const maxRedeemablePoints = currentUser?.loyaltyPoints
+    ? Math.min(currentUser.loyaltyPoints, Math.floor((remainingDepositAfterTier * 0.5) / 100))
+    : 0;
+  const pointsToRedeem = useLoyaltyPoints ? maxRedeemablePoints : 0;
+  const pointsDiscountAmount = pointsToRedeem * 100;
+
+  const totalDiscount = vipTierDiscountAmount + pointsDiscountAmount;
+  const effectiveDeposit = Math.max(0, depositRequired - totalDiscount);
+  const grandTotal = effectiveDeposit + dishesTotal;
   const effectiveTimeSlot = `${selectedSlot} - ${parseInt(selectedSlot.split(':')[0], 10) + 2}:${selectedSlot.split(':')[1]}`;
 
   // Floor descriptions
@@ -361,7 +380,10 @@ export const BookingPage: React.FC<BookingPageProps> = ({
     const occasionText = selectedOccasion
       ? `[Dịp: ${OCCASIONS.find((o) => o.id === selectedOccasion)?.label}] `
       : '';
-    const fullNotes = `${occasionText}${customNotes}`.trim();
+    const discountNote = totalDiscount > 0
+      ? ` [Ưu đãi VIP: -${new Intl.NumberFormat('vi-VN').format(totalDiscount)}đ${pointsToRedeem > 0 ? `, đổi ${pointsToRedeem} pts` : ''}]`
+      : '';
+    const fullNotes = `${occasionText}${customNotes}${discountNote}`.trim();
 
     setIsSubmitting(true);
     let realBookingCode = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -376,7 +398,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
         guestCount: partySize,
         tableIds: [tableUUID],
         specialNotes: fullNotes,
-        totalDeposit: depositRequired,
+        totalDeposit: effectiveDeposit,
         preorderItems: preOrderItems.map((p) => ({
           menuItemId: SEED_DATA.MENU_ITEM_ID,
           quantity: p.quantity,
@@ -409,7 +431,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       timeSlot: effectiveTimeSlot,
       notes: fullNotes,
       preOrders: preOrderItems,
-      depositAmount: depositRequired,
+      depositAmount: effectiveDeposit,
       totalEstimatedAmount: grandTotal,
       createdAt: 'Vừa xong',
       status: 'PENDING_DEPOSIT',
@@ -426,13 +448,48 @@ export const BookingPage: React.FC<BookingPageProps> = ({
         try {
           const res = await bookingApi.approveAndRequestDeposit(
             backendBookingUUID,
-            depositRequired,
+            effectiveDeposit,
             60,
             'Khách đã thanh toán cọc thành công qua VietQR'
           );
           console.log('✅ [Backend API] Duyệt cọc đơn thành công:', res.data);
         } catch (err: any) {
           console.warn('⚠️ [Backend API] Lỗi duyệt cọc trên backend:', err.message);
+        }
+      }
+
+      // UC-09: Tự động trừ điểm tích lũy đã đổi qua Auth Service API
+      if (useLoyaltyPoints && pointsToRedeem > 0 && currentUser) {
+        const accessToken = localStorage.getItem('tm_access_token');
+        if (accessToken) {
+          try {
+            const adjustRes = await fetch('/api/v1/auth/loyalty/adjust', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${accessToken}`,
+              },
+              body: JSON.stringify({
+                delta: -pointsToRedeem,
+                reason: 'REDEEM_DISCOUNT',
+                referenceId: currentBooking.bookingId,
+              }),
+            });
+            if (adjustRes.ok) {
+              const wallet = await adjustRes.json();
+              if (wallet && onUpdateCurrentUser) {
+                const updatedUser: AuthUser = {
+                  ...currentUser,
+                  loyaltyPoints: wallet.loyaltyPoints,
+                  vipTier: wallet.vipTier,
+                  vipTierName: wallet.vipTierName,
+                };
+                onUpdateCurrentUser(updatedUser);
+              }
+            }
+          } catch (e) {
+            console.warn('Could not adjust loyalty points:', e);
+          }
         }
       }
 
@@ -1765,6 +1822,48 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                   {new Intl.NumberFormat('vi-VN').format(depositRequired)} đ
                 </span>
               </div>
+
+              {/* UC-09: Chiết khấu hạng VIP */}
+              {vipTierDiscountAmount > 0 && (
+                <div className="flex justify-between items-center text-emerald-400">
+                  <span className="flex items-center gap-1">
+                    <Crown className="w-3.5 h-3.5 text-amber-400" />
+                    Ưu đãi Hạng VIP {vipTier} (-{vipDiscountPercent}%):
+                  </span>
+                  <span className="font-bold font-mono">
+                    -{new Intl.NumberFormat('vi-VN').format(vipTierDiscountAmount)} đ
+                  </span>
+                </div>
+              )}
+
+              {/* UC-09: Tùy chọn đổi điểm tích lũy thành viên */}
+              {currentUser && currentUser.loyaltyPoints !== undefined && currentUser.loyaltyPoints > 0 && (
+                <div className="p-2.5 rounded-xl bg-stone-900 border border-amber-500/30 space-y-1">
+                  <label className="flex items-center justify-between cursor-pointer select-none">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={useLoyaltyPoints}
+                        onChange={(e) => setUseLoyaltyPoints(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded-sm accent-amber-500 cursor-pointer"
+                      />
+                      <span className="text-[11px] text-stone-200">
+                        Đổi điểm VIP (Có <strong className="text-amber-400">{currentUser.loyaltyPoints}</strong> điểm)
+                      </span>
+                    </div>
+                    {useLoyaltyPoints && pointsDiscountAmount > 0 && (
+                      <span className="text-[11px] font-bold text-emerald-400 font-mono">
+                        -{new Intl.NumberFormat('vi-VN').format(pointsDiscountAmount)} đ
+                      </span>
+                    )}
+                  </label>
+                  {useLoyaltyPoints && pointsToRedeem > 0 && (
+                    <p className="text-[10px] text-stone-400 pl-5.5">
+                      Áp dụng đổi {pointsToRedeem} điểm thưởng (Quy đổi 1 điểm = 100 đ)
+                    </p>
+                  )}
+                </div>
+              )}
 
               {dishesTotal > 0 && (
                 <div className="flex justify-between items-center text-stone-300">

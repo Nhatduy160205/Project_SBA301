@@ -347,6 +347,10 @@ export function App() {
                 rebookData={rebookData}
                 onClearRebook={() => setRebookData(null)}
                 currentUser={currentUser}
+                onUpdateCurrentUser={(updated) => {
+                  setCurrentUser(updated);
+                  localStorage.setItem('tm_user', JSON.stringify(updated));
+                }}
               />
             </motion.div>
           )}
