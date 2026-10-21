@@ -1,7 +1,7 @@
 package com.tablemaster.analytics.service;
 
-import com.tablemaster.analytics.dto.VipCustomerResponse;
-import com.tablemaster.analytics.entity.LoyaltyTier;
+import com.tablemaster.analytics.dto.response.VipCustomerResponse;
+import com.tablemaster.analytics.enums.LoyaltyTier;
 import com.tablemaster.analytics.entity.VipCustomerInsight;
 import com.tablemaster.analytics.repository.VipCustomerInsightRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,19 +23,18 @@ public class VipCustomerService {
 
     @Transactional(readOnly = true)
     public List<VipCustomerResponse> getVipCustomers(LoyaltyTier tier) {
-        List<VipCustomerInsight> insights;
+        List<VipCustomerInsight> list;
         if (tier != null) {
-            insights = vipRepository.findAllByLoyaltyTierOrderByTotalSpentDesc(tier);
+            list = vipRepository.findAllByLoyaltyTierOrderByTotalSpentDesc(tier);
         } else {
-            insights = vipRepository.findAllByOrderByTotalSpentDesc();
+            list = vipRepository.findAllByOrderByTotalSpentDesc();
         }
-        return insights.stream().map(this::mapToResponse).collect(Collectors.toList());
+        return list.stream().map(this::mapToResponse).collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<VipCustomerResponse> getTopVipCustomers(int limit) {
         return vipRepository.findTop5ByOrderByTotalSpentDesc().stream()
-                .limit(limit)
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
@@ -49,97 +48,74 @@ public class VipCustomerService {
 
     @Transactional(readOnly = true)
     public Map<String, Long> getTierDistribution() {
-        Map<String, Long> distribution = new LinkedHashMap<>();
+        Map<String, Long> dist = new LinkedHashMap<>();
         for (LoyaltyTier t : LoyaltyTier.values()) {
-            distribution.put(t.name(), 0L);
+            dist.put(t.name(), 0L);
         }
 
-        List<Object[]> rows = vipRepository.countByLoyaltyTier();
-        for (Object[] row : rows) {
-            if (row[0] != null) {
-                String tierName = row[0].toString();
-                Long count = (Long) row[1];
-                distribution.put(tierName, count);
+        List<Object[]> results = vipRepository.countByLoyaltyTier();
+        for (Object[] row : results) {
+            if (row[0] != null && row[1] != null) {
+                dist.put(row[0].toString(), (Long) row[1]);
             }
         }
-        return distribution;
+        return dist;
     }
 
     @Transactional
-    public VipCustomerInsight recordCustomerMeal(UUID userId, String phoneNumber, String fullName,
-                                                 int guestCount, BigDecimal foodBill, String zoneType,
-                                                 LocalDate visitDate) {
-        if (userId == null) {
-            log.warn("Cannot record VIP insight without userId");
-            return null;
-        }
+    public VipCustomerInsight recordCustomerMeal(
+            UUID userId,
+            String phoneNumber,
+            String fullName,
+            int partySize,
+            BigDecimal mealCost,
+            String zoneType,
+            LocalDate visitDate) {
 
         VipCustomerInsight insight = vipRepository.findByUserId(userId)
-                .orElseGet(() -> {
-                    log.info("Creating new VIP profile for user={}", fullName);
-                    return vipRepository.save(VipCustomerInsight.builder()
-                            .userId(userId)
-                            .phoneNumber(phoneNumber != null ? phoneNumber : "+84900000000")
-                            .fullName(fullName != null ? fullName : "Khách Hàng")
-                            .totalVisits(0)
-                            .totalSpent(BigDecimal.ZERO)
-                            .averagePartySize(0.0f)
-                            .loyaltyTier(LoyaltyTier.BRONZE)
-                            .favoriteZone(zoneType != null ? zoneType : "STANDARD")
-                            .build());
-                });
+                .orElseGet(() -> VipCustomerInsight.builder()
+                        .userId(userId)
+                        .phoneNumber(phoneNumber != null ? phoneNumber : "N/A")
+                        .fullName(fullName != null ? fullName : "Khách hàng thân thiết")
+                        .totalVisits(0)
+                        .totalSpent(BigDecimal.ZERO)
+                        .averagePartySize(0.0f)
+                        .favoriteZone(zoneType != null ? zoneType : "STANDARD")
+                        .loyaltyTier(LoyaltyTier.BRONZE)
+                        .build());
 
-        int oldVisits = insight.getTotalVisits();
-        int newVisits = oldVisits + 1;
+        int prevVisits = insight.getTotalVisits();
+        int newVisits = prevVisits + 1;
+        BigDecimal newSpent = insight.getTotalSpent().add(mealCost != null ? mealCost : BigDecimal.ZERO);
+        float newAvgParty = ((insight.getAveragePartySize() * prevVisits) + partySize) / newVisits;
+
         insight.setTotalVisits(newVisits);
-
-        if (foodBill != null) {
-            insight.setTotalSpent(insight.getTotalSpent().add(foodBill));
-        }
-
-        // Running average party size
-        float oldAvg = insight.getAveragePartySize() != null ? insight.getAveragePartySize() : 0.0f;
-        float newAvg = ((oldAvg * oldVisits) + guestCount) / newVisits;
-        insight.setAveragePartySize((float) (Math.round(newAvg * 10.0) / 10.0));
-
-        if (visitDate != null) {
-            insight.setLastVisitDate(visitDate);
-        } else {
-            insight.setLastVisitDate(LocalDate.now());
-        }
-
+        insight.setTotalSpent(newSpent);
+        insight.setAveragePartySize(newAvgParty);
+        insight.setLastVisitDate(visitDate != null ? visitDate : LocalDate.now());
         if (zoneType != null && !zoneType.isBlank()) {
             insight.setFavoriteZone(zoneType);
         }
-        if (phoneNumber != null && !phoneNumber.isBlank()) {
-            insight.setPhoneNumber(phoneNumber);
-        }
-        if (fullName != null && !fullName.isBlank()) {
-            insight.setFullName(fullName);
-        }
 
-        // Re-evaluate Loyalty Tier
-        LoyaltyTier newTier = LoyaltyTier.evaluate(insight.getTotalVisits(), insight.getTotalSpent());
-        if (insight.getLoyaltyTier() != newTier) {
-            log.info("Customer {} upgraded from tier {} to {}", insight.getFullName(), insight.getLoyaltyTier(), newTier);
-            insight.setLoyaltyTier(newTier);
-        }
+        // Tự động thăng hạng theo thuật toán định mức chi tiêu & lượt ăn
+        LoyaltyTier calculatedTier = LoyaltyTier.evaluate(newVisits, newSpent);
+        insight.setLoyaltyTier(calculatedTier);
 
         return vipRepository.save(insight);
     }
 
-    private VipCustomerResponse mapToResponse(VipCustomerInsight insight) {
+    private VipCustomerResponse mapToResponse(VipCustomerInsight v) {
         return VipCustomerResponse.builder()
-                .id(insight.getId())
-                .userId(insight.getUserId())
-                .phoneNumber(insight.getPhoneNumber())
-                .fullName(insight.getFullName())
-                .totalVisits(insight.getTotalVisits())
-                .totalSpent(insight.getTotalSpent())
-                .averagePartySize(insight.getAveragePartySize())
-                .lastVisitDate(insight.getLastVisitDate())
-                .favoriteZone(insight.getFavoriteZone())
-                .loyaltyTier(insight.getLoyaltyTier())
+                .id(v.getId())
+                .userId(v.getUserId())
+                .phoneNumber(v.getPhoneNumber())
+                .fullName(v.getFullName())
+                .totalVisits(v.getTotalVisits())
+                .totalSpent(v.getTotalSpent())
+                .averagePartySize(v.getAveragePartySize())
+                .lastVisitDate(v.getLastVisitDate())
+                .favoriteZone(v.getFavoriteZone())
+                .loyaltyTier(v.getLoyaltyTier())
                 .build();
     }
 }

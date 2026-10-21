@@ -1,5 +1,6 @@
 package com.tablemaster.analytics.entity;
 
+import com.tablemaster.analytics.enums.LoyaltyTier;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.UpdateTimestamp;
