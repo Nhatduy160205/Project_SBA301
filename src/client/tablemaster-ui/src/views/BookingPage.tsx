@@ -33,8 +33,9 @@ import {
   Sun,
   Moon,
   Star,
+  Crown,
 } from 'lucide-react';
-import type { TableItem, SignatureDish, BookingDetails } from '../types';
+import type { TableItem, SignatureDish, BookingDetails, AuthUser } from '../types';
 import { SIGNATURE_DISHES } from '../data/mockData';
 import { QRPaymentModal } from '../components/common/QRPaymentModal';
 import { AvailabilitySearchEngine } from '../components/booking/AvailabilitySearchEngine';
@@ -117,6 +118,7 @@ interface BookingPageProps {
   onAddBooking: (newBooking: BookingDetails) => void;
   rebookData?: BookingDetails | null;
   onClearRebook?: () => void;
+  currentUser?: AuthUser | null;
 }
 
 export const BookingPage: React.FC<BookingPageProps> = ({
@@ -126,6 +128,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   onAddBooking,
   rebookData,
   onClearRebook,
+  currentUser,
 }) => {
   // Toast thông báo Re-book 1 chạm
   const [rebookToast, setRebookToast] = useState<string | null>(null);
@@ -215,6 +218,15 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       setRebookToast(`Đã tự động tải cấu hình bàn & món ăn cũ từ đơn #${rebookData.bookingId}. Quý khách chỉ cần chọn ngày giờ phù hợp để hoàn tất.`);
     }
   }, [rebookData]);
+
+  // Tự động điền thông tin và hỗ trợ sở thích ẩm thực từ tài khoản thực khách (UC-02)
+  useEffect(() => {
+    if (currentUser && !rebookData) {
+      if (currentUser.fullName) setCustomerName(currentUser.fullName);
+      if (currentUser.phone) setCustomerPhone(currentUser.phone);
+      if (currentUser.email) setCustomerEmail(currentUser.email);
+    }
+  }, [currentUser, rebookData]);
 
   const toggleComboDetails = (dishId: string) => {
     setExpandedComboIds((prev) => ({ ...prev, [dishId]: !prev[dishId] }));
@@ -1181,6 +1193,35 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                       <span className="text-[11px] text-stone-400">Click chọn nhanh</span>
                     </label>
 
+                    {/* UC-02: Sở thích ẩm thực & Dị ứng từ hồ sơ thực khách */}
+                    {currentUser?.dietaryPreferences && (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl gap-3 text-xs">
+                        <div className="flex items-start gap-2.5">
+                          <Utensils className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-bold text-amber-950 block text-xs">
+                              Sở thích ẩm thực & Dị ứng đã lưu trong hồ sơ:
+                            </span>
+                            <span className="text-amber-800 font-medium">
+                              {currentUser.dietaryPreferences}
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const noteToAdd = `[Dị ứng / Sở thích: ${currentUser.dietaryPreferences}]`;
+                            if (!customNotes.includes(noteToAdd)) {
+                              setCustomNotes((prev) => (prev ? `${prev.trim()}\n${noteToAdd}` : noteToAdd));
+                            }
+                          }}
+                          className="px-3 py-1.5 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-[11px] font-bold shrink-0 transition-colors cursor-pointer shadow-xs self-start sm:self-center"
+                        >
+                          + Chèn vào ghi chú bếp
+                        </button>
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap gap-2">
                       {QUICK_TAGS.map((tag) => {
                         const isChecked = customNotes.includes(tag);
@@ -1650,9 +1691,37 @@ export const BookingPage: React.FC<BookingPageProps> = ({
 
             {/* Customer Inputs Form */}
             <div className="space-y-3">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-stone-300 block">
-                Thông tin người đặt bàn:
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-stone-300 block">
+                  Thông tin người đặt bàn:
+                </label>
+                {currentUser && (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full font-medium">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    Đã đăng nhập
+                  </span>
+                )}
+              </div>
+
+              {currentUser && (
+                <div className="p-2.5 bg-stone-900 border border-amber-500/30 rounded-xl flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#C4A480] to-[#8C6A43] text-white flex items-center justify-center font-bold text-xs shrink-0 font-serif">
+                      {currentUser.fullName ? currentUser.fullName.charAt(0).toUpperCase() : 'P'}
+                    </div>
+                    <div className="truncate">
+                      <p className="text-white font-semibold text-xs truncate">{currentUser.fullName}</p>
+                      <p className="text-stone-400 text-[10px] truncate">{currentUser.email || currentUser.phone}</p>
+                    </div>
+                  </div>
+                  {currentUser.vipTier && (
+                    <span className="text-[10px] font-bold text-amber-300 bg-amber-950/80 border border-amber-600/50 px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0 font-mono">
+                      <Crown className="w-3 h-3 text-amber-400" />
+                      {currentUser.vipTier}
+                    </span>
+                  )}
+                </div>
+              )}
 
               <div className="relative">
                 <User className="w-4 h-4 text-stone-500 absolute left-3.5 top-1/2 -translate-y-1/2" />

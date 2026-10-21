@@ -346,6 +346,7 @@ export function App() {
                 onAddBooking={handleAddBooking}
                 rebookData={rebookData}
                 onClearRebook={() => setRebookData(null)}
+                currentUser={currentUser}
               />
             </motion.div>
           )}
