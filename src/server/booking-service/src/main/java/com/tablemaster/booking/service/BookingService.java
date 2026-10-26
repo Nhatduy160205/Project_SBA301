@@ -45,6 +45,15 @@ public interface BookingService {
 
     BookingResponse updateEventConsultation(UUID bookingId, com.tablemaster.booking.dto.request.UpdateEventConsultationRequest request, UUID managerUserId);
 
+    // UC-12: Nhận Vé điện tử QR Check-in (E-Ticket with Dynamic QR Code)
+    com.tablemaster.booking.dto.response.ETicketResponse getETicket(String bookingIdOrCode);
+
+    com.tablemaster.booking.dto.response.ETicketResponse refreshDynamicQrToken(String bookingIdOrCode);
+
+    com.tablemaster.booking.dto.response.ETicketResponse verifyAndCheckIn(com.tablemaster.booking.dto.request.VerifyTicketRequest request);
+
+    com.tablemaster.booking.dto.response.ETicketResponse sendTicketNotification(String bookingIdOrCode, com.tablemaster.booking.dto.request.SendTicketNotificationRequest request);
+
     void checkAndExpireBookings();
 
     byte[] generateDepositInvoicePdf(UUID bookingId);

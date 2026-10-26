@@ -4,7 +4,6 @@ import {
   X,
   History,
   QrCode,
-  FileText,
   RotateCcw,
   Calendar,
   Clock,
@@ -19,6 +18,7 @@ import {
 import type { BookingDetails, AuthUser } from '../../types';
 import { SIGNATURE_DISHES } from '../../data/mockData';
 import { bookingApi, type BackendBooking } from '../../services/bookingApi';
+import { ETicketModal } from '../booking/ETicketModal';
 
 interface BookingHistoryModalProps {
   isOpen: boolean;
@@ -504,87 +504,14 @@ export const BookingHistoryModal: React.FC<BookingHistoryModalProps> = ({
         </motion.div>
       </div>
 
-      {/* ==================== MODAL XEM MÃ VÉ QR CHECK-IN TẠI SẢNH ==================== */}
-      {selectedTicketBooking && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl border border-amber-200 overflow-hidden text-center"
-          >
-            {/* Header Ticket */}
-            <div className="bg-gradient-to-r from-[#1C1917] to-[#2C221E] text-white p-5 space-y-1 relative">
-              <button
-                onClick={() => setSelectedTicketBooking(null)}
-                className="absolute top-3 right-3 p-1.5 text-stone-400 hover:text-white rounded-full bg-white/10 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-              <div className="w-8 h-8 mx-auto rounded-full bg-gradient-to-br from-[#C4A480] to-[#8C6A43] text-white flex items-center justify-center font-serif text-sm font-bold">
-                P
-              </div>
-              <h4 className="font-serif font-bold text-base tracking-wider text-amber-100">
-                LE PRIME BISTRO & LOUNGE
-              </h4>
-              <p className="text-[10px] uppercase tracking-widest text-stone-400">
-                Vé Điện Tử Check-in Tại Sảnh (E-Ticket)
-              </p>
-            </div>
-
-            {/* QR Code Container */}
-            <div className="p-6 space-y-4">
-              <div className="p-4 bg-amber-50/60 rounded-2xl border-2 border-dashed border-[#C4A480] inline-block shadow-inner">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                    (selectedTicketBooking as any).checkinQrToken || selectedTicketBooking.bookingId
-                  )}`}
-                  alt="Mã QR Check-in"
-                  className="w-44 h-44 object-contain mx-auto rounded-xl bg-white p-1"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <span className="font-mono text-sm font-bold text-[#8C6A43] block">
-                  {selectedTicketBooking.bookingId}
-                </span>
-                <p className="text-xs font-semibold text-[#1C1917]">
-                  {selectedTicketBooking.customerName} • {selectedTicketBooking.partySize} Khách
-                </p>
-                <p className="text-[11px] text-[#78716C]">
-                  {selectedTicketBooking.date} • {selectedTicketBooking.timeSlot} • {selectedTicketBooking.tableCode}
-                </p>
-              </div>
-
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-left text-[11px] text-emerald-800 space-y-0.5">
-                <p className="font-bold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>Vé đã sẵn sàng Check-in</span>
-                </p>
-                <p className="text-emerald-700">
-                  Khi đến cửa nhà hàng, vui lòng xuất trình mã này cho Lễ tân để quét camera và vào bàn ngay lập tức.
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleDownloadInvoice(selectedTicketBooking)}
-                  className="flex-1 py-2.5 rounded-xl border border-[#E8DFD1] hover:bg-[#FAF8F5] text-xs font-bold text-[#1C1917] flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <FileText className="w-3.5 h-3.5 text-[#8C6A43]" />
-                  <span>Hóa Đơn PDF</span>
-                </button>
-                <button
-                  onClick={() => setSelectedTicketBooking(null)}
-                  className="flex-1 py-2.5 rounded-xl bg-[#8C6A43] hover:bg-[#735534] text-white text-xs font-bold cursor-pointer"
-                >
-                  Hoàn Tất
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
+      {/* ==================== VÉ ĐIỆN TỬ DYNAMIC QR CODE CHECK-IN (UC-12) ==================== */}
+      <ETicketModal
+        isOpen={!!selectedTicketBooking}
+        onClose={() => setSelectedTicketBooking(null)}
+        bookingIdOrCode={(selectedTicketBooking as any)?.backendUUID || selectedTicketBooking?.bookingId}
+        initialBookingDetails={selectedTicketBooking}
+      />
     </AnimatePresence>
   );
 };
+

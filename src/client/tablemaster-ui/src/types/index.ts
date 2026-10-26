@@ -155,3 +155,99 @@ export interface AuthUser {
   avatarUrl?: string | null;
   dietaryPreferences?: string | null;
 }
+
+
+export interface LoyaltyWallet {
+  userId: string;
+  loyaltyPoints: number;
+  vipTier: 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND';
+  vipTierName: string;
+  pointsToNextTier: number;
+  depositDiscountPercent: number;
+}
+
+export interface ReviewItem {
+  id: string;
+  userId: string;
+  customerName: string;
+  customerAvatar?: string | null;
+  bookingId?: string | null;
+  foodRating: number;
+  serviceRating: number;
+  ambianceRating: number;
+  overallRating: number;
+  comment?: string | null;
+  pointsAwarded: number;
+  createdAt: string;
+}
+
+export interface CreateReviewPayload {
+  bookingId?: string;
+  foodRating: number;
+  serviceRating: number;
+  ambianceRating: number;
+  overallRating?: number;
+  comment?: string;
+}
+
+// ==========================================
+// UC-12: Vé Điện Tử QR Check-in Động (E-Ticket with Dynamic QR Code)
+// ==========================================
+
+export interface ETicketPreOrderItem {
+  itemName: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  notes?: string;
+}
+
+export interface ETicketData {
+  bookingId: string;
+  bookingCode: string;
+  guestName: string;
+  guestPhone: string;
+  guestEmail: string;
+  bookingDate: string;
+  timeSlotName?: string;
+  timeSlotRange?: string;
+  guestCount: number;
+  tableCode?: string;
+  floorNumber?: number;
+  floorName?: string;
+  totalDeposit: number;
+  status: string;
+  isConfirmed: boolean;
+  occasion?: string;
+  dietaryNotes?: string;
+  babyChairCount?: number;
+  candleSetup?: boolean;
+  specialNotes?: string;
+  preorderItems: ETicketPreOrderItem[];
+  dynamicQrToken: string; // Token 64 ký tự chống giả mạo HMAC-SHA256
+  qrRotationCounter: number;
+  qrExpiresAt: string;
+  refreshIntervalSeconds: number; // 60s
+  ticketIssuedAt?: string;
+  ticketZnsStatus: 'PENDING' | 'SENT' | 'DELIVERED' | 'FAILED' | string;
+  ticketEmailStatus: 'PENDING' | 'SENT' | 'DELIVERED' | 'FAILED' | string;
+  checkinScannedAt?: string | null;
+  isAlreadyCheckedIn: boolean;
+  restaurantName: string;
+  restaurantAddress: string;
+  hotline: string;
+  dressCode?: string;
+}
+
+export interface VerifyTicketPayload {
+  qrToken: string;
+  staffId?: string;
+  scannerLocation?: string;
+}
+
+export interface SendTicketNotificationPayload {
+  channel: 'ZNS' | 'EMAIL' | 'BOTH';
+  recipientOverride?: string;
+}
+
+

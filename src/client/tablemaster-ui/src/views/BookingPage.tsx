@@ -43,6 +43,7 @@ import {
 import type { TableItem, SignatureDish, BookingDetails } from '../types';
 import { SIGNATURE_DISHES } from '../data/mockData';
 import { QRPaymentModal } from '../components/common/QRPaymentModal';
+import { ETicketModal } from '../components/booking/ETicketModal';
 import { AvailabilitySearchEngine } from '../components/booking/AvailabilitySearchEngine';
 import { FloorPlanCanvas } from '../components/floor/FloorPlanCanvas';
 import { SpatialFloor3D } from '../components/floor/SpatialFloor3D';
@@ -245,6 +246,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   const [bookingSuccess, setBookingSuccess] = useState<BookingDetails | null>(null);
   const [backendBookingUUID, setBackendBookingUUID] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isETicketOpen, setIsETicketOpen] = useState<boolean>(false);
 
   // Generate 7 upcoming days for horizontal date selector
   const upcomingDays = useMemo(() => {
@@ -691,6 +693,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       onAddBooking(confirmedBooking);
       setBookingSuccess(confirmedBooking);
       setIsQRModalOpen(false);
+      setIsETicketOpen(true); // UC-12: Tự động mở Vé Điện Tử QR Check-in sau khi cọc thành công
 
       // Giải phóng phiên giữ tạm thời Redlock khi đã cọc tiền thành công
       if (selectedTable && holdToken) {
@@ -913,12 +916,23 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                 )}
               </div>
             </div>
-            <button
-              onClick={() => setBookingSuccess(null)}
-              className="px-5 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition-colors shrink-0 cursor-pointer shadow-md active:scale-95"
-            >
-              Đặt Thêm Bàn Mới
-            </button>
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsETicketOpen(true)}
+                className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
+              >
+                <span>📱 Mở Vé QR Check-in (E-Ticket)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBookingSuccess(null)}
+                className="px-4 py-2.5 bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Đặt Thêm Bàn Mới
+              </button>
+            </div>
+
           </motion.div>
         )}
       </AnimatePresence>
@@ -2478,6 +2492,15 @@ export const BookingPage: React.FC<BookingPageProps> = ({
         booking={currentBooking}
         onPaymentSuccess={handlePaymentSuccess}
       />
+
+      {/* UC-12: Vé Điện Tử Dynamic QR Code Check-in */}
+      <ETicketModal
+        isOpen={isETicketOpen}
+        onClose={() => setIsETicketOpen(false)}
+        bookingIdOrCode={backendBookingUUID || bookingSuccess?.bookingId}
+        initialBookingDetails={bookingSuccess}
+      />
     </div>
   );
 };
+
