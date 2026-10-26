@@ -163,6 +163,11 @@ public class BookingEventProducer {
         publishEvent(KafkaConfig.TOPIC_NOTIFICATION_EMAIL_SENT, "NOTIFICATION_EVENT", booking.getId(), "EMAIL_SENT", payload);
     }
 
+    // UC-15: Đồng bộ dữ liệu Live Sàn đa tầng tới Tablet Lễ tân qua WebSocket STOMP (<300ms)
+    public void publishHostFloorLiveUpdate(Object payload) {
+        broadcastWebSocket("/topic/host/floors-live", payload);
+    }
+
     private Map<String, Object> createBookingPayload(Booking booking) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("bookingId", booking.getId());

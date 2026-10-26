@@ -11,6 +11,9 @@ interface TableNodeProps {
   showTooltip?: boolean;
   interactive?: boolean;
   isHeatmapMode?: boolean;
+  isHostView?: boolean;
+  diningDurationFormatted?: string;
+  diningAlertLevel?: 'NORMAL' | 'LONG_DINING' | 'OVERSTAY';
 }
 
 export const TableNode: React.FC<TableNodeProps> = ({
@@ -19,6 +22,9 @@ export const TableNode: React.FC<TableNodeProps> = ({
   onSelect,
   interactive = true,
   isHeatmapMode = false,
+  isHostView = false,
+  diningDurationFormatted,
+  diningAlertLevel,
 }) => {
   const isCircle = table.shape === 'circle';
 
@@ -41,10 +47,30 @@ export const TableNode: React.FC<TableNodeProps> = ({
       case 'HOLDING':
         return isSelected
           ? 'bg-gradient-to-br from-amber-100 via-amber-200 to-amber-100 text-amber-950 border-amber-500 ring-4 ring-amber-400/60 shadow-xl shadow-amber-500/30 scale-105 z-20'
-          : 'bg-amber-100/90 text-amber-900 border-amber-400 shadow-md ring-2 ring-amber-400/60 cursor-not-allowed animate-pulse';
+          : 'bg-amber-100/90 text-amber-900 border-amber-400 shadow-md ring-2 ring-amber-400/60 animate-pulse';
       case 'CONFIRMED':
+        if (isHostView) {
+          return isSelected
+            ? 'bg-blue-100 text-blue-950 border-blue-600 ring-4 ring-blue-400/50 shadow-lg scale-105 z-20'
+            : 'bg-blue-50/90 text-blue-900 border-blue-400 hover:border-blue-600 hover:bg-blue-100/90 shadow-sm cursor-pointer';
+        }
         return 'bg-rose-50 text-rose-800 border-rose-300 cursor-not-allowed opacity-90';
       case 'SEATED':
+        if (isHostView) {
+          if (diningAlertLevel === 'OVERSTAY') {
+            return isSelected
+              ? 'bg-rose-100 text-rose-950 border-rose-600 ring-4 ring-rose-500/60 shadow-xl scale-105 z-20 animate-pulse'
+              : 'bg-rose-50 text-rose-900 border-rose-500 hover:border-rose-600 shadow-md ring-2 ring-rose-400/50 cursor-pointer';
+          }
+          if (diningAlertLevel === 'LONG_DINING') {
+            return isSelected
+              ? 'bg-amber-100 text-amber-950 border-amber-600 ring-4 ring-amber-500/50 shadow-lg scale-105 z-20'
+              : 'bg-amber-50 text-amber-900 border-amber-500 hover:border-amber-600 shadow-sm ring-1 ring-amber-400/60 cursor-pointer';
+          }
+          return isSelected
+            ? 'bg-amber-100 text-amber-950 border-amber-600 ring-4 ring-amber-400/50 shadow-lg scale-105 z-20'
+            : 'bg-amber-50/80 text-amber-900 border-amber-400 hover:border-amber-600 shadow-sm cursor-pointer';
+        }
         return 'bg-blue-50 text-blue-800 border-blue-400 cursor-default';
       case 'CLEANING':
         return 'bg-slate-100 text-slate-700 border-slate-300 cursor-default';
@@ -60,9 +86,11 @@ export const TableNode: React.FC<TableNodeProps> = ({
       case 'HOLDING':
         return 'bg-amber-500 animate-ping';
       case 'CONFIRMED':
-        return 'bg-rose-500';
-      case 'SEATED':
         return 'bg-blue-500';
+      case 'SEATED':
+        if (diningAlertLevel === 'OVERSTAY') return 'bg-rose-500 animate-ping';
+        if (diningAlertLevel === 'LONG_DINING') return 'bg-amber-500';
+        return 'bg-emerald-500';
       case 'CLEANING':
         return 'bg-slate-400';
       default:
@@ -72,6 +100,11 @@ export const TableNode: React.FC<TableNodeProps> = ({
 
   const handleClick = () => {
     if (!interactive) return;
+    if (isHostView) {
+      // Host view: Receptionist can tap any table to view orders, check-in, or manage table
+      if (onSelect) onSelect(table);
+      return;
+    }
     if (table.status === 'HOLDING' && !isSelected) {
       return; // Khách khác đang giữ bàn 5 phút, vô hiệu hóa click
     }
@@ -187,6 +220,29 @@ export const TableNode: React.FC<TableNodeProps> = ({
         </>
       )}
 
+      {/* Live Dining Duration Chip on Table (Host View) */}
+      {isHostView && table.status === 'SEATED' && !isSelected && (
+        <div
+          className={`absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full shadow-md border flex items-center gap-1 z-20 ${
+            diningAlertLevel === 'OVERSTAY'
+              ? 'bg-rose-600 text-white border-rose-300 animate-pulse ring-2 ring-rose-400'
+              : diningAlertLevel === 'LONG_DINING'
+              ? 'bg-amber-500 text-white border-amber-300'
+              : 'bg-stone-900 text-emerald-300 border-stone-600'
+          }`}
+        >
+          <Clock className="w-2.5 h-2.5" />
+          <span>{diningDurationFormatted || table.seatedSince || '30p'}</span>
+        </div>
+      )}
+
+      {/* Confirmed Deposit Badge (Host View) */}
+      {isHostView && table.status === 'CONFIRMED' && !isSelected && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap text-[8px] font-sans font-black tracking-wide px-1.5 py-0.5 rounded-full shadow-md bg-blue-600 text-white border border-blue-300 flex items-center gap-1 z-20">
+          <span>ĐÃ CỌC</span>
+        </div>
+      )}
+
       {/* Main Table Body */}
       <motion.div
         whileHover={interactive ? { scale: 1.04 } : undefined}
@@ -215,8 +271,8 @@ export const TableNode: React.FC<TableNodeProps> = ({
           className={`w-2 h-2 rounded-full mt-1 ${getStatusDot()} shadow-xs`}
         />
 
-        {/* Locked icon for confirmed/occupied */}
-        {table.status === 'CONFIRMED' && (
+        {/* Locked icon for customer view confirmed */}
+        {!isHostView && table.status === 'CONFIRMED' && (
           <div className="absolute top-1 right-1 text-rose-500/80">
             <Lock className="w-2.5 h-2.5" />
           </div>
