@@ -34,6 +34,8 @@ import {
   Sun,
   Moon,
   Star,
+  Sliders,
+  Cake,
 } from 'lucide-react';
 import type { TableItem, SignatureDish, BookingDetails } from '../types';
 import { SIGNATURE_DISHES } from '../data/mockData';
@@ -45,6 +47,7 @@ import { webSocketFloorService } from '../services/websocketService';
 import {
   bookingApi,
   ensureUUID,
+  getDishUUID,
   SEED_DATA,
   type CreateBookingRequestPayload,
   type TableAvailabilityDto,
@@ -160,9 +163,10 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   const [selectedOccasion, setSelectedOccasion] = useState<string | null>('date');
   const [customNotes, setCustomNotes] = useState<string>('Ưu tiên bàn gần cửa sổ ngắm trọn phố Nguyễn Huệ giúp mình nhé!');
 
-  // Step 4: Pre-orders
+  // Step 4: Pre-orders (UC-07 Signature Pre-order Menu & Elaborate Prep)
   const [showSection4, setShowSection4] = useState<boolean>(true);
   const [selectedDishes, setSelectedDishes] = useState<Record<string, number>>({});
+  const [dishNotes, setDishNotes] = useState<Record<string, string>>({});
   const [selectedMenuCategory, setSelectedMenuCategory] = useState<string>('ALL');
   const [expandedComboIds, setExpandedComboIds] = useState<Record<string, boolean>>({ 'combo-1': true });
 
@@ -202,7 +206,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
     return list;
   }, []);
 
-  // Tự động khôi phục dữ liệu khi khách bấm "Đặt lại bàn này" (Re-book 1-Chạm)
+  // Tự động khôi phục dữ liệu khi khách bấm "Đặt lại bàn này" (Re-book 1-Chạm, gồm cả món Signature & ghi chú)
   useEffect(() => {
     if (rebookData) {
       if (rebookData.partySize) setPartySize(rebookData.partySize);
@@ -213,12 +217,17 @@ export const BookingPage: React.FC<BookingPageProps> = ({
 
       if (rebookData.preOrders && rebookData.preOrders.length > 0) {
         const dishMap: Record<string, number> = {};
+        const noteMap: Record<string, string> = {};
         rebookData.preOrders.forEach((p) => {
           if (p.dish && p.dish.id) {
             dishMap[p.dish.id] = p.quantity;
+            if (p.preparationNotes) {
+              noteMap[p.dish.id] = p.preparationNotes;
+            }
           }
         });
         setSelectedDishes(dishMap);
+        setDishNotes(noteMap);
       }
 
       setRebookToast(`Đã tự động tải cấu hình bàn & món ăn cũ từ đơn #${rebookData.bookingId}. Quý khách chỉ cần chọn ngày giờ phù hợp để hoàn tất.`);
@@ -231,6 +240,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
 
   const handleClearAllDishes = () => {
     setSelectedDishes({});
+    setDishNotes({});
   };
 
   const handleQuickTagClick = (tag: string) => {
@@ -259,6 +269,21 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       }
       return copy;
     });
+
+    // Mặc định gợi ý ghi chú chế biến công phu cho các món signature đặc thù
+    if (delta > 0 && !selectedDishes[dishId] && !dishNotes[dishId]) {
+      if (dishId === 'dish-1') {
+        setDishNotes((prev) => ({ ...prev, [dishId]: 'Độ chín: Medium-Rare, Ủ nhiệt 45 phút kỹ thuật Sous-vide' }));
+      } else if (dishId === 'wine-1') {
+        setDishNotes((prev) => ({ ...prev, [dishId]: 'Decant chiết thở bình pha lê trước 30 phút, ướp lạnh 16°C' }));
+      } else if (dishId === 'cake-1') {
+        setDishNotes((prev) => ({ ...prev, [dishId]: 'Viết chữ: Chúc Mừng Sinh Nhật (Tặng kèm nến sinh nhật)' }));
+      }
+    }
+  };
+
+  const handleUpdateDishNote = (dishId: string, note: string) => {
+    setDishNotes((prev) => ({ ...prev, [dishId]: note }));
   };
 
   const dishesTotal = Object.entries(selectedDishes).reduce((sum, [dishId, qty]) => {
@@ -476,9 +501,15 @@ export const BookingPage: React.FC<BookingPageProps> = ({
     const preOrderItems = Object.entries(selectedDishes)
       .map(([id, quantity]) => {
         const dish = SIGNATURE_DISHES.find((d) => d.id === id);
-        return dish ? { dish, quantity } : null;
+        return dish
+          ? {
+              dish,
+              quantity,
+              preparationNotes: dishNotes[id] || '',
+            }
+          : null;
       })
-      .filter((item): item is { dish: SignatureDish; quantity: number } => item !== null);
+      .filter((item): item is { dish: SignatureDish; quantity: number; preparationNotes: string } => item !== null);
 
     const occasionText = selectedOccasion
       ? `[Dịp: ${OCCASIONS.find((o) => o.id === selectedOccasion)?.label}] `
@@ -498,11 +529,13 @@ export const BookingPage: React.FC<BookingPageProps> = ({
         guestCount: partySize,
         tableIds: [tableUUID],
         specialNotes: fullNotes,
-        totalDeposit: depositRequired,
+        totalDeposit: grandTotal, // UC-07: Tổng cọc đã cộng dồn (Cọc bàn + Cọc món ăn đặt trước)
         preorderItems: preOrderItems.map((p) => ({
-          menuItemId: SEED_DATA.MENU_ITEM_ID,
+          menuItemId: getDishUUID(p.dish.id),
+          itemName: p.dish.name,
           quantity: p.quantity,
           unitPrice: p.dish.price,
+          notes: p.preparationNotes,
         })),
       };
 
@@ -531,7 +564,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       timeSlot: effectiveTimeSlot,
       notes: fullNotes,
       preOrders: preOrderItems,
-      depositAmount: depositRequired,
+      depositAmount: grandTotal, // UC-07: Cọc cộng dồn chuyển sang VietQR
       totalEstimatedAmount: grandTotal,
       createdAt: 'Vừa xong',
       status: 'PENDING_DEPOSIT',
@@ -548,9 +581,9 @@ export const BookingPage: React.FC<BookingPageProps> = ({
         try {
           const res = await bookingApi.approveAndRequestDeposit(
             backendBookingUUID,
-            depositRequired,
+            grandTotal, // UC-07: Duyệt cọc tổng cộng dồn
             60,
-            'Khách đã thanh toán cọc thành công qua VietQR'
+            'Khách đã thanh toán cọc bàn và món ăn Signature qua VietQR'
           );
           console.log('✅ [Backend API] Duyệt cọc đơn thành công:', res.data);
         } catch (err: any) {
@@ -737,6 +770,19 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                 <p className="text-xs sm:text-sm text-emerald-800">
                   Cảm ơn quý khách <strong>{bookingSuccess.customerName}</strong>. Vị trí <strong>{bookingSuccess.tableCode}</strong> vào ngày <strong>{bookingSuccess.date} ({bookingSuccess.timeSlot})</strong> cho <strong>{bookingSuccess.partySize} thực khách</strong> đã được giữ chỗ.
                 </p>
+                {bookingSuccess.preOrders && bookingSuccess.preOrders.length > 0 && (
+                  <div className="pt-1.5 flex flex-wrap items-center gap-2 text-xs text-emerald-900 font-medium">
+                    <span className="bg-emerald-200/60 px-2 py-0.5 rounded-md font-bold">
+                      🍳 {bookingSuccess.preOrders.reduce((s, p) => s + p.quantity, 0)} món Signature đặt trước:
+                    </span>
+                    <span>
+                      {bookingSuccess.preOrders.map(p => `${p.quantity}x ${p.dish.name}`).join(', ')}
+                    </span>
+                    <span className="font-mono font-bold text-emerald-950">
+                      (Tổng cọc đã thanh toán: {new Intl.NumberFormat('vi-VN').format(bookingSuccess.depositAmount)} đ)
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
             <button
@@ -1447,7 +1493,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
             </AnimatePresence>
           </section>
 
-          {/* STEP 4: THỰC ĐƠN SIGNATURE & RƯỢU VANG (PRE-ORDER) */}
+          {/* STEP 4: THỰC ĐƠN SIGNATURE & RƯỢU VANG (PRE-ORDER - UC-07) */}
           <section className="bg-white border-2 border-stone-200/90 rounded-3xl p-6 sm:p-8 shadow-sm space-y-5 transition-all hover:border-amber-400/60">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200">
               <div className="flex items-start sm:items-center gap-3">
@@ -1457,14 +1503,14 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="font-serif text-xl font-bold text-stone-900">
-                      Đặt Trước Món Ăn & Rượu Vang Signature
+                      Chọn Món Ăn Signature Đặt Trước (Pre-order Menu)
                     </h2>
                     <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
-                      Tùy chọn • Bếp trưởng chuẩn bị trước
+                      Cộng dồn cọc • Bếp trưởng chuẩn bị công phu
                     </span>
                   </div>
                   <p className="text-xs text-stone-500 mt-0.5">
-                    Bò lên tuổi Dry-Aged & Set Menu được tẩm ướp chuẩn bị trước, phục vụ nóng hổi khi quý khách vừa đến
+                    Cho phép chọn trước Bò Wagyu A5 (ủ nhiệt 45p), Decant rượu vang (thở 30p), Bánh kem sinh nhật viết tên riêng. Tiền cọc món ăn cộng dồn vào tổng hóa đơn cọc VietQR.
                   </p>
                 </div>
               </div>
@@ -1548,72 +1594,173 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                                 : 'bg-white border-stone-200 hover:border-amber-300 hover:shadow-xs'
                             }`}
                           >
-                            <div className="flex gap-3.5">
-                              {/* Dish Image */}
-                              <div className="relative w-24 h-24 rounded-2xl overflow-hidden shrink-0 bg-stone-100 border border-stone-200">
-                                <img
-                                  src={dish.image}
-                                  alt={dish.name}
-                                  className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
-                                  loading="lazy"
-                                />
-                                {dish.badge && (
-                                  <div className="absolute top-1 left-1 bg-amber-500 text-slate-950 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md shadow-xs">
-                                    {dish.badge}
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Dish Info */}
-                              <div className="flex-1 min-w-0 space-y-1">
-                                <div className="flex items-start justify-between gap-1">
-                                  <h4 className="font-serif text-sm font-bold text-stone-900 leading-snug">
-                                    {dish.name}
-                                  </h4>
-                                </div>
-                                <p className="text-[11px] text-stone-500 line-clamp-2 leading-relaxed">
-                                  {dish.description}
-                                </p>
-                                <div className="flex items-center gap-2 pt-0.5">
-                                  <span className="font-serif text-sm font-bold text-amber-700">
-                                    {new Intl.NumberFormat('vi-VN').format(dish.price)} đ
-                                  </span>
-                                  {dish.prepTimeMinutes && (
-                                    <span className="text-[10px] text-stone-400 flex items-center gap-0.5">
-                                      <Clock className="w-3 h-3" /> {dish.prepTimeMinutes} phút
-                                    </span>
+                            <div>
+                              <div className="flex gap-3.5">
+                                {/* Dish Image */}
+                                <div className="relative w-24 h-24 rounded-2xl overflow-hidden shrink-0 bg-stone-100 border border-stone-200">
+                                  <img
+                                    src={dish.image}
+                                    alt={dish.name}
+                                    className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                                    loading="lazy"
+                                  />
+                                  {dish.badge && (
+                                    <div className="absolute top-1 left-1 bg-amber-500 text-slate-950 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md shadow-xs">
+                                      {dish.badge}
+                                    </div>
                                   )}
                                 </div>
-                              </div>
-                            </div>
 
-                            {/* Combo courses preview if combo */}
-                            {dish.comboItems && dish.comboItems.length > 0 && (
-                              <div className="mt-3 pt-2.5 border-t border-stone-200 text-[11px]">
-                                <button
-                                  type="button"
-                                  onClick={() => toggleComboDetails(dish.id)}
-                                  className="text-amber-800 font-bold hover:underline flex items-center gap-1 cursor-pointer"
-                                >
-                                  <span>{isExpanded ? 'Ẩn các món trong set' : 'Xem các món trong set menu'}</span>
-                                  {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                                </button>
-                                {isExpanded && (
-                                  <ul className="mt-1.5 space-y-0.5 text-stone-600 pl-3 list-disc">
-                                    {dish.comboItems.map((item, idx) => (
-                                      <li key={idx}>{item}</li>
-                                    ))}
-                                  </ul>
-                                )}
+                                {/* Dish Info */}
+                                <div className="flex-1 min-w-0 space-y-1">
+                                  <div className="flex items-start justify-between gap-1">
+                                    <h4 className="font-serif text-sm font-bold text-stone-900 leading-snug">
+                                      {dish.name}
+                                    </h4>
+                                  </div>
+                                  <p className="text-[11px] text-stone-500 line-clamp-2 leading-relaxed">
+                                    {dish.description}
+                                  </p>
+                                  <div className="flex items-center gap-2 pt-0.5">
+                                    <span className="font-serif text-sm font-bold text-amber-700">
+                                      {new Intl.NumberFormat('vi-VN').format(dish.price)} đ
+                                    </span>
+                                    {dish.prepTimeMinutes && (
+                                      <span className="text-[10px] text-stone-400 flex items-center gap-0.5">
+                                        <Clock className="w-3 h-3 text-amber-600" /> Chuẩn bị {dish.prepTimeMinutes}p
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                            )}
+
+                              {/* Combo courses preview if combo */}
+                              {dish.comboItems && dish.comboItems.length > 0 && (
+                                <div className="mt-3 pt-2.5 border-t border-stone-200 text-[11px]">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleComboDetails(dish.id)}
+                                    className="text-amber-800 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <span>{isExpanded ? 'Ẩn các món trong set' : 'Xem các món trong set menu'}</span>
+                                    {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                  </button>
+                                  {isExpanded && (
+                                    <ul className="mt-1.5 space-y-0.5 text-stone-600 pl-3 list-disc">
+                                      {dish.comboItems.map((item, idx) => (
+                                        <li key={idx}>{item}</li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Elaborate Preparation Options (UC-07) */}
+                              {isSelected && (
+                                <div className="mt-3 pt-2.5 border-t border-amber-200/70 bg-amber-50/60 -mx-4 p-3 space-y-2 rounded-xl">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-amber-950 flex items-center gap-1">
+                                      <Sliders className="w-3 h-3 text-amber-600" />
+                                      <span>Chuẩn Bị Công Phu (Pre-order Customization):</span>
+                                    </span>
+                                    <span className="text-[9px] text-amber-800 bg-amber-200/50 px-1.5 py-0.5 rounded font-bold">
+                                      Bếp trưởng Le Prime
+                                    </span>
+                                  </div>
+
+                                  {/* Wagyu / Steak Doneness & 45-min heat hold */}
+                                  {(dish.id === 'dish-1' || dish.category.includes('Bò') || dish.id.includes('dish')) && (
+                                    <div className="space-y-1">
+                                      <span className="text-[10px] text-stone-600 font-medium">Độ chín Steak (Ủ nhiệt Sous-vide 45 phút):</span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {['Medium-Rare (Khuyên dùng)', 'Rare (Tái)', 'Medium (Vừa)', 'Well-Done'].map((opt) => {
+                                          const key = opt.split(' ')[0];
+                                          const isCurrent = (dishNotes[dish.id] || '').includes(key);
+                                          return (
+                                            <button
+                                              key={opt}
+                                              type="button"
+                                              onClick={() => handleUpdateDishNote(dish.id, `Độ chín: ${opt}, Ủ nhiệt 45 phút Sous-vide & áp chảo gang`)}
+                                              className={`px-2 py-0.5 rounded-lg text-[9px] font-semibold transition-all cursor-pointer ${
+                                                isCurrent
+                                                  ? 'bg-amber-600 text-white shadow-xs'
+                                                  : 'bg-white text-stone-700 border border-stone-200 hover:border-amber-400'
+                                              }`}
+                                            >
+                                              {opt}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Fine Wine Decanting */}
+                                  {(dish.id === 'wine-1' || dish.category.includes('Vang') || dish.id.includes('wine')) && (
+                                    <div className="space-y-1">
+                                      <span className="text-[10px] text-stone-600 font-medium">Chiết thở bình Decanter pha lê & ướp nhiệt:</span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {['Decant thở 30 phút (Khuyên dùng)', 'Decant thở 45 phút', 'Mở tại bàn', 'Ướp xô đá (16°C)'].map((opt) => {
+                                          const key = opt.split(' ')[0];
+                                          const isCurrent = (dishNotes[dish.id] || '').includes(key);
+                                          return (
+                                            <button
+                                              key={opt}
+                                              type="button"
+                                              onClick={() => handleUpdateDishNote(dish.id, `Chiết thở vang: ${opt}`)}
+                                              className={`px-2 py-0.5 rounded-lg text-[9px] font-semibold transition-all cursor-pointer ${
+                                                isCurrent
+                                                  ? 'bg-amber-600 text-white shadow-xs'
+                                                  : 'bg-white text-stone-700 border border-stone-200 hover:border-amber-400'
+                                              }`}
+                                            >
+                                              {opt}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Birthday Cake Lettering */}
+                                  {(dish.id === 'cake-1' || dish.name.includes('Bánh Kem') || dish.name.includes('Sinh Nhật')) && (
+                                    <div className="space-y-1">
+                                      <span className="text-[10px] text-stone-600 font-medium flex items-center gap-1">
+                                        <Cake className="w-3 h-3 text-amber-600" />
+                                        <span>Thông điệp viết chữ trên bánh & nến sinh nhật:</span>
+                                      </span>
+                                      <input
+                                        type="text"
+                                        value={dishNotes[dish.id] || ''}
+                                        onChange={(e) => handleUpdateDishNote(dish.id, e.target.value)}
+                                        placeholder="VD: Chúc Mừng Sinh Nhật Minh Anh 26th (Cắm nến số 26)"
+                                        className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1 text-[10px] text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-600"
+                                      />
+                                    </div>
+                                  )}
+
+                                  {/* General custom note */}
+                                  {dish.id !== 'cake-1' && !dish.name.includes('Bánh Kem') && (
+                                    <div className="pt-0.5">
+                                      <input
+                                        type="text"
+                                        value={dishNotes[dish.id] || ''}
+                                        onChange={(e) => handleUpdateDishNote(dish.id, e.target.value)}
+                                        placeholder="Ghi chú thêm: gia vị, dị ứng, thời gian lên món..."
+                                        className="w-full bg-white/90 border border-stone-200 rounded-lg px-2.5 py-1 text-[10px] text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500"
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
 
                             {/* Stepper Footer */}
                             <div className="mt-3 pt-3 border-t border-stone-200 flex items-center justify-between">
                               <span className="text-[10px] text-stone-500">
                                 {isSelected ? (
                                   <strong className="text-amber-700 font-mono">
-                                    Thành tiền: {new Intl.NumberFormat('vi-VN').format(dish.price * qty)} đ
+                                    Cọc món: {new Intl.NumberFormat('vi-VN').format(dish.price * qty)} đ
                                   </strong>
                                 ) : (
                                   <span>Thêm vào tiệc</span>
@@ -1658,25 +1805,34 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                       })}
                   </div>
 
-                  {/* Summary Cart Pill */}
+                  {/* Summary Cart Pill with Deposit Accumulation Breakdown (UC-07) */}
                   {Object.keys(selectedDishes).length > 0 && (
-                    <div className="p-4 bg-gradient-to-r from-amber-500/10 via-amber-50 to-amber-500/10 rounded-2xl border border-amber-300 flex items-center justify-between text-xs text-amber-950 shadow-xs">
+                    <div className="p-4 bg-gradient-to-r from-amber-500/10 via-amber-50 to-amber-500/10 rounded-2xl border border-amber-300 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs text-amber-950 shadow-xs">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-xs">
-                          <ShoppingBag className="w-4 h-4" />
+                        <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-xs">
+                          <ShoppingBag className="w-5 h-5" />
                         </div>
                         <div>
-                          <p className="font-bold text-stone-900">
-                            Đã chọn {Object.values(selectedDishes).reduce((a, b) => a + b, 0)} phần món đặt trước
+                          <p className="font-bold text-stone-900 text-sm">
+                            Đã chọn {Object.values(selectedDishes).reduce((a, b) => a + b, 0)} phần món đặc biệt chuẩn bị trước
                           </p>
-                          <p className="text-[11px] text-stone-500">
-                            Tiền cọc món (100%): <strong className="text-amber-800 font-mono">{new Intl.NumberFormat('vi-VN').format(dishesTotal)} đ</strong> (Chuẩn bị nguyên liệu & nướng trước)
-                          </p>
+                          <div className="text-[11px] text-stone-600 flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
+                            <span>Cọc bàn: <strong className="text-stone-900 font-mono">{new Intl.NumberFormat('vi-VN').format(depositRequired)} đ</strong></span>
+                            <span>+</span>
+                            <span>Cọc món Signature: <strong className="text-amber-800 font-mono">{new Intl.NumberFormat('vi-VN').format(dishesTotal)} đ</strong></span>
+                            <span>=</span>
+                            <span className="text-amber-900 font-bold bg-amber-200/60 px-2 py-0.5 rounded-md font-mono">
+                              Tổng cọc VietQR: {new Intl.NumberFormat('vi-VN').format(grandTotal)} đ
+                            </span>
+                          </div>
                         </div>
                       </div>
-                      <span className="text-[11px] font-bold text-amber-800 bg-white px-3 py-1 rounded-xl border border-amber-300">
-                        Bếp Trưởng Lên Lửa Sớm
-                      </span>
+                      <div className="flex items-center gap-2 self-end md:self-auto">
+                        <span className="text-[11px] font-bold text-amber-900 bg-white px-3 py-1.5 rounded-xl border border-amber-300 shadow-xs flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Cộng Dồn Vào Hóa Đơn Cọc</span>
+                        </span>
+                      </div>
                     </div>
                   )}
                 </motion.div>
@@ -1873,23 +2029,35 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                 </div>
               )}
 
-              {/* Pre-order summary */}
+              {/* Pre-order summary (UC-07) */}
               {Object.keys(selectedDishes).length > 0 && (
                 <div className="pt-2 border-t border-stone-800 space-y-1.5">
-                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
-                    Món ăn đặt trước:
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
+                      Món Signature Đặt Trước:
+                    </span>
+                    <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded font-mono">
+                      {Object.values(selectedDishes).reduce((a, b) => a + b, 0)} phần
+                    </span>
+                  </div>
                   {Object.entries(selectedDishes).map(([id, qty]) => {
                     const dish = SIGNATURE_DISHES.find(d => d.id === id);
                     if (!dish) return null;
                     return (
-                      <div key={id} className="flex items-center justify-between text-[11px]">
-                        <span className="text-stone-300 truncate pr-2">
-                          <strong className="text-amber-400 font-mono">{qty}x</strong> {dish.name}
-                        </span>
-                        <span className="font-mono text-stone-200 shrink-0">
-                          {new Intl.NumberFormat('vi-VN').format(dish.price * qty)} đ
-                        </span>
+                      <div key={id} className="space-y-0.5 text-[11px] pb-1 border-b border-stone-800/60 last:border-0 last:pb-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-stone-300 truncate pr-2">
+                            <strong className="text-amber-400 font-mono">{qty}x</strong> {dish.name}
+                          </span>
+                          <span className="font-mono text-stone-200 shrink-0">
+                            {new Intl.NumberFormat('vi-VN').format(dish.price * qty)} đ
+                          </span>
+                        </div>
+                        {dishNotes[id] && (
+                          <p className="text-[10px] text-amber-300/80 italic pl-2 leading-tight">
+                            ↳ {dishNotes[id]}
+                          </p>
+                        )}
                       </div>
                     );
                   })}
@@ -1937,7 +2105,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
               </div>
             </div>
 
-            {/* Financial Breakdown */}
+            {/* Financial Breakdown (UC-07 Cọc Bàn + Cọc Món Ăn) */}
             <div className="space-y-2 pt-3 border-t border-stone-800 text-xs">
               <div className="flex justify-between items-center text-stone-300">
                 <span>Tiền cọc giữ bàn:</span>
@@ -1947,17 +2115,20 @@ export const BookingPage: React.FC<BookingPageProps> = ({
               </div>
 
               {dishesTotal > 0 && (
-                <div className="flex justify-between items-center text-stone-300">
-                  <span>Tiền cọc món ăn (100%):</span>
+                <div className="flex justify-between items-center text-amber-300">
+                  <span>Tiền cọc món ăn Signature:</span>
                   <span className="font-bold text-amber-300 font-mono">
-                    {new Intl.NumberFormat('vi-VN').format(dishesTotal)} đ
+                    +{new Intl.NumberFormat('vi-VN').format(dishesTotal)} đ
                   </span>
                 </div>
               )}
 
               {/* Grand Total Box */}
               <div className="p-4 bg-gradient-to-r from-amber-950/80 to-amber-900/60 rounded-2xl border border-amber-500/40 flex justify-between items-center text-xs font-bold pt-3 shadow-md">
-                <span className="text-amber-200">Tổng Cọc VietQR:</span>
+                <div>
+                  <span className="text-amber-200 block">Tổng Cọc VietQR:</span>
+                  <span className="text-[10px] text-stone-400 font-normal">Đã cộng dồn món đặt trước</span>
+                </div>
                 <span className="font-serif text-lg font-black text-amber-300">
                   {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(grandTotal)}
                 </span>

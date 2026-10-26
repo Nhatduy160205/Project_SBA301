@@ -508,15 +508,15 @@ export const SIGNATURE_DISHES: SignatureDish[] = [
   // 2. DRY-AGED STEAK & MAIN COURSE
   {
     id: 'dish-1',
-    name: 'Wagyu Striploin A5 Miyazaki (300g)',
+    name: 'Thăn Lưng Bò Wagyu A5 Miyazaki (Ủ Nhiệt 45 Phút)',
     category: 'Bò Dry-Aged & Món Chính',
     price: 2450000,
     originalPrice: 2800000,
     servingSize: '1-2 Khách • Bò Wagyu Nhật A5',
-    badge: '👨‍🍳 Chef Choice',
-    description: 'Thăn ngoại bò Wagyu A5 vùng Miyazaki trứ danh với vân mỡ cẩm thạch hoàn hảo, tan chảy ngay trên đầu lưỡi, phục vụ cùng muối hồng Himalaya và sốt tiêu đen Phú Quốc.',
+    badge: '🥩 Wagyu A5 • Cần Ủ Nhiệt 45p',
+    description: 'Thăn ngoại bò Wagyu A5 vùng Miyazaki trứ danh với vân mỡ cẩm thạch hoàn hảo, cần ủ nhiệt 45 phút kỹ thuật Sous-vide và nướng cháy cạnh trên than hồng, tan chảy trên đầu lưỡi.',
     image: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80',
-    prepTimeMinutes: 25,
+    prepTimeMinutes: 45,
   },
   {
     id: 'dish-2',
@@ -554,14 +554,14 @@ export const SIGNATURE_DISHES: SignatureDish[] = [
   // 3. RƯỢU VANG & CHAMPAGNE GRAND CRU
   {
     id: 'wine-1',
-    name: 'Château Margaux Premier Grand Cru Classé (2015)',
+    name: 'Château Margaux Premier Grand Cru (Decant 30 Phút)',
     category: 'Rượu Vang & Champagne',
     price: 8500000,
     servingSize: 'Chai 750ml • Pháp (14% Vol)',
-    badge: '🍷 Huyền Thoại Bordeaux',
-    description: 'Dòng vang đỏ danh giá bậc nhất vùng Bordeaux với hương thơm quý phái của quả mọng đen, gỗ sồi Pháp, xì gà và kết cấu tannin mượt mà như nhung.',
+    badge: '🍷 Decant Thở 30 Phút',
+    description: 'Dòng vang đỏ danh giá bậc nhất vùng Bordeaux, yêu cầu chiết thở bình decanter pha lê trước 30-45 phút để bung tỏa đa tầng hương thơm quả mọng đen, gỗ sồi Pháp và xì gà Cuba.',
     image: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=800&q=80',
-    prepTimeMinutes: 5,
+    prepTimeMinutes: 30,
   },
   {
     id: 'wine-2',
@@ -572,7 +572,7 @@ export const SIGNATURE_DISHES: SignatureDish[] = [
     badge: '🍾 Khai Tiệc Hoàn Hảo',
     description: 'Sâm-panh nổ hoàng gia với bọt khí li ti tinh tế, hương hoa trắng, cam chanh thanh khiết và hậu vị khoáng chất kéo dài bất tận.',
     image: 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=800&q=80',
-    prepTimeMinutes: 5,
+    prepTimeMinutes: 10,
   },
   {
     id: 'wine-3',
@@ -583,7 +583,7 @@ export const SIGNATURE_DISHES: SignatureDish[] = [
     badge: '🍇 Pairing Steak Tuyệt Vời',
     description: 'Vang đỏ Ý đậm đà từ những gốc nho cổ thụ 60 năm tuổi, ngập tràn hương mận chín, mứt dâu rừng, vani ngọt ngào và cacao ấm áp.',
     image: 'https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=800&q=80',
-    prepTimeMinutes: 5,
+    prepTimeMinutes: 15,
   },
 
   // 4. KHAI VỊ & TRÁNG MIỆNG ĐỘC BẢN
@@ -618,6 +618,17 @@ export const SIGNATURE_DISHES: SignatureDish[] = [
     description: 'Bánh sô-cô-la Pháp Valrhona 70% nướng nóng hổi với phần nhân nham thạch tan chảy ngọt đắng quyến rũ, kèm viên kem vani Madagascar béo mịn.',
     image: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?auto=format&fit=crop&w=800&q=80',
     prepTimeMinutes: 15,
+  },
+  {
+    id: 'cake-1',
+    name: 'Bánh Kem Sinh Nhật Thiết Kế Riêng (Viết Tên Theo Yêu Cầu)',
+    category: 'Khai Vị & Tráng Miệng',
+    price: 450000,
+    servingSize: '1 Ổ bánh (16cm) • 4-6 Khách',
+    badge: '🎂 Sinh Nhật • Viết Tên Riêng',
+    description: 'Bánh kem bắp phô mai Mascarpone tươi béo ngậy, tặng kèm nến sáp & bảng viết thông điệp chúc mừng bằng sô-cô-la theo tên chủ nhân bữa tiệc.',
+    image: 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=800&q=80',
+    prepTimeMinutes: 45,
   },
 ];
 

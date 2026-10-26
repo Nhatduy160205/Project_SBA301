@@ -142,12 +142,42 @@ export const QRPaymentModal: React.FC<QRPaymentModalProps> = ({
                   </div>
                 </div>
 
-                {/* Account details */}
-                <div className="space-y-3.5 text-sm">
-                  <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl">
-                    <span className="text-xs text-amber-800 font-medium block">Số tiền cọc quy định:</span>
-                    <span className="text-2xl font-bold font-serif text-amber-900">{formattedDeposit}</span>
-                    <span className="text-[11px] text-amber-700 block mt-0.5">Sẽ được trừ trực tiếp vào hóa đơn khi dùng bữa.</span>
+                {/* Account details & Deposit Breakdown */}
+                <div className="space-y-3 text-sm">
+                  <div className="p-3 bg-gradient-to-br from-amber-500/10 via-amber-50/80 to-amber-500/5 border border-amber-300 rounded-2xl shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-amber-800 font-bold uppercase tracking-wider">Tổng cọc hóa đơn VietQR:</span>
+                      <span className="text-[10px] bg-amber-600 text-white px-2 py-0.5 rounded-full font-bold">100% Khấu trừ vào bill</span>
+                    </div>
+                    <span className="text-2xl font-black font-serif text-amber-950 block mt-1">{formattedDeposit}</span>
+                    
+                    {/* Breakdown cọc bàn + cọc món (UC-07) */}
+                    {booking.preOrders && booking.preOrders.length > 0 && (
+                      <div className="mt-2.5 pt-2 border-t border-amber-200/80 space-y-1.5 text-[11px]">
+                        <div className="flex justify-between text-stone-600">
+                          <span>• Tiền cọc giữ bàn ({booking.tableCode}):</span>
+                          <span className="font-mono font-bold text-stone-900">
+                            {new Intl.NumberFormat('vi-VN').format(Math.max(0, booking.depositAmount - booking.preOrders.reduce((s, p) => s + p.dish.price * p.quantity, 0)))} đ
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-amber-900 font-semibold">
+                          <span>• Cọc món Signature đặt trước ({booking.preOrders.reduce((s, p) => s + p.quantity, 0)} phần):</span>
+                          <span className="font-mono font-bold text-amber-800">
+                            {new Intl.NumberFormat('vi-VN').format(booking.preOrders.reduce((s, p) => s + p.dish.price * p.quantity, 0))} đ
+                          </span>
+                        </div>
+                        <div className="pl-2 space-y-1 pt-1 border-t border-amber-200/50">
+                          {booking.preOrders.map((p, idx) => (
+                            <div key={idx} className="text-[10px] text-stone-600 leading-tight">
+                              <span className="font-bold text-amber-800">{p.quantity}x {p.dish.name}</span>
+                              {p.preparationNotes && (
+                                <span className="block text-stone-500 italic pl-2">↳ Yêu cầu: {p.preparationNotes}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">

@@ -88,9 +88,11 @@ public class BookingResponse {
                     .map(item -> PreorderItemResponse.builder()
                             .id(item.getId())
                             .menuItemId(item.getMenuItemId())
+                            .itemName(item.getItemName())
                             .quantity(item.getQuantity())
                             .unitPrice(item.getUnitPrice())
                             .subtotal(item.getSubtotal())
+                            .notes(item.getNotes())
                             .build())
                     .collect(Collectors.toList()));
         }
@@ -106,8 +108,10 @@ public class BookingResponse {
     public static class PreorderItemResponse {
         private UUID id;
         private UUID menuItemId;
+        private String itemName;
         private Integer quantity;
         private BigDecimal unitPrice;
         private BigDecimal subtotal;
+        private String notes;
     }
 }

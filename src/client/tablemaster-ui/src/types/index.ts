@@ -46,6 +46,7 @@ export interface SignatureDish {
 export interface PreOrderItem {
   dish: SignatureDish;
   quantity: number;
+  preparationNotes?: string;
 }
 
 export interface BookingDetails {

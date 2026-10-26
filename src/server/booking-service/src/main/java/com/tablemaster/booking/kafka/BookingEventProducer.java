@@ -103,6 +103,24 @@ public class BookingEventProducer {
         payload.put("status", booking.getStatus().name());
         payload.put("checkinQrToken", booking.getCheckinQrToken());
         payload.put("paymentDeadline", booking.getPaymentDeadline());
+
+        if (booking.getPreorderItems() != null && !booking.getPreorderItems().isEmpty()) {
+            java.util.List<Map<String, Object>> items = booking.getPreorderItems().stream()
+                    .map(i -> {
+                        Map<String, Object> map = new HashMap<>();
+                        map.put("id", i.getId());
+                        map.put("menuItemId", i.getMenuItemId());
+                        map.put("itemName", i.getItemName());
+                        map.put("quantity", i.getQuantity());
+                        map.put("unitPrice", i.getUnitPrice());
+                        map.put("subtotal", i.getSubtotal());
+                        map.put("notes", i.getNotes());
+                        return map;
+                    })
+                    .collect(java.util.stream.Collectors.toList());
+            payload.put("preorderItems", items);
+        }
+
         return payload;
     }
 }

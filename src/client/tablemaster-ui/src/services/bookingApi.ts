@@ -35,9 +35,11 @@ export interface BackendBooking {
   preorderItems?: Array<{
     id?: string;
     menuItemId: string;
+    itemName?: string;
     quantity: number;
     unitPrice: number;
     subtotal: number;
+    notes?: string;
   }>;
 }
 
@@ -53,8 +55,10 @@ export interface CreateBookingRequestPayload {
   totalDeposit?: number;
   preorderItems?: Array<{
     menuItemId: string;
+    itemName?: string;
     quantity: number;
     unitPrice: number;
+    notes?: string;
   }>;
 }
 
@@ -188,6 +192,34 @@ export const SEED_DATA = {
     OUT_02: 'b3000000-0000-0000-0000-000000000005',
   },
   MENU_ITEM_ID: 'b5000000-0000-0000-0000-000000000001',
+  MENU_ITEMS: {
+    WAGYU_A5: 'b5000000-0000-0000-0000-000000000001',
+    MARGAUX_WINE: 'b5000000-0000-0000-0000-000000000002',
+    TRUFFLE_SOUP: 'b5000000-0000-0000-0000-000000000003',
+    LAVA_CAKE: 'b5000000-0000-0000-0000-000000000004',
+    BIRTHDAY_CAKE: 'b5000000-0000-0000-0000-000000000005',
+  },
+};
+
+// Map dish id to PostgreSQL UUID
+export const getDishUUID = (dishId: string): string => {
+  const map: Record<string, string> = {
+    'dish-1': 'b5000000-0000-0000-0000-000000000001',
+    'dish-2': 'b5000000-0000-0000-0000-000000000001',
+    'dish-3': 'b5000000-0000-0000-0000-000000000001',
+    'dish-4': 'b5000000-0000-0000-0000-000000000001',
+    'wine-1': 'b5000000-0000-0000-0000-000000000002',
+    'wine-2': 'b5000000-0000-0000-0000-000000000002',
+    'wine-3': 'b5000000-0000-0000-0000-000000000002',
+    'starter-1': 'b5000000-0000-0000-0000-000000000003',
+    'starter-2': 'b5000000-0000-0000-0000-000000000003',
+    'starter-3': 'b5000000-0000-0000-0000-000000000004',
+    'cake-1': 'b5000000-0000-0000-0000-000000000005',
+    'combo-1': 'b5000000-0000-0000-0000-000000000001',
+    'combo-2': 'b5000000-0000-0000-0000-000000000001',
+    'combo-3': 'b5000000-0000-0000-0000-000000000001',
+  };
+  return map[dishId] || (dishId.includes('-') && dishId.length === 36 ? dishId : SEED_DATA.MENU_ITEM_ID);
 };
 
 // Map ID bàn mock sang UUID tương ứng trong PostgreSQL
