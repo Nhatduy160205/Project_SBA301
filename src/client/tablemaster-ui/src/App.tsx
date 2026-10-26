@@ -144,7 +144,7 @@ export function App() {
           return {
             ...t,
             status: newStatus,
-            currentGuestName: guestName !== undefined ? guestName : t.currentGuestName,
+            currentGuestName: newStatus === 'AVAILABLE' ? (guestName || undefined) : (guestName !== undefined ? guestName : t.currentGuestName),
             isLateNoShow: false,
           };
         }

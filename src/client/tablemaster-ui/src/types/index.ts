@@ -1,4 +1,4 @@
-export type TableStatus = 'AVAILABLE' | 'HOLDING' | 'CONFIRMED' | 'SEATED' | 'CLEANING';
+export type TableStatus = 'AVAILABLE' | 'HOLDING' | 'CONFIRMED' | 'SEATED' | 'CALL_BILL' | 'CLEANING';
 
 export type TableShape = 'rect' | 'circle';
 

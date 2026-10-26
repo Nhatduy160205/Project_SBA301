@@ -36,6 +36,7 @@ import {
   Radio,
   Timer,
   Camera,
+  Zap,
 } from 'lucide-react';
 import type { TableItem, TableStatus, BookingDetails, TableOrderRecord, HostFloorLivePayload } from '../types';
 import { SIGNATURE_DISHES } from '../data/mockData';
@@ -43,6 +44,8 @@ import { bookingApi } from '../services/bookingApi';
 import { FloorPlanCanvas } from '../components/floor/FloorPlanCanvas';
 import { websocketService } from '../services/websocketService';
 import { HostCameraQrScanner } from '../components/host/HostCameraQrScanner';
+import { OneTouchStatusRibbon } from '../components/host/OneTouchStatusRibbon';
+import { hostAudioService } from '../services/hostAudioService';
 
 interface HostTabletPageProps {
   tables: TableItem[];
@@ -80,8 +83,11 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'AVAILABLE' | 'SEATED' | 'CONFIRMED' | 'LONG_DINING' | 'OVERSTAY' | 'CLEANING'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'AVAILABLE' | 'SEATED' | 'CONFIRMED' | 'CALL_BILL' | 'LONG_DINING' | 'OVERSTAY' | 'CLEANING'>('ALL');
   const selectedShift = '🌙 Ca Tối (17:00 - 23:00)';
+
+  // UC-17: Đổi trạng thái bàn 1 chạm trên Tablet (One-touch Table Status)
+  const [isOneTouchFastMode, setIsOneTouchFastMode] = useState<boolean>(false);
 
   // Active Table for POS / Detail Drawer
   const [selectedTableForPOS, setSelectedTableForPOS] = useState<TableItem | null>(null);
@@ -374,6 +380,7 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
     const available = floorTables.filter((t) => t.status === 'AVAILABLE').length;
     const seated = floorTables.filter((t) => t.status === 'SEATED').length;
     const reserved = floorTables.filter((t) => t.status === 'CONFIRMED' || t.status === 'HOLDING').length;
+    const callBill = floorTables.filter((t) => t.status === 'CALL_BILL').length;
     const cleaning = floorTables.filter((t) => t.status === 'CLEANING').length;
     const capacity = floorTables.reduce((sum, t) => sum + t.capacity, 0);
     const occupancy = total > 0 ? Math.round(((seated + reserved) / total) * 1000) / 10 : 0;
@@ -389,7 +396,7 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
     }).length;
     const totalDeposit = floorTables.reduce((sum, t) => sum + (t.depositPrice || 0), 0);
 
-    return { total, available, seated, reserved, cleaning, capacity, occupancy, longDiningCount, overstayCount, totalDeposit };
+    return { total, available, seated, reserved, callBill, cleaning, capacity, occupancy, longDiningCount, overstayCount, totalDeposit };
   };
 
   const statsF1 = getFloorStats(floor1Tables);
@@ -764,6 +771,120 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
     setIsPaymentSuccessOpen(true);
   };
 
+  // =========================================================================
+  // UC-17: Đổi trạng thái bàn 1 chạm trên Tablet (One-touch Table Status)
+  // Chu trình: SEATED -> CALL_BILL -> CLEANING -> AVAILABLE
+  // =========================================================================
+
+  const handleOneTouchFastCycle = async (table: TableItem) => {
+    let nextStatus: TableStatus;
+    switch (table.status) {
+      case 'CONFIRMED':
+        nextStatus = 'SEATED';
+        break;
+      case 'SEATED':
+        nextStatus = 'CALL_BILL';
+        break;
+      case 'CALL_BILL':
+        nextStatus = 'CLEANING';
+        break;
+      case 'CLEANING':
+        nextStatus = 'AVAILABLE';
+        break;
+      case 'AVAILABLE':
+      default:
+        nextStatus = 'SEATED';
+        break;
+    }
+
+    // 1. Âm thanh tổng hợp Web Audio API và rung haptic
+    hostAudioService.playOneTouchTransition(nextStatus);
+
+    // 2. Cập nhật state cục bộ
+    onUpdateTableStatus(table.id, nextStatus, table.currentGuestName);
+
+    // 3. Phát sóng STOMP WebSocket đa kênh tức thời (<300ms)
+    const colorMap: Record<string, string> = {
+      SEATED: '#2563EB',
+      CALL_BILL: '#9333EA',
+      CLEANING: '#0D9488',
+      AVAILABLE: '#059669',
+      CONFIRMED: '#4F46E5',
+    };
+
+    websocketService.broadcastOneTouchTableStatus({
+      tableId: table.id,
+      tableCode: table.code,
+      status: nextStatus,
+      color: colorMap[nextStatus] || '#2563EB',
+      updatedBy: 'HOST_TABLET',
+      guestName: table.currentGuestName,
+      message: `Đổi trạng thái bàn ${table.code} sang ${nextStatus}`,
+    });
+
+    // 4. Đồng bộ REST API backend nếu có
+    try {
+      await bookingApi.oneTouchUpdateTableStatus(table.code, {
+        status: nextStatus,
+        updatedBy: 'HOST',
+        guestName: table.currentGuestName,
+      });
+    } catch (e: any) {
+      console.debug('API oneTouch status update error:', e.message);
+    }
+
+    showToast(`⚡ [1 Chạm] Bàn ${table.code} ➔ ${nextStatus} (<300ms STOMP)`);
+  };
+
+  const handleRibbonStatusChange = async (
+    newStatus: TableStatus,
+    guestName?: string,
+    notes?: string
+  ) => {
+    if (!selectedTableForPOS) return;
+
+    // 1. Âm thanh phản hồi
+    hostAudioService.playOneTouchTransition(newStatus);
+
+    // 2. Cập nhật state
+    onUpdateTableStatus(selectedTableForPOS.id, newStatus, guestName);
+    setSelectedTableForPOS((prev) => (prev ? { ...prev, status: newStatus } : null));
+
+    // 3. Phát sóng STOMP WebSocket
+    const colorMap: Record<string, string> = {
+      SEATED: '#2563EB',
+      CALL_BILL: '#9333EA',
+      CLEANING: '#0D9488',
+      AVAILABLE: '#059669',
+      CONFIRMED: '#4F46E5',
+    };
+
+    websocketService.broadcastOneTouchTableStatus({
+      tableId: selectedTableForPOS.id,
+      tableCode: selectedTableForPOS.code,
+      status: newStatus,
+      color: colorMap[newStatus] || '#2563EB',
+      updatedBy: 'HOST_TABLET',
+      guestName: guestName || selectedTableForPOS.currentGuestName,
+      message: `Đổi trạng thái bàn ${selectedTableForPOS.code} sang ${newStatus}`,
+      notes,
+    });
+
+    // 4. API Call
+    try {
+      await bookingApi.oneTouchUpdateTableStatus(selectedTableForPOS.code, {
+        status: newStatus,
+        updatedBy: 'HOST',
+        guestName: guestName || selectedTableForPOS.currentGuestName,
+        notes,
+      });
+    } catch (e: any) {
+      console.debug('API oneTouch status update error:', e.message);
+    }
+
+    showToast(`⚡ [1 Chạm] Bàn ${selectedTableForPOS.code} ➔ ${newStatus} (<300ms STOMP)`);
+  };
+
 
 
   // Filter tables by floor, search query, and dining status
@@ -779,6 +900,7 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
     if (statusFilter === 'AVAILABLE') return t.status === 'AVAILABLE';
     if (statusFilter === 'SEATED') return t.status === 'SEATED';
     if (statusFilter === 'CONFIRMED') return t.status === 'CONFIRMED' || t.status === 'HOLDING';
+    if (statusFilter === 'CALL_BILL') return t.status === 'CALL_BILL';
     if (statusFilter === 'LONG_DINING') {
       if (t.status !== 'SEATED') return false;
       const m = getTableDiningMetrics(t);
@@ -1205,6 +1327,8 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
               { id: 'ALL', label: 'Tất Cả', count: currentFloorTables.length },
               { id: 'AVAILABLE', label: '🟢 Trống', count: currentFloorStats.available },
               { id: 'SEATED', label: '🔵 Xanh Dương (Seated)', count: currentFloorStats.seated },
+              { id: 'CALL_BILL', label: '💳 Gọi Bill', count: currentFloorStats.callBill },
+              { id: 'CLEANING', label: '🧹 Dọn Bàn', count: currentFloorStats.cleaning },
               { id: 'CONFIRMED', label: '🟣 Đã Cọc', count: currentFloorStats.reserved },
               { id: 'LONG_DINING', label: '⏱️ >75p', count: currentFloorStats.longDiningCount + currentFloorStats.overstayCount },
             ].map((tab) => {
@@ -1276,11 +1400,64 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
               </span>
             </div>
 
-            <div className="flex items-center gap-2 text-xs font-semibold bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-xl border border-emerald-300 shadow-2xs">
-              <Radio className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
-              <span>STOMP Stream Active (&lt;300ms)</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const nextMode = !isOneTouchFastMode;
+                  setIsOneTouchFastMode(nextMode);
+                  showToast(
+                    nextMode
+                      ? '⚡ Đã BẬT Chế Độ Đổi Trạng Thái 1 Chạm (UC-17): Chạm vào bàn để chuyển SEATED ➔ CALL_BILL ➔ CLEANING ➔ AVAILABLE'
+                      : 'Đã chuyển về Chế Độ Xem Bàn Bình Thường'
+                  );
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  isOneTouchFastMode
+                    ? 'bg-amber-500 text-slate-950 border-2 border-amber-300 shadow-md ring-2 ring-amber-400/50 animate-pulse'
+                    : 'bg-white text-[#44403C] hover:bg-amber-50 border border-[#E8DFD1]'
+                }`}
+              >
+                <Zap className={`w-3.5 h-3.5 ${isOneTouchFastMode ? 'fill-slate-950 text-slate-950' : 'text-amber-600'}`} />
+                <span>{isOneTouchFastMode ? '⚡ 1 Chạm: ĐANG BẬT' : '⚡ Bật Đổi Trạng Thái 1 Chạm'}</span>
+              </button>
+
+              <div className="flex items-center gap-2 text-xs font-semibold bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-xl border border-emerald-300 shadow-2xs">
+                <Radio className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                <span>STOMP Stream Active (&lt;300ms)</span>
+              </div>
             </div>
           </div>
+
+          {/* UC-17: Banner Chế Độ Đổi Trạng Thái 1 Chạm */}
+          {isOneTouchFastMode && (
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-purple-500/10 to-teal-500/15 border-2 border-amber-500/60 text-amber-950 text-xs flex items-center justify-between gap-3 shadow-sm animate-in fade-in duration-200">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center font-bold shrink-0">
+                  <Zap className="w-4 h-4 fill-slate-950" />
+                </div>
+                <div>
+                  <p className="font-bold text-[#2C221E] text-xs">
+                    Chế Độ Đổi Trạng Thái Bàn 1 Chạm (UC-17) Đang Hoạt Động
+                  </p>
+                  <p className="text-[11px] text-[#78716C] mt-0.5">
+                    Chạm trực tiếp vào bất kỳ bàn nào trên sơ đồ để chuyển trạng thái tức thì theo vòng đời:
+                    <strong className="text-blue-700 mx-1">🔵 SEATED</strong> ➔
+                    <strong className="text-purple-700 mx-1">💳 CALL_BILL</strong> ➔
+                    <strong className="text-teal-700 mx-1">🧹 CLEANING</strong> ➔
+                    <strong className="text-emerald-700 mx-1">🟢 AVAILABLE</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOneTouchFastMode(false)}
+                className="px-3 py-1.5 rounded-xl bg-white border border-amber-300 text-amber-900 font-bold hover:bg-amber-50 text-xs shrink-0 cursor-pointer shadow-2xs"
+              >
+                ✕ Tắt Chế Độ
+              </button>
+            </div>
+          )}
 
           {/* Architectural Live Canvas */}
           <FloorPlanCanvas
@@ -1288,6 +1465,10 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
             tables={tables}
             selectedTable={selectedTableForPOS}
             onSelectTable={(table) => {
+              if (isOneTouchFastMode) {
+                handleOneTouchFastCycle(table);
+                return;
+              }
               if (table.status === 'AVAILABLE') {
                 handleOpenWalkInModal(table);
               } else {
@@ -1322,6 +1503,14 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
                   <span className="text-blue-900 font-bold">Xanh Dương • Đang Ăn (Seated &lt;75p)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-md bg-purple-100 border border-purple-500 animate-pulse" />
+                  <span className="text-purple-900 font-bold">Tím • Gọi Tính Tiền (Call Bill)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-md bg-teal-100 border border-teal-500" />
+                  <span className="text-teal-900 font-bold">Teal • Đang Dọn Bàn (Cleaning)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
                   <span className="w-3 h-3 rounded-md bg-amber-300 border border-amber-600" />
                   <span className="text-[#44403C]">Ngồi Lâu (75-105p)</span>
                 </div>
@@ -1332,7 +1521,7 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
               </div>
             </div>
             <p className="text-[11px] text-[#78716C] italic border-t border-[#E8DFD1] pt-2">
-              💡 Chạm vào bất kỳ bàn nào trên sơ đồ để mở drawer chi tiết: kiểm tra thông tin khách đã cọc, số tiền cọc, thực đơn đặt trước (UC-07), nhu cầu dị ứng (UC-08), gọi món hoặc check-in đón khách.
+              💡 Chạm vào bất kỳ bàn nào trên sơ đồ để mở drawer chi tiết hoặc bật <strong>⚡ Chế Độ 1 Chạm</strong> để chuyển nhanh trạng thái bàn SEATED ➔ CALL_BILL ➔ CLEANING ➔ AVAILABLE.
             </p>
           </div>
         </div>
@@ -1861,6 +2050,13 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
 
               {/* Body */}
               <div className="p-5 sm:p-6 overflow-y-auto space-y-5">
+                {/* UC-17: One-Touch Status Ribbon */}
+                <OneTouchStatusRibbon
+                  table={selectedTableForPOS}
+                  onStatusChange={handleRibbonStatusChange}
+                  activeRole="HOST"
+                />
+
                 {/* Grid 2 cols: Guest Info & Reservation Info */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Card 1: Guest Information */}
@@ -2172,6 +2368,15 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
                   <X className="w-4 h-4" />
                 </button>
               </div>
+            </div>
+
+            {/* UC-17: One-Touch Status Ribbon */}
+            <div className="px-5 sm:px-6 pt-4 shrink-0">
+              <OneTouchStatusRibbon
+                table={selectedTableForPOS}
+                onStatusChange={handleRibbonStatusChange}
+                activeRole="CASHIER"
+              />
             </div>
 
             {/* Main POS Content Grid (Left: Current Orders List | Right: Billing & Add Dish) */}
