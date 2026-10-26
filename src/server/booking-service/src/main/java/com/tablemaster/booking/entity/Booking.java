@@ -71,6 +71,24 @@ public class Booking {
     @Builder.Default
     private BookingStatus status = BookingStatus.PENDING_REVIEW;
 
+    // UC-08: Mục đích tiệc (BIRTHDAY, BUSINESS, ROMANTIC_DATE, FAMILY, ANNIVERSARY, OTHER)
+    @Column(name = "occasion", length = 50)
+    private String occasion;
+
+    // UC-08: Ghi chú dị ứng & dinh dưỡng (không tiêu, không cay, dị ứng hải sản...)
+    @Column(name = "dietary_notes", columnDefinition = "TEXT")
+    private String dietaryNotes;
+
+    // UC-08: Yêu cầu ghế ăn cho trẻ em (Baby high-chair)
+    @Column(name = "baby_chair_count", nullable = false)
+    @Builder.Default
+    private Integer babyChairCount = 0;
+
+    // UC-08: Setup nến thơm lãng mạn
+    @Column(name = "candle_setup", nullable = false)
+    @Builder.Default
+    private Boolean candleSetup = false;
+
     // Ghi chú của khách: "Set nến kỷ niệm ngày cưới"
     @Column(name = "special_notes", columnDefinition = "TEXT")
     private String specialNotes;

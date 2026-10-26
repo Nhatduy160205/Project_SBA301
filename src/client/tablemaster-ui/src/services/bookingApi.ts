@@ -24,6 +24,10 @@ export interface BackendBooking {
   status: 'PENDING_REVIEW' | 'AWAITING_PAYMENT' | 'CONFIRMED' | 'SEATED' | 'COMPLETED' | 'REJECTED' | 'EXPIRED' | 'CANCELLED' | 'NO_SHOW';
   specialNotes?: string;
   staffNotes?: string;
+  occasion?: string;
+  dietaryNotes?: string;
+  babyChairCount?: number;
+  candleSetup?: boolean;
   reviewedByUserId?: string;
   paymentDeadline?: string;
   checkinQrToken?: string;
@@ -52,6 +56,10 @@ export interface CreateBookingRequestPayload {
   guestCount: number;
   tableIds: string[];
   specialNotes?: string;
+  occasion?: string;
+  dietaryNotes?: string;
+  babyChairCount?: number;
+  candleSetup?: boolean;
   totalDeposit?: number;
   preorderItems?: Array<{
     menuItemId: string;
@@ -60,6 +68,15 @@ export interface CreateBookingRequestPayload {
     unitPrice: number;
     notes?: string;
   }>;
+}
+
+export interface UpdateSpecialRequestsPayload {
+  occasion?: string;
+  dietaryNotes?: string;
+  babyChairCount?: number;
+  candleSetup?: boolean;
+  specialNotes?: string;
+  staffNotes?: string;
 }
 
 // UC-04: Chi tiết tình trạng khả dụng & kiểm tra BR-01 của từng bàn
@@ -487,6 +504,28 @@ export const bookingApi = {
     });
 
     if (!res.ok) throw new Error('Chuyển bàn thất bại');
+    return res.json();
+  },
+
+  /**
+   * 9b. Cập nhật Nhu cầu đặc biệt & Ghi chú dị ứng (UC-08)
+   * PUT /api/v1/bookings/{id}/special-requests
+   */
+  async updateSpecialRequests(id: string, payload: UpdateSpecialRequestsPayload): Promise<ApiResponse<BackendBooking>> {
+    const res = await fetch(`${BASE_URL}/${id}/special-requests`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Id': SEED_DATA.STAFF_ID,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ message: 'Lỗi cập nhật nhu cầu đặc biệt' }));
+      throw new Error(err.message || 'Cập nhật nhu cầu đặc biệt & dị ứng thất bại');
+    }
+
     return res.json();
   },
 

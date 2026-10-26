@@ -16,6 +16,7 @@ import { LandingPage } from './views/LandingPage';
 import { BookingPage } from './views/BookingPage';
 import { HostTabletPage } from './views/HostTabletPage';
 import { WaitstaffMobilePage } from './views/WaitstaffMobilePage';
+import { KitchenKdsPage } from './views/KitchenKdsPage';
 import { AdminStudioPage } from './views/AdminStudioPage';
 import { RestaurantManagementPage } from './views/restaurant/RestaurantManagementPage';
 import { INITIAL_TABLES, INITIAL_BOOKINGS, INITIAL_TABLE_ORDERS } from './data/mockData';
@@ -50,6 +51,10 @@ export function App() {
               date: b.bookingDate,
               timeSlot: '19:00 - 21:00',
               notes: b.specialNotes,
+              occasion: b.occasion,
+              dietaryNotes: b.dietaryNotes,
+              babyChairCount: b.babyChairCount,
+              candleSetup: b.candleSetup,
               preOrders: [],
               depositAmount: Number(b.totalDeposit) || 0,
               totalEstimatedAmount: Number(b.totalDeposit) || 0,
@@ -367,6 +372,25 @@ export function App() {
                 onTransferTable={handleTransferTable}
                 onMergeTables={handleMergeTables}
                 onNavigateToWaiter={() => handleNavigate('waiter')}
+                onNavigateToKds={() => handleNavigate('kds')}
+              />
+            </motion.div>
+          )}
+
+          {currentView === 'kds' && (
+            <motion.div
+              key="kds"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.3 }}
+            >
+              <KitchenKdsPage
+                tables={tables}
+                bookings={bookings}
+                tableOrders={tableOrders}
+                setTableOrders={setTableOrders}
+                onNavigateToHost={() => handleNavigate('host')}
               />
             </motion.div>
           )}
@@ -474,6 +498,13 @@ export function App() {
                 >
                   <span>Tablet Lễ Tân (Host Portal)</span>
                   <span className="text-[10px] text-[#3D7058] font-bold">Live</span>
+                </button>
+                <button
+                  onClick={() => handleNavigate('kds')}
+                  className="w-full py-2 px-3 bg-[#FAF7F2] hover:bg-[#F2ECE1] rounded-xl text-left font-semibold text-[#1C1917] flex justify-between items-center transition-colors cursor-pointer"
+                >
+                  <span>Màn Hình Bếp (KDS Ticket Board)</span>
+                  <span className="text-[10px] text-amber-600 font-bold">Kitchen</span>
                 </button>
                 <button
                   onClick={() => handleNavigate('admin')}

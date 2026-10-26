@@ -168,4 +168,17 @@ public class BookingController {
         BookingResponse response = bookingService.transferTable(id, request, staffId);
         return ResponseEntity.ok(ApiResponse.success("Chuyển bàn thành công", response));
     }
+
+    /**
+     * PUT /api/v1/bookings/{id}/special-requests
+     * Cập nhật Nhu cầu đặc biệt & Ghi chú dị ứng cho đơn đặt bàn (UC-08)
+     */
+    @PutMapping("/{id}/special-requests")
+    public ResponseEntity<ApiResponse<BookingResponse>> updateSpecialRequests(
+            @PathVariable UUID id,
+            @Valid @RequestBody com.tablemaster.booking.dto.request.UpdateSpecialRequestsRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) UUID staffOrUserId) {
+        BookingResponse response = bookingService.updateSpecialRequests(id, request, staffOrUserId);
+        return ResponseEntity.ok(ApiResponse.success("Cập nhật nhu cầu đặc biệt & dị ứng thành công", response));
+    }
 }

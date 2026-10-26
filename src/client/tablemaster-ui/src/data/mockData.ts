@@ -644,6 +644,10 @@ export const INITIAL_BOOKINGS: BookingDetails[] = [
     tableId: 'f1-t08',
     date: '2026-09-26',
     timeSlot: '19:00 - 21:00',
+    occasion: 'ANNIVERSARY',
+    dietaryNotes: 'Không rắc tiêu vào thức ăn vì có trẻ nhỏ, Dị ứng hải sản có vỏ',
+    babyChairCount: 1,
+    candleSetup: true,
     notes: 'Kỷ niệm ngày cưới 5 năm. Cần bố trí nến thơm và bình hoa hồng pastel góc bàn.',
     preOrders: [
       { dish: SIGNATURE_DISHES[0], quantity: 2 },
@@ -666,6 +670,10 @@ export const INITIAL_BOOKINGS: BookingDetails[] = [
     tableId: 'f2-v03',
     date: '2026-09-26',
     timeSlot: '20:00 - 22:30',
+    occasion: 'BUSINESS',
+    dietaryNotes: 'Không bột ngọt (No MSG), có khách ăn kiêng cay',
+    babyChairCount: 0,
+    candleSetup: false,
     notes: 'Tiếp khách đối tác quốc tế. Yêu cầu sommelier riêng rót vang.',
     preOrders: [
       { dish: SIGNATURE_DISHES[1], quantity: 1 },
@@ -713,7 +721,11 @@ export const INITIAL_TABLE_ORDERS: Record<string, import('../types').TableOrderR
     source: 'ONLINE',
     guestCount: 4,
     seatedAtTime: 'Chờ nhận bàn (Hẹn 19:00)',
-    notes: 'Bàn ngắm phố Nguyễn Huệ, kỷ niệm 5 năm ngày cưới.',
+    occasion: 'ANNIVERSARY',
+    dietaryNotes: 'Không rắc tiêu vào thức ăn vì có trẻ nhỏ, Dị ứng hải sản có vỏ',
+    babyChairCount: 1,
+    candleSetup: true,
+    notes: 'Bàn ngắm phố Nguyễn Huệ, kỷ niệm 5 năm ngày cưới. Setup nến thơm và ghế em bé.',
     depositAmount: 300000,
     items: [
       {
@@ -733,6 +745,10 @@ export const INITIAL_TABLE_ORDERS: Record<string, import('../types').TableOrderR
     source: 'ONLINE',
     guestCount: 6,
     seatedAtTime: '18:15 (Đã ngồi 55p)',
+    occasion: 'BIRTHDAY',
+    dietaryNotes: 'Dị ứng đậu phộng, không ăn cay',
+    babyChairCount: 0,
+    candleSetup: false,
     notes: 'Khách VIP thân thiết, ưu tiên phục vụ vang nhiệt độ 16°C.',
     depositAmount: 500000,
     items: [
@@ -769,6 +785,10 @@ export const INITIAL_TABLE_ORDERS: Record<string, import('../types').TableOrderR
     source: 'WALK_IN',
     guestCount: 10,
     seatedAtTime: '18:45 (Đã ngồi 40p)',
+    occasion: 'BUSINESS',
+    dietaryNotes: 'Có 2 khách ăn chay, không bột ngọt (No MSG)',
+    babyChairCount: 0,
+    candleSetup: false,
     notes: 'Phục vụ tiệc tiếp đối tác công nghệ, xuất hóa đơn công ty.',
     depositAmount: 0,
     items: [

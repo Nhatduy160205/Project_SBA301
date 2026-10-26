@@ -81,6 +81,10 @@ public class BookingServiceImpl implements BookingService {
                 .guestCount(request.getGuestCount())
                 .totalDeposit(BigDecimal.ZERO)
                 .status(BookingStatus.PENDING_REVIEW)
+                .occasion(request.getOccasion())
+                .dietaryNotes(request.getDietaryNotes())
+                .babyChairCount(request.getBabyChairCount() != null ? request.getBabyChairCount() : 0)
+                .candleSetup(Boolean.TRUE.equals(request.getCandleSetup()))
                 .specialNotes(request.getSpecialNotes())
                 .bookingTables(new ArrayList<>())
                 .preorderItems(new ArrayList<>())
@@ -391,5 +395,40 @@ public class BookingServiceImpl implements BookingService {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new BookingNotFoundException(bookingId));
         return invoicePdfService.generateInvoicePdf(booking);
+    }
+
+    @Override
+    @Transactional
+    public BookingResponse updateSpecialRequests(UUID bookingId, com.tablemaster.booking.dto.request.UpdateSpecialRequestsRequest request, UUID staffOrUserId) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
+
+        if (request.getOccasion() != null) {
+            booking.setOccasion(request.getOccasion());
+        }
+        if (request.getDietaryNotes() != null) {
+            booking.setDietaryNotes(request.getDietaryNotes());
+        }
+        if (request.getBabyChairCount() != null) {
+            booking.setBabyChairCount(request.getBabyChairCount());
+        }
+        if (request.getCandleSetup() != null) {
+            booking.setCandleSetup(request.getCandleSetup());
+        }
+        if (request.getSpecialNotes() != null) {
+            booking.setSpecialNotes(request.getSpecialNotes());
+        }
+        if (request.getStaffNotes() != null) {
+            booking.setStaffNotes(request.getStaffNotes());
+        }
+
+        Booking saved = bookingRepository.save(booking);
+        log.info("Updated special requests & dietary notes for booking {}: occasion={}, dietary={}, babyChairs={}",
+                saved.getBookingCode(), saved.getOccasion(), saved.getDietaryNotes(), saved.getBabyChairCount());
+
+        // Bắn Kafka và WebSocket STOMP đồng bộ tức thời sang Tablet Lễ tân và KDS Bếp (UC-08)
+        bookingEventProducer.publishSpecialRequestsUpdated(saved);
+
+        return BookingResponse.fromEntity(saved);
     }
 }
