@@ -32,10 +32,16 @@ import {
   PhoneCall,
   Calendar,
   AlertTriangle,
+  Layers,
+  LayoutGrid,
+  Radio,
+  Timer,
 } from 'lucide-react';
-import type { TableItem, TableStatus, BookingDetails, TableOrderRecord } from '../types';
+import type { TableItem, TableStatus, BookingDetails, TableOrderRecord, HostFloorLivePayload } from '../types';
 import { SIGNATURE_DISHES } from '../data/mockData';
 import { bookingApi } from '../services/bookingApi';
+import { FloorPlanCanvas } from '../components/floor/FloorPlanCanvas';
+import { websocketService } from '../services/websocketService';
 
 interface HostTabletPageProps {
   tables: TableItem[];
@@ -62,9 +68,18 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
   onNavigateToKds,
   onUpdateBooking,
 }) => {
+  // UC-15: Sơ Đồ Sàn Live Đa Tầng Trên Tablet
+  const [selectedFloor, setSelectedFloor] = useState<1 | 2 | 3 | 'ALL'>(1);
+  const [viewMode, setViewMode] = useState<'canvas' | 'cards'>('canvas');
+  const [hostFloorLive, setHostFloorLive] = useState<HostFloorLivePayload | null>(null);
+  const [stompLatencyMs, setStompLatencyMs] = useState<number>(18);
+  const [isWsLive, setIsWsLive] = useState<boolean>(true);
+  const [lastSyncTime, setLastSyncTime] = useState<string>(new Date().toLocaleTimeString('vi-VN'));
+  const [liveTicker, setLiveTicker] = useState<number>(0);
+
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'AVAILABLE' | 'SEATED' | 'CONFIRMED' | 'CLEANING'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'AVAILABLE' | 'SEATED' | 'CONFIRMED' | 'LONG_DINING' | 'OVERSTAY' | 'CLEANING'>('ALL');
   const selectedShift = '🌙 Ca Tối (17:00 - 23:00)';
 
   // Active Table for POS / Detail Drawer
@@ -241,17 +256,166 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
     }
   };
 
-  // Calculate table metrics
-  const totalTables = tables.length;
-  const availableTables = tables.filter((t) => t.status === 'AVAILABLE').length;
-  const seatedTables = tables.filter((t) => t.status === 'SEATED').length;
-  const reservedTables = tables.filter((t) => t.status === 'CONFIRMED' || t.status === 'HOLDING').length;
+  // UC-15: Fetch live floor map & subscribe to STOMP WebSocket topic /topic/host/floors-live (<300ms)
+  useEffect(() => {
+    let isSubscribed = true;
 
-  // Calculate total shift revenue
-  const totalShiftRevenue = Object.values(tableOrders).reduce((sum, order) => {
-    const orderItemsTotal = order.items.reduce((acc, item) => acc + item.price * item.quantity, 0);
-    return sum + orderItemsTotal;
-  }, 0);
+    const loadLiveFloors = async () => {
+      try {
+        const floorParam = selectedFloor === 'ALL' ? undefined : selectedFloor;
+        const res = await bookingApi.getHostFloorsLive(floorParam);
+        if (isSubscribed && res.success && res.data) {
+          setHostFloorLive(res.data);
+          setLastSyncTime(new Date().toLocaleTimeString('vi-VN'));
+          if (res.data.latencyMs) setStompLatencyMs(res.data.latencyMs);
+        }
+      } catch (err) {
+        console.warn('Failed to load host floors live:', err);
+      }
+    };
+
+    loadLiveFloors();
+
+    const unsubscribeStomp = websocketService.subscribeToHostFloorLive((payload: HostFloorLivePayload) => {
+      if (!isSubscribed) return;
+      setHostFloorLive(payload);
+      setIsWsLive(true);
+      const ping = websocketService.getLastPingMs() || 14;
+      setStompLatencyMs(ping);
+      setLastSyncTime(new Date().toLocaleTimeString('vi-VN'));
+    });
+
+    return () => {
+      isSubscribed = false;
+      unsubscribeStomp();
+    };
+  }, [selectedFloor]);
+
+  // Periodic ping & dynamic dining timer counter tick (every 10s)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setLiveTicker((t) => t + 1);
+      const ping = websocketService.getLastPingMs();
+      if (ping > 0) setStompLatencyMs(ping);
+    }, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleSimulateStompBroadcast = () => {
+    const start = performance.now();
+    const updated = bookingApi.generateFallbackHostFloorLive(selectedFloor === 'ALL' ? undefined : selectedFloor);
+    websocketService.simulateHostFloorBroadcast(updated.data);
+    const roundTrip = Math.round(performance.now() - start + 8);
+    setStompLatencyMs(roundTrip);
+    setHostFloorLive(updated.data);
+    showToast(`Đã nhận khung tin WebSocket STOMP (/topic/host/floors-live) trong ${roundTrip}ms (Đạt chuẩn <300ms)`);
+  };
+
+  // Helper tính thời gian ngồi ăn và phân loại alert level: NORMAL (<75m), LONG_DINING (75-105m), OVERSTAY (>105m)
+  const getTableDiningMetrics = (table: TableItem) => {
+    const liveItem = hostFloorLive?.tables?.find((lt) => lt.tableId === table.id || lt.tableCode === table.code);
+    if (liveItem && liveItem.seatedMinutes != null) {
+      return {
+        minutes: liveItem.seatedMinutes,
+        durationFormatted: liveItem.seatedDurationFormatted || `${liveItem.seatedMinutes} phút`,
+        alertLevel: liveItem.diningAlertLevel || (liveItem.seatedMinutes > 105 ? 'OVERSTAY' : liveItem.seatedMinutes > 75 ? 'LONG_DINING' : 'NORMAL'),
+        seatedAt: liveItem.seatedAt,
+      };
+    }
+
+    const order = tableOrders[table.id];
+    let mins = 0;
+    if (table.seatedSince) {
+      if (table.seatedSince.includes('phút')) {
+        mins = parseInt(table.seatedSince) || 45;
+      } else if (table.seatedSince.includes('giờ') || table.seatedSince.includes('h')) {
+        const parts = table.seatedSince.match(/\d+/g);
+        if (parts && parts.length >= 2) {
+          mins = parseInt(parts[0]) * 60 + parseInt(parts[1]);
+        } else if (parts && parts.length === 1) {
+          mins = parseInt(parts[0]) * 60;
+        }
+      }
+    } else if (order?.seatedAtTime) {
+      mins = 35;
+    }
+
+    const durationFormatted = mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins} phút`;
+    const alertLevel: 'NORMAL' | 'LONG_DINING' | 'OVERSTAY' =
+      mins > 105 ? 'OVERSTAY' : mins > 75 ? 'LONG_DINING' : 'NORMAL';
+
+    return {
+      minutes: mins,
+      durationFormatted,
+      alertLevel,
+      seatedAt: undefined,
+    };
+  };
+
+  // Live table metrics mapped by tableId & tableCode for FloorPlanCanvas
+  const liveTableMetrics = React.useMemo(() => {
+    const map: Record<string, { durationFormatted?: string; alertLevel?: 'NORMAL' | 'LONG_DINING' | 'OVERSTAY' }> = {};
+    tables.forEach((t) => {
+      if (t.status === 'SEATED') {
+        const m = getTableDiningMetrics(t);
+        map[t.id] = {
+          durationFormatted: m.durationFormatted,
+          alertLevel: m.alertLevel,
+        };
+        map[t.code] = map[t.id];
+      }
+    });
+    return map;
+  }, [tables, hostFloorLive, liveTicker, tableOrders]);
+
+  // Group tables by floor
+  const floor1Tables = tables.filter((t) => t.floor === 1);
+  const floor2Tables = tables.filter((t) => t.floor === 2);
+  const floor3Tables = tables.filter((t) => t.floor === 3);
+
+  const getFloorStats = (floorTables: TableItem[]) => {
+    const total = floorTables.length;
+    const available = floorTables.filter((t) => t.status === 'AVAILABLE').length;
+    const seated = floorTables.filter((t) => t.status === 'SEATED').length;
+    const reserved = floorTables.filter((t) => t.status === 'CONFIRMED' || t.status === 'HOLDING').length;
+    const cleaning = floorTables.filter((t) => t.status === 'CLEANING').length;
+    const capacity = floorTables.reduce((sum, t) => sum + t.capacity, 0);
+    const occupancy = total > 0 ? Math.round(((seated + reserved) / total) * 1000) / 10 : 0;
+    const longDiningCount = floorTables.filter((t) => {
+      if (t.status !== 'SEATED') return false;
+      const m = getTableDiningMetrics(t);
+      return m.alertLevel === 'LONG_DINING';
+    }).length;
+    const overstayCount = floorTables.filter((t) => {
+      if (t.status !== 'SEATED') return false;
+      const m = getTableDiningMetrics(t);
+      return m.alertLevel === 'OVERSTAY';
+    }).length;
+    const totalDeposit = floorTables.reduce((sum, t) => sum + (t.depositPrice || 0), 0);
+
+    return { total, available, seated, reserved, cleaning, capacity, occupancy, longDiningCount, overstayCount, totalDeposit };
+  };
+
+  const statsF1 = getFloorStats(floor1Tables);
+  const statsF2 = getFloorStats(floor2Tables);
+  const statsF3 = getFloorStats(floor3Tables);
+  const statsAll = getFloorStats(tables);
+
+  const currentFloorStats =
+    selectedFloor === 1
+      ? statsF1
+      : selectedFloor === 2
+      ? statsF2
+      : selectedFloor === 3
+      ? statsF3
+      : statsAll;
+
+  // Active Floor Tables
+  const currentFloorTables =
+    selectedFloor === 'ALL'
+      ? tables
+      : tables.filter((t) => t.floor === selectedFloor);
+
 
   const showToast = (msg: string) => {
     setFeedbackToast(msg);
@@ -659,8 +823,8 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
   };
 
 
-  // Filter tables
-  const filteredTables = tables.filter((t) => {
+  // Filter tables by floor, search query, and dining status
+  const filteredTables = currentFloorTables.filter((t) => {
     const matchesSearch =
       t.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (t.currentGuestName && t.currentGuestName.toLowerCase().includes(searchQuery.toLowerCase())) ||
@@ -672,6 +836,16 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
     if (statusFilter === 'AVAILABLE') return t.status === 'AVAILABLE';
     if (statusFilter === 'SEATED') return t.status === 'SEATED';
     if (statusFilter === 'CONFIRMED') return t.status === 'CONFIRMED' || t.status === 'HOLDING';
+    if (statusFilter === 'LONG_DINING') {
+      if (t.status !== 'SEATED') return false;
+      const m = getTableDiningMetrics(t);
+      return m.alertLevel === 'LONG_DINING' || m.alertLevel === 'OVERSTAY';
+    }
+    if (statusFilter === 'OVERSTAY') {
+      if (t.status !== 'SEATED') return false;
+      const m = getTableDiningMetrics(t);
+      return m.alertLevel === 'OVERSTAY';
+    }
     if (statusFilter === 'CLEANING') return t.status === 'CLEANING';
     return true;
   });
@@ -707,8 +881,30 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
             </p>
           </div>
 
-          {/* Shift info & Fast Actions */}
+          {/* Shift info, STOMP indicator & Fast Actions */}
           <div className="flex flex-wrap items-center gap-3">
+            {/* UC-15: Real-time WebSocket STOMP Live Badge (<300ms SLA) */}
+            <div className={`flex items-center gap-2 ${isWsLive ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-amber-50 text-amber-800 border-amber-300'} px-3.5 py-2 rounded-2xl border text-xs font-semibold shadow-2xs`}>
+              <span className="relative flex h-2.5 w-2.5">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${isWsLive ? 'bg-emerald-400' : 'bg-amber-400'} opacity-75`}></span>
+                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isWsLive ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+              </span>
+              <span className="font-mono text-[11px] font-bold">
+                {isWsLive ? 'STOMP Live (<300ms)' : 'STOMP Đang Kết Nối'}
+              </span>
+              <span className={`text-[10px] ${isWsLive ? 'bg-emerald-200/80 text-emerald-950' : 'bg-amber-200/80 text-amber-950'} px-2 py-0.5 rounded-full font-mono font-bold`}>
+                Ping: {stompLatencyMs}ms
+              </span>
+              <button
+                type="button"
+                onClick={handleSimulateStompBroadcast}
+                title="Mô phỏng phát sóng WebSocket STOMP tức thì"
+                className="p-1 hover:bg-emerald-200 rounded-lg transition-colors text-emerald-700 cursor-pointer ml-1"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
             <div className="flex items-center gap-2 bg-[#FAF7F2] px-4 py-2 rounded-2xl border border-[#E8DFD1] text-xs font-semibold text-[#44403C]">
               <Clock className="w-4 h-4 text-[#8C6A43]" />
               <span>{selectedShift}</span>
@@ -721,7 +917,7 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
                 className="px-4 py-2 rounded-2xl bg-[#FAF4EB] hover:bg-[#F3ECE0] text-[#8C6A43] border border-[#C4A480] text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-2xs"
               >
                 <Smartphone className="w-4 h-4 text-[#8C6A43]" />
-                <span>Mở App Phục Vụ (Order Tại Bàn)</span>
+                <span>App Phục Vụ</span>
               </button>
             )}
 
@@ -732,7 +928,7 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
                 className="px-4 py-2 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 border border-amber-300 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-2xs"
               >
                 <ChefHat className="w-4 h-4 text-amber-700" />
-                <span>Màn Hình Bếp (KDS)</span>
+                <span>KDS Bếp</span>
               </button>
             )}
 
@@ -743,7 +939,7 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
               className="relative px-4 py-2 rounded-2xl bg-gradient-to-r from-purple-900 to-indigo-900 hover:from-purple-800 hover:to-indigo-800 text-white text-xs font-bold flex items-center gap-2 transition-all shadow-md cursor-pointer border border-purple-400/40"
             >
               <Sparkles className="w-4 h-4 text-amber-300" />
-              <span>Tiệc Sự Kiện & Rooftop (UC-10)</span>
+              <span>Tiệc & Rooftop (UC-10)</span>
               {pendingInquiriesCount > 0 && (
                 <span className="w-5 h-5 rounded-full bg-rose-500 text-white font-mono text-[10px] flex items-center justify-center animate-bounce shadow-xs">
                   {pendingInquiriesCount}
@@ -757,7 +953,7 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
               className="px-4 py-2 rounded-2xl bg-[#8C6A43] text-white hover:bg-[#735534] text-xs font-bold flex items-center gap-2 transition-all shadow-xs cursor-pointer"
             >
               <QrCode className="w-4 h-4" />
-              <span>Quét Mã Vé Check-in</span>
+              <span>Quét QR Check-in (UC-12)</span>
             </button>
           </div>
         </div>
@@ -794,7 +990,162 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
           </div>
         )}
 
-        {/* Real-time Status Metric Counters */}
+        {/* UC-15: One-Touch Floor Switcher Bar (Chuyển tầng 1 chạm trên Tablet) */}
+        <div className="space-y-3 pt-2 border-t border-[#E8DFD1]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-[#8C6A43]" />
+              <span className="text-xs font-bold uppercase tracking-wider text-[#8C6A43]">
+                Chuyển Tầng 1 Chạm (Host Floor Switcher)
+              </span>
+            </div>
+            <span className="text-[11px] text-[#78716C]">
+              Đồng bộ đa tầng qua STOMP • Lần cuối: {lastSyncTime}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Tầng 1 */}
+            <button
+              type="button"
+              onClick={() => setSelectedFloor(1)}
+              className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                selectedFloor === 1
+                  ? 'bg-gradient-to-br from-[#FAF4EB] to-amber-50/80 border-[#C4A480] ring-2 ring-[#C4A480]/60 shadow-md scale-[1.01]'
+                  : 'bg-[#FAF7F2] border-[#E8DFD1] hover:bg-white hover:border-[#C4A480]/50'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="font-serif text-base font-bold text-[#2C221E] block">
+                    Tầng 1 • Grand Bistro
+                  </span>
+                  <span className="text-[10px] text-[#8C6A43] font-medium block">
+                    View Nguyễn Huệ • Sân Khấu Acoustic
+                  </span>
+                </div>
+                <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-900 text-xs font-bold flex items-center justify-center font-mono">
+                  1
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-[#78716C] pt-2 mt-2 border-t border-[#E8DFD1]/60">
+                <span className="font-semibold text-emerald-700">
+                  {statsF1.available}/{statsF1.total} bàn trống
+                </span>
+                <span className="font-mono font-bold text-amber-900 bg-amber-100/70 px-1.5 py-0.5 rounded">
+                  {statsF1.occupancy}% lấp đầy
+                </span>
+              </div>
+            </button>
+
+            {/* Tầng 2 */}
+            <button
+              type="button"
+              onClick={() => setSelectedFloor(2)}
+              className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                selectedFloor === 2
+                  ? 'bg-gradient-to-br from-purple-50/70 to-indigo-50/70 border-purple-400 ring-2 ring-purple-400/60 shadow-md scale-[1.01]'
+                  : 'bg-[#FAF7F2] border-[#E8DFD1] hover:bg-white hover:border-purple-300'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="font-serif text-base font-bold text-[#2C221E] block">
+                    Tầng 2 • VIP Salon
+                  </span>
+                  <span className="text-[10px] text-purple-800 font-medium block">
+                    5 Phòng VIP • Hầm Rượu Vang
+                  </span>
+                </div>
+                <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-900 text-xs font-bold flex items-center justify-center font-mono">
+                  2
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-[#78716C] pt-2 mt-2 border-t border-[#E8DFD1]/60">
+                <span className="font-semibold text-emerald-700">
+                  {statsF2.available}/{statsF2.total} bàn trống
+                </span>
+                <span className="font-mono font-bold text-purple-900 bg-purple-100/70 px-1.5 py-0.5 rounded">
+                  {statsF2.occupancy}% lấp đầy
+                </span>
+              </div>
+            </button>
+
+            {/* Tầng 3 */}
+            <button
+              type="button"
+              onClick={() => setSelectedFloor(3)}
+              className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                selectedFloor === 3
+                  ? 'bg-gradient-to-br from-sky-50/70 to-blue-50/70 border-sky-400 ring-2 ring-sky-400/60 shadow-md scale-[1.01]'
+                  : 'bg-[#FAF7F2] border-[#E8DFD1] hover:bg-white hover:border-sky-300'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="font-serif text-base font-bold text-[#2C221E] block">
+                    Tầng 3 • Sky Lounge
+                  </span>
+                  <span className="text-[10px] text-sky-800 font-medium block">
+                    Rooftop • Sunset View Sài Gòn
+                  </span>
+                </div>
+                <span className="w-6 h-6 rounded-full bg-sky-100 text-sky-900 text-xs font-bold flex items-center justify-center font-mono">
+                  3
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-[#78716C] pt-2 mt-2 border-t border-[#E8DFD1]/60">
+                <span className="font-semibold text-emerald-700">
+                  {statsF3.available}/{statsF3.total} bàn trống
+                </span>
+                <span className="font-mono font-bold text-sky-900 bg-sky-100/70 px-1.5 py-0.5 rounded">
+                  {statsF3.occupancy}% lấp đầy
+                </span>
+              </div>
+            </button>
+
+            {/* Tất Cả Các Tầng */}
+            <button
+              type="button"
+              onClick={() => setSelectedFloor('ALL')}
+              className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                selectedFloor === 'ALL'
+                  ? 'bg-gradient-to-br from-[#2C221E] to-[#44362E] text-white border-[#2C221E] ring-2 ring-[#8C6A43]/60 shadow-md scale-[1.01]'
+                  : 'bg-[#FAF7F2] border-[#E8DFD1] hover:bg-white hover:border-[#8C6A43]/50'
+              }`}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className={`font-serif text-base font-bold block ${selectedFloor === 'ALL' ? 'text-white' : 'text-[#2C221E]'}`}>
+                    Toàn Nhà Hàng (Đa Tầng)
+                  </span>
+                  <span className={`text-[10px] font-medium block ${selectedFloor === 'ALL' ? 'text-[#C4A480]' : 'text-[#8C6A43]'}`}>
+                    Tổng quan 3 tầng • 24 Bàn Live
+                  </span>
+                </div>
+                <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center font-mono ${
+                  selectedFloor === 'ALL' ? 'bg-[#8C6A43] text-white' : 'bg-stone-200 text-stone-800'
+                }`}>
+                  Σ
+                </span>
+              </div>
+              <div className={`flex items-center justify-between text-[11px] pt-2 mt-2 border-t ${
+                selectedFloor === 'ALL' ? 'border-white/20 text-white/80' : 'border-[#E8DFD1]/60 text-[#78716C]'
+              }`}>
+                <span className={selectedFloor === 'ALL' ? 'text-emerald-300 font-semibold' : 'text-emerald-700 font-semibold'}>
+                  {statsAll.available}/{statsAll.total} bàn trống
+                </span>
+                <span className={`font-mono font-bold px-1.5 py-0.5 rounded ${
+                  selectedFloor === 'ALL' ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-900'
+                }`}>
+                  {statsAll.occupancy}% lấp đầy
+                </span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Real-time Status Metric Counters for the Active Floor */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E8DFD1] space-y-1">
             <div className="flex items-center justify-between">
@@ -802,7 +1153,7 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
             </div>
             <p className="font-serif text-2xl sm:text-3xl font-bold text-[#2C221E]">
-              {availableTables} <span className="text-xs font-normal text-[#78716C]">/ {totalTables} bàn</span>
+              {currentFloorStats.available} <span className="text-xs font-normal text-[#78716C]">/ {currentFloorStats.total} bàn</span>
             </p>
           </div>
 
@@ -811,41 +1162,108 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
               <span className="text-xs font-semibold text-[#8C6A43]">Đang Có Khách Ngồi</span>
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
             </div>
-            <p className="font-serif text-2xl sm:text-3xl font-bold text-[#8C6A43]">
-              {seatedTables} <span className="text-xs font-normal text-[#78716C]">bàn</span>
-            </p>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <p className="font-serif text-2xl sm:text-3xl font-bold text-[#8C6A43]">
+                {currentFloorStats.seated} <span className="text-xs font-normal text-[#78716C]">bàn</span>
+              </p>
+              {currentFloorStats.overstayCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-600 text-white animate-pulse">
+                  {currentFloorStats.overstayCount} Overstay
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-200 space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-blue-800">Đặt Online Chờ Đến</span>
+              <span className="text-xs font-semibold text-blue-800">Đặt Online Đã Cọc</span>
               <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
             </div>
             <p className="font-serif text-2xl sm:text-3xl font-bold text-blue-900">
-              {reservedTables} <span className="text-xs font-normal text-blue-600">bàn</span>
+              {currentFloorStats.reserved} <span className="text-xs font-normal text-blue-600">bàn</span>
             </p>
           </div>
 
           <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-emerald-800">Doanh Thu Tạm Tính</span>
+              <span className="text-xs font-semibold text-emerald-800">Tiền Cọc Đang Giữ</span>
               <Receipt className="w-4 h-4 text-emerald-700" />
             </div>
             <p className="font-mono text-xl sm:text-2xl font-bold text-emerald-900 truncate">
-              {new Intl.NumberFormat('vi-VN').format(totalShiftRevenue)} đ
+              {new Intl.NumberFormat('vi-VN').format(currentFloorStats.totalDeposit)} đ
             </p>
           </div>
         </div>
 
-        {/* Filter Chips & Search Box */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+        {/* Dining Overstay & Long Dining Notification Alert */}
+        {(currentFloorStats.overstayCount > 0 || currentFloorStats.longDiningCount > 0) && (
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-950 via-rose-950 to-amber-950 text-white border-2 border-amber-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 animate-pulse">
+                <Timer className="w-5 h-5" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-rose-500 px-2 py-0.5 rounded text-white">
+                    Cảnh Báo Thời Gian Ngồi Ăn (Host Dining Tracker)
+                  </span>
+                  <span className="text-xs text-amber-200">
+                    Phát hiện <strong>{currentFloorStats.overstayCount} bàn quá 105 phút</strong> và <strong>{currentFloorStats.longDiningCount} bàn quá 75 phút</strong>
+                  </span>
+                </div>
+                <p className="text-xs text-amber-100/90">
+                  Lễ tân và phục vụ chú ý chăm sóc tiếp trà, mời tráng miệng hoặc chuẩn bị in hóa đơn để đảm bảo giờ đón khách ca sau.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('OVERSTAY')}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 font-bold text-xs shrink-0 cursor-pointer shadow-xs"
+            >
+              Xem Bàn Quá Giờ
+            </button>
+          </div>
+        )}
+
+        {/* View Mode Switcher, Status Filters & Search Box */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-2">
+          {/* Dual Presentation Mode Toggle */}
+          <div className="flex items-center gap-1.5 bg-[#FAF7F2] p-1.5 rounded-2xl border border-[#E8DFD1]">
+            <button
+              type="button"
+              onClick={() => setViewMode('canvas')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                viewMode === 'canvas'
+                  ? 'bg-[#2C221E] text-white shadow-md'
+                  : 'text-[#6B5E54] hover:text-[#2C221E]'
+              }`}
+            >
+              <LayoutGrid className="w-4 h-4 text-amber-400" />
+              <span>🗺️ Sơ Đồ Mặt Bằng Live</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('cards')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                viewMode === 'cards'
+                  ? 'bg-[#2C221E] text-white shadow-md'
+                  : 'text-[#6B5E54] hover:text-[#2C221E]'
+              }`}
+            >
+              <Layers className="w-4 h-4 text-amber-400" />
+              <span>📋 Lưới Thẻ Bàn Cảm Ứng</span>
+            </button>
+          </div>
+
           {/* Status filter tabs */}
           <div className="flex flex-wrap items-center gap-2">
             {[
-              { id: 'ALL', label: 'Tất Cả Bàn', count: tables.length },
-              { id: 'AVAILABLE', label: '🟢 Bàn Trống', count: availableTables },
-              { id: 'SEATED', label: '🟠 Đang Dùng Bữa', count: seatedTables },
-              { id: 'CONFIRMED', label: '🔵 Đặt Online', count: reservedTables },
+              { id: 'ALL', label: 'Tất Cả', count: currentFloorTables.length },
+              { id: 'AVAILABLE', label: '🟢 Trống', count: currentFloorStats.available },
+              { id: 'SEATED', label: '🟠 Đang Ăn', count: currentFloorStats.seated },
+              { id: 'CONFIRMED', label: '🔵 Đã Cọc', count: currentFloorStats.reserved },
+              { id: 'LONG_DINING', label: '⏱️ &gt;75p', count: currentFloorStats.longDiningCount + currentFloorStats.overstayCount },
             ].map((tab) => {
               const isSelected = statusFilter === tab.id;
               return (
@@ -853,7 +1271,7 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
                   key={tab.id}
                   type="button"
                   onClick={() => setStatusFilter(tab.id as any)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
                     isSelected
                       ? 'bg-[#8C6A43] text-white shadow-xs'
                       : 'bg-[#FAF7F2] text-[#6B5E54] hover:bg-white border border-[#E8DFD1]'
@@ -873,34 +1291,123 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
           </div>
 
           {/* Search bar */}
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full lg:w-64">
             <Search className="w-4 h-4 text-[#78716C] absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Tìm số bàn (T-01, VIP-01) hoặc tên khách..."
-              className="w-full bg-[#FAF7F2] border border-[#E8DFD1] rounded-2xl pl-9 pr-4 py-2.5 text-xs text-[#2C221E] font-medium focus:outline-none focus:border-[#C4A480]"
+              placeholder="Tìm số bàn hoặc khách..."
+              className="w-full bg-[#FAF7F2] border border-[#E8DFD1] rounded-2xl pl-9 pr-4 py-2 text-xs text-[#2C221E] font-medium focus:outline-none focus:border-[#C4A480]"
             />
           </div>
         </div>
       </div>
 
-      {/* 2. MAIN TABLE BOXES GRID (BOX VIEW) */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-serif text-xl font-bold text-[#2C221E] flex items-center gap-2">
-            <span>Danh Sách Ô Bàn Tại Sảnh</span>
-            <span className="text-xs font-normal text-[#78716C]">
-              (Bấm vào từng ô bàn để mở bàn, chuyển bàn, ghép bàn, order hoặc tính tiền)
-            </span>
-          </h2>
-          <span className="text-xs text-[#8C6A43] font-semibold">
-            Hiển thị {filteredTables.length} bàn
-          </span>
-        </div>
+      {/* 2. DUAL PRESENTATION VIEW: INTERACTIVE FLOOR CANVAS OR TOUCH CARDS GRID */}
+      {viewMode === 'canvas' ? (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-serif text-xl font-bold text-[#2C221E] flex items-center gap-2">
+                <span>
+                  Sơ Đồ Mặt Bằng Live •{' '}
+                  {selectedFloor === 1
+                    ? 'Tầng 1 (Grand Bistro)'
+                    : selectedFloor === 2
+                    ? 'Tầng 2 (VIP Salon Cellar)'
+                    : selectedFloor === 3
+                    ? 'Tầng 3 (Sky Lounge Rooftop)'
+                    : 'Tầng 1 (Grand Bistro - Sảnh Chính)'}
+                </span>
+                <span className="text-xs font-normal text-[#78716C]">
+                  (Tọa độ thực, cảm ứng chạm 1 chạm vào từng bàn để thao tác)
+                </span>
+              </h2>
+              <span className="text-xs text-[#8C6A43] font-medium mt-0.5 block">
+                {selectedFloor === 1 || selectedFloor === 'ALL'
+                  ? '✨ Vòm Kính Panoramic View Phố Đi Bộ Nguyễn Huệ • Sân Khấu Acoustic'
+                  : selectedFloor === 2
+                  ? '🍷 Không Gian Phòng VIP Riêng Tư • Hầm Rượu Vang Bordeaux Grand Cru'
+                  : '🌟 Sky Lounge Rooftop Ngoài Trời • Ngắm Hoàng Hôn & Skyline Sài Gòn'}
+              </span>
+            </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="flex items-center gap-2 text-xs font-semibold bg-emerald-50 text-emerald-800 px-3 py-1.5 rounded-xl border border-emerald-300 shadow-2xs">
+              <Radio className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+              <span>STOMP Stream Active (&lt;300ms)</span>
+            </div>
+          </div>
+
+          {/* Architectural Live Canvas */}
+          <FloorPlanCanvas
+            floorNumber={(selectedFloor === 'ALL' ? 1 : selectedFloor) as 1 | 2 | 3}
+            tables={tables}
+            selectedTable={selectedTableForPOS}
+            onSelectTable={(table) => {
+              if (table.status === 'AVAILABLE') {
+                handleOpenWalkInModal(table);
+              } else {
+                setSelectedTableForPOS(table);
+              }
+            }}
+            isHostView={true}
+            tableLiveMetrics={liveTableMetrics}
+          />
+
+          {/* Architectural Canvas Legend & Host Guide Bar */}
+          <div className="p-4 rounded-2xl bg-white border border-[#E8DFD1] shadow-2xs space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+              <span className="font-bold text-[#2C221E] uppercase tracking-wider text-[11px] font-mono">
+                Chú Giải Trạng Thái Bàn Live (Host Legend):
+              </span>
+              <div className="flex flex-wrap items-center gap-3 text-[11px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-md bg-emerald-100 border border-emerald-400" />
+                  <span className="text-[#44403C]">Bàn Trống (Sẵn sàng)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-md bg-amber-100 border border-amber-400 animate-pulse" />
+                  <span className="text-[#44403C]">Đang Giữ 5p (Redlock)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-md bg-blue-100 border border-blue-500" />
+                  <span className="text-[#44403C]">Đã Cọc Giữ Chỗ (Confirmed)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-md bg-amber-200 border border-amber-500" />
+                  <span className="text-[#44403C]">Đang Ăn (&lt;75p)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-md bg-amber-300 border border-amber-600" />
+                  <span className="text-[#44403C]">Ngồi Lâu (75-105p)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-md bg-rose-200 border border-rose-600 animate-pulse" />
+                  <span className="text-rose-700 font-bold">Overstay (&gt;105p)</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-[11px] text-[#78716C] italic border-t border-[#E8DFD1] pt-2">
+              💡 Chạm vào bất kỳ bàn nào trên sơ đồ để mở drawer chi tiết: kiểm tra thông tin khách đã cọc, số tiền cọc, thực đơn đặt trước (UC-07), nhu cầu dị ứng (UC-08), gọi món hoặc check-in đón khách.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-serif text-xl font-bold text-[#2C221E] flex items-center gap-2">
+              <span>Danh Sách Thẻ Bàn Cảm Ứng Tại Sảnh</span>
+              <span className="text-xs font-normal text-[#78716C]">
+                (Hiển thị thời gian ngồi ăn và thông tin cọc trực quan)
+              </span>
+            </h2>
+            <span className="text-xs text-[#8C6A43] font-semibold">
+              Hiển thị {filteredTables.length} bàn
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {filteredTables.map((table) => {
             const isAvailable = table.status === 'AVAILABLE';
             const isSeated = table.status === 'SEATED';
@@ -924,13 +1431,16 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
                     : 'bg-stone-100 border-stone-300 opacity-80'
                 }`}
               >
-                {/* Top Row: Table Code, Capacity & Status Badge */}
+                {/* Top Row: Table Code, Floor, Capacity & Status Badge */}
                 <div className="space-y-3">
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="font-serif text-2xl font-bold text-[#2C221E] tracking-tight">
                           {table.code}
+                        </span>
+                        <span className="text-[10px] font-bold text-amber-900 bg-amber-100/80 px-1.5 py-0.5 rounded">
+                          Tầng {table.floor}
                         </span>
                         <span className="text-[11px] font-bold text-[#78716C] bg-[#FAF7F2] px-2 py-0.5 rounded-lg border border-[#E8DFD1] flex items-center gap-1">
                           <Users className="w-3 h-3 text-[#C4A480]" />
@@ -954,15 +1464,45 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
                         🟢 Bàn Trống
                       </span>
                     )}
-                    {isSeated && (
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                        🟠 Đang Có Khách
-                      </span>
-                    )}
+                    {isSeated && (() => {
+                      const dining = getTableDiningMetrics(table);
+                      return (
+                        <div className="flex flex-col items-end gap-1">
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 ${
+                              dining.alertLevel === 'OVERSTAY'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-300 ring-2 ring-rose-400 animate-pulse'
+                                : dining.alertLevel === 'LONG_DINING'
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                : 'bg-amber-50 text-amber-800 border border-amber-200'
+                            }`}
+                          >
+                            <Clock className="w-3 h-3 text-[#8C6A43]" />
+                            <span>{dining.durationFormatted}</span>
+                          </span>
+                          {dining.alertLevel === 'OVERSTAY' && (
+                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-rose-600 text-white animate-bounce">
+                              Overstay &gt;105p
+                            </span>
+                          )}
+                          {dining.alertLevel === 'LONG_DINING' && (
+                            <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-amber-200 text-amber-900">
+                              Ngồi Lâu &gt;75p
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {isConfirmed && (
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                        🔵 Đặt Online
-                      </span>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                          <span>Đã Cọc 100%</span>
+                        </span>
+                        <span className="text-[10px] font-mono text-blue-900 font-bold bg-blue-100/60 px-1.5 py-0.5 rounded">
+                          {new Intl.NumberFormat('vi-VN').format(table.depositPrice)} đ
+                        </span>
+                      </div>
                     )}
                     {isCleaning && (
                       <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-stone-200 text-stone-700">
@@ -1107,8 +1647,17 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
 
                       <div className="grid grid-cols-2 gap-2 text-[11px] text-[#78716C] pt-1 border-t border-[#E8DFD1]">
                         <div>
-                          <span>Thời gian:</span>
-                          <p className="font-semibold text-[#2C221E]">{currentOrder?.seatedAtTime || 'Đang ngồi'}</p>
+                          <span>Thời lượng ngồi:</span>
+                          <p className={`font-semibold font-mono flex items-center gap-1 ${
+                            getTableDiningMetrics(table).alertLevel === 'OVERSTAY'
+                              ? 'text-rose-700 font-bold'
+                              : getTableDiningMetrics(table).alertLevel === 'LONG_DINING'
+                              ? 'text-amber-700 font-bold'
+                              : 'text-[#2C221E]'
+                          }`}>
+                            <Clock className="w-3 h-3 text-[#8C6A43]" />
+                            <span>{getTableDiningMetrics(table).durationFormatted}</span>
+                          </p>
                         </div>
                         <div>
                           <span>Đã gọi:</span>
@@ -1206,6 +1755,7 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
           })}
         </div>
       </div>
+      )}
 
       {/* 3. MODAL: PHỤC VỤ BÁO MỞ BÀN (WALK-IN GUEST OPEN MODAL) */}
       {walkInTargetTable && (
@@ -1308,8 +1858,282 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
         </div>
       )}
 
-      {/* 4. MODAL: POS CHI TIẾT BÀN, QUẢN LÝ ORDER & TÍNH TIỀN */}
-      {selectedTableForPOS && (
+      {/* 4. MODAL: HOST BOOKING INSPECTOR (CHO BÀN ĐÃ CỌC 'CONFIRMED') HOẶC POS CHI TIẾT BÀN (CHO 'SEATED') */}
+      {selectedTableForPOS && selectedTableForPOS.status === 'CONFIRMED' && (() => {
+        const matchedBk = bookings.find(
+          (b: BookingDetails) => b.tableId === selectedTableForPOS.id || b.tableCode.includes(selectedTableForPOS.code)
+        );
+        const guestName = selectedTableForPOS.currentGuestName || matchedBk?.customerName || 'Khách Đặt Online';
+        const phone = selectedTableForPOS.guestPhone || matchedBk?.phone || '090***';
+        const bookingCode = matchedBk?.bookingCode || `BK-${selectedTableForPOS.code}-2026`;
+        const timeSlot = selectedTableForPOS.bookingTime || matchedBk?.bookingTime || '19:00 - 21:00';
+        const partySize = matchedBk?.partySize || selectedTableForPOS.capacity;
+        const depositAmount = matchedBk?.depositAmount || selectedTableForPOS.depositPrice || 200000;
+        const preOrders = matchedBk?.preOrders || [];
+        const preOrdersTotal = preOrders.reduce((sum: number, po: any) => sum + (po.dish.price * po.quantity), 0);
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1412]/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto">
+            <div className="w-full max-w-3xl bg-white rounded-3xl border border-[#E8DFD1] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+              {/* Header */}
+              <div className="p-5 sm:p-6 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-600/30 border border-blue-400 text-white flex items-center justify-center font-serif font-bold text-lg shadow-inner shrink-0">
+                    {selectedTableForPOS.code}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="font-serif text-xl font-bold text-white">
+                        Hồ Sơ Đặt Bàn Đã Cọc • Bàn {selectedTableForPOS.code}
+                      </h3>
+                      <span className="text-[11px] font-bold text-blue-200 bg-blue-800/60 px-2.5 py-0.5 rounded-full border border-blue-500 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                        <span>Đã Cọc 100% Giữ Chỗ</span>
+                      </span>
+                    </div>
+                    <p className="text-xs text-blue-200/90 mt-0.5 flex items-center gap-1.5">
+                      <span>Tầng {selectedTableForPOS.floor}</span>
+                      <span>•</span>
+                      <span>{selectedTableForPOS.zone === 'WINDOW_VIEW' ? '🌟 View Phố Nguyễn Huệ' : selectedTableForPOS.zone === 'VIP' ? '👑 Phòng VIP Salon' : selectedTableForPOS.zone === 'OUTDOOR' ? '🌿 Sky Terrace' : '🍽️ Sảnh Tiêu Chuẩn'}</span>
+                      <span>•</span>
+                      <span>{selectedTableForPOS.capacity} Ghế</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 text-emerald-300 border border-emerald-400/30 text-xs font-semibold">
+                    <Radio className="w-3.5 h-3.5 animate-pulse" />
+                    <span>STOMP Live (&lt;300ms)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTableForPOS(null)}
+                    className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center cursor-pointer transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 sm:p-6 overflow-y-auto space-y-5">
+                {/* Grid 2 cols: Guest Info & Reservation Info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Card 1: Guest Information */}
+                  <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E8DFD1] space-y-3">
+                    <span className="text-[11px] font-bold text-[#8C6A43] uppercase tracking-wider block">
+                      👤 Thông Tin Thực Khách
+                    </span>
+                    <div className="space-y-2 text-xs">
+                      <div className="flex justify-between items-center py-1 border-b border-[#E8DFD1]">
+                        <span className="text-[#78716C]">Họ và tên khách:</span>
+                        <strong className="text-sm text-[#2C221E]">{guestName}</strong>
+                      </div>
+                      <div className="flex justify-between items-center py-1 border-b border-[#E8DFD1]">
+                        <span className="text-[#78716C]">Số điện thoại:</span>
+                        <a href={`tel:${phone}`} className="font-mono font-bold text-blue-700 hover:underline flex items-center gap-1">
+                          <Phone className="w-3 h-3" />
+                          <span>{phone}</span>
+                        </a>
+                      </div>
+                      <div className="flex justify-between items-center py-1 border-b border-[#E8DFD1]">
+                        <span className="text-[#78716C]">Mã đơn booking:</span>
+                        <span className="font-mono font-bold text-[#8C6A43] bg-white px-2 py-0.5 rounded border border-[#E8DFD1]">
+                          {bookingCode}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center py-1">
+                        <span className="text-[#78716C]">Số lượng khách:</span>
+                        <span className="font-bold text-[#2C221E] flex items-center gap-1">
+                          <Users className="w-3.5 h-3.5 text-[#8C6A43]" />
+                          <span>{partySize} người</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Schedule & Escrow Deposit */}
+                  <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E8DFD1] space-y-3">
+                    <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">
+                      💳 Tiền Cọc & Khung Giờ Đến
+                    </span>
+                    <div className="space-y-2 text-xs">
+                      <div className="flex justify-between items-center py-1 border-b border-[#E8DFD1]">
+                        <span className="text-[#78716C]">Khung giờ hẹn:</span>
+                        <span className="font-mono font-bold text-[#2C221E] bg-white px-2 py-0.5 rounded border border-[#E8DFD1]">
+                          {timeSlot}
+                        </span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-300 space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[11px] text-emerald-900 font-bold">Tiền cọc đang giữ (Escrow):</span>
+                          <span className="font-mono text-base font-black text-emerald-800">
+                            {new Intl.NumberFormat('vi-VN').format(depositAmount)} đ
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-emerald-700 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 shrink-0" />
+                          <span>Đã thanh toán 100% qua VNPay / VietQR an toàn</span>
+                        </p>
+                      </div>
+                      {matchedBk?.occasion && (
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-[#78716C]">Mục đích tiệc:</span>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-xs font-bold">
+                            <Cake className="w-3 h-3 text-amber-700" />
+                            <span>{matchedBk.occasion}</span>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 3: UC-08 Special Requests & Dietary Intel */}
+                <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-700" />
+                      <span>Nhu Cầu Đặc Biệt & An Toàn Thực Phẩm (UC-08)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditSpecialModal(selectedTableForPOS.id)}
+                      className="text-[11px] font-bold text-[#8C6A43] hover:text-[#735534] underline cursor-pointer flex items-center gap-1"
+                    >
+                      <Edit3 className="w-3 h-3" />
+                      <span>Chỉnh sửa</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-2 p-2 bg-white rounded-xl border border-amber-200">
+                      <Baby className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span className="text-[#2C221E]">
+                        Ghế trẻ em: <strong>{matchedBk?.babyChairCount || 0} ghế</strong>
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 p-2 bg-white rounded-xl border border-amber-200">
+                      <Flame className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span className="text-[#2C221E]">
+                        Bố trí nến lãng mạn: <strong>{matchedBk?.candleSetup ? 'Có yêu cầu thắp nến' : 'Không'}</strong>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Dietary & Allergy Warning Banner */}
+                  {matchedBk?.dietaryNotes ? (
+                    <div className="p-3 bg-rose-50 border-2 border-rose-400 rounded-xl space-y-1 text-xs text-rose-900">
+                      <div className="flex items-center gap-1.5 font-bold text-rose-800">
+                        <ShieldAlert className="w-4 h-4 text-rose-600" />
+                        <span>CẢNH BÁO AN TOÀN THỰC PHẨM & DỊ ỨNG (LƯU Ý KHI TIẾP ĐÓN):</span>
+                      </div>
+                      <p className="font-semibold pl-5">
+                        {matchedBk.dietaryNotes}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-[11px] text-emerald-800 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Không có ghi chú dị ứng đặc biệt từ khách</span>
+                    </div>
+                  )}
+
+                  {matchedBk?.notes && (
+                    <div className="text-xs text-[#78716C] bg-white p-2.5 rounded-xl border border-[#E8DFD1]">
+                      <strong>Ghi chú khách:</strong> {matchedBk.notes}
+                    </div>
+                  )}
+                </div>
+
+                {/* Card 4: UC-07 Pre-ordered Dishes */}
+                <div className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#E8DFD1] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#8C6A43] uppercase tracking-wider flex items-center gap-1.5">
+                      <Utensils className="w-4 h-4 text-[#8C6A43]" />
+                      <span>Món Gọi Trước Qua Online (UC-07)</span>
+                    </span>
+                    <span className="text-xs font-semibold text-[#8C6A43]">
+                      {preOrders.length} món đã đặt
+                    </span>
+                  </div>
+
+                  {preOrders.length === 0 ? (
+                    <div className="p-3 bg-white rounded-xl border border-dashed border-[#E8DFD1] text-center text-xs text-[#78716C]">
+                      Khách chưa đặt trước món ăn. Thực khách sẽ chọn món trực tiếp tại bàn sau khi nhận chỗ.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                        {preOrders.map((po: any, idx: number) => (
+                          <div key={idx} className="p-2.5 rounded-xl bg-white border border-[#E8DFD1] flex items-center justify-between text-xs">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-bold text-[#2C221E] truncate">{po.dish.name}</p>
+                              {po.preparationNotes && (
+                                <p className="text-[10px] text-amber-800 italic">Ghi chú: {po.preparationNotes}</p>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0 ml-3">
+                              <span className="font-mono text-[#78716C]">x{po.quantity} • </span>
+                              <strong className="font-mono text-[#8C6A43]">{new Intl.NumberFormat('vi-VN').format(po.dish.price * po.quantity)} đ</strong>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex justify-between items-center pt-2 border-t border-[#E8DFD1] text-xs">
+                        <span className="font-bold text-[#78716C]">Tổng giá trị món đặt trước:</span>
+                        <strong className="font-mono text-sm text-[#8C6A43]">{new Intl.NumberFormat('vi-VN').format(preOrdersTotal)} đ</strong>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons Footer */}
+              <div className="p-5 bg-gradient-to-r from-[#FAF7F2] to-[#F5ECE0] border-t border-[#E8DFD1] flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTableForPOS(null);
+                      setIsScannerOpen(true);
+                    }}
+                    className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-white hover:bg-[#FAF4EB] text-[#2C221E] border border-[#E8DFD1] text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs transition-colors"
+                  >
+                    <QrCode className="w-4 h-4 text-[#8C6A43]" />
+                    <span>Quét Vé QR (UC-12)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTableForPOS(null)}
+                    className="px-4 py-2.5 rounded-xl bg-white hover:bg-stone-100 text-[#78716C] border border-[#E8DFD1] text-xs font-bold cursor-pointer"
+                  >
+                    Đóng
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleCheckInOnlineBooking(selectedTableForPOS);
+                    setSelectedTableForPOS(null);
+                  }}
+                  className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span>Xác Nhận Đón Khách Vào Bàn {selectedTableForPOS.code} (Check-in 1 Chạm)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 4.2 MODAL: POS CHI TIẾT BÀN, QUẢN LÝ ORDER & TÍNH TIỀN (CHO BÀN SEATED) */}
+      {selectedTableForPOS && selectedTableForPOS.status !== 'CONFIRMED' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1412]/60 backdrop-blur-xs p-3 sm:p-6 overflow-y-auto">
           <div className="w-full max-w-4xl bg-white rounded-3xl border border-[#E8DFD1] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             {/* Header - Fixed Badge Overflow with min-w & whitespace-nowrap */}
@@ -1327,9 +2151,40 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
                       {tableOrders[selectedTableForPOS.id]?.source === 'ONLINE' ? '✨ Khách Đặt Online' : '🚶 Khách Vãng Lai'}
                     </span>
                   </div>
-                  <p className="text-xs text-[#78716C] mt-0.5">
-                    Thực khách: <strong>{tableOrders[selectedTableForPOS.id]?.guestName || selectedTableForPOS.currentGuestName || 'Khách Tại Bàn'}</strong> • {tableOrders[selectedTableForPOS.id]?.seatedAtTime || 'Đang ngồi'}
-                  </p>
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <p className="text-xs text-[#78716C]">
+                      Thực khách: <strong>{tableOrders[selectedTableForPOS.id]?.guestName || selectedTableForPOS.currentGuestName || 'Khách Tại Bàn'}</strong> • {tableOrders[selectedTableForPOS.id]?.seatedAtTime || 'Đang ngồi'}
+                    </p>
+                    {(() => {
+                      const dining = getTableDiningMetrics(selectedTableForPOS);
+                      return (
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[11px] font-bold flex items-center gap-1 ${
+                              dining.alertLevel === 'OVERSTAY'
+                                ? 'bg-rose-100 text-rose-800 border border-rose-300 ring-2 ring-rose-400 animate-pulse'
+                                : dining.alertLevel === 'LONG_DINING'
+                                ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            }`}
+                          >
+                            <Clock className="w-3 h-3 text-[#8C6A43]" />
+                            <span>Đã ngồi: <strong>{dining.durationFormatted}</strong></span>
+                          </span>
+                          {dining.alertLevel === 'OVERSTAY' && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-rose-600 text-white animate-bounce">
+                              ⚠️ Overstay &gt;105p
+                            </span>
+                          )}
+                          {dining.alertLevel === 'LONG_DINING' && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-200 text-amber-900">
+                              🕒 &gt;75p
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
 

@@ -277,4 +277,20 @@ public class BookingController {
         com.tablemaster.booking.dto.response.ETicketResponse ticket = bookingService.sendTicketNotification(id, request);
         return ResponseEntity.ok(ApiResponse.success("Đã gửi vé điện tử qua kênh " + request.getChannel(), ticket));
     }
+
+    // =========================================================================
+    // UC-15: Xem Sơ đồ Sàn Live Đa tầng trên Tablet (Host Floor Live View)
+    // =========================================================================
+
+    /**
+     * GET /api/v1/bookings/host/floors-live
+     * Lấy dữ liệu Sơ đồ sàn Live đa tầng thời gian thực cho Tablet Lễ tân (<300ms)
+     */
+    @GetMapping("/host/floors-live")
+    public ResponseEntity<ApiResponse<com.tablemaster.booking.dto.response.HostFloorLiveResponse>> getHostFloorsLive(
+            @RequestParam(required = false) Integer floor) {
+        com.tablemaster.booking.dto.response.HostFloorLiveResponse response = bookingService.getHostFloorsLive(floor);
+        return ResponseEntity.ok(ApiResponse.success("Lấy sơ đồ sàn Live thành công", response));
+    }
 }
+
