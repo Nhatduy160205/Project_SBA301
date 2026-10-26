@@ -3,7 +3,8 @@
 > **Phân hệ:** Module 5: Analytics & Business Intelligence (BI) Service (Cổng 8085)  
 > **Thành viên thực hiện:** Phong (`phongtt.ce190157` / Git: `Phong-the20`)  
 > **Nhánh Git (Feature Branch):** `feature/phong-analytics-service`  
-> **Ngày hoàn thành:** 11/10/2026  
+> **Danh sách Use Cases phụ trách theo Backlog:** **UC-32**, **UC-33**, **UC-34**  
+> **Ngày hoàn thành:** 12/10/2026  
 
 ---
 
@@ -17,10 +18,11 @@ Module 5 (**Analytics & BI Service**) đóng vai trò là trung tâm phân tích
 
 ---
 
-## 🚀 II. CHI TIẾT CÁC CHỨC NĂNG ĐÃ HOÀN THÀNH
+## 🚀 II. CHI TIẾT CÁC USE CASES ĐÃ HOÀN THÀNH
 
-### 1. Báo cáo Hiệu suất ca & Doanh thu (Shift Metrics & RevPASH)
-* **Phân bổ dòng tiền theo khung giờ:** Biểu đồ trực quan từ **11:00 đến 23:00** (khớp 100% thời gian mở cửa nhà hàng, bao gồm ca trưa, ca tối, giờ cao điểm và chốt sổ ca muộn).
+### 1. UC-32: Báo cáo Doanh thu, RevPASH & Tỷ lệ No-Show (Revenue & RevPASH Analytics)
+* **Mức độ ưu tiên:** High | **Đợt triển khai:** Iteration 1 (12/10/2026 - 26/10/2026)
+* **Phân bổ dòng tiền theo khung giờ:** Biểu đồ trực quan từ **11:00 đến 23:00** (khớp 100% thời gian mở cửa nhà hàng, bao gồm ca trưa, ca tối, giờ cao điểm và chốt ca muộn).
 * **Chỉ số vàng RevPASH (Revenue Per Available Seat Hour):**
   $$\text{RevPASH} = \frac{\text{Tổng Doanh Thu Ca}}{\text{Tổng Số Ghế Khả Dụng} \times \text{Thời Gian Ca (giờ)}}$$
   Tự động đánh giá hiệu quả sinh lời của từng mét vuông sàn nhà hàng theo từng giờ phục vụ.
@@ -30,7 +32,8 @@ Module 5 (**Analytics & BI Service**) đóng vai trò là trung tâm phân tích
   * Tách bạch rõ ràng trong doanh thu ca:
     $$\text{Tổng Doanh Thu Ca} = \text{Tiền Ăn Uống (Food Bill)} + \text{Tiền Phạt Bùng Cọc (No-Show Penalty)}$$
 
-### 2. Xếp hạng Bàn ăn & Bản đồ nhiệt 2D (Spatial Heatmap Intelligence)
+### 2. UC-33: Bản đồ Nhiệt Vị trí Bàn ăn (Table Popularity Heatmap)
+* **Mức độ ưu tiên:** Low | **Đợt triển khai:** Iteration 2 (12/10/2026 - 09/11/2026)
 * **Xếp hạng độ Hot của bàn:** Phân loại 18 bàn ăn theo 4 cấp độ nhiệt:
   * 🔴 **HOT (Đỏ):** Độ hot > 80% (Bàn được săn đón nhiều nhất, doanh thu bùng nổ).
   * 🟡 **WARM (Vàng):** Độ hot 50% - 80% (Bàn ưa thích).
@@ -38,15 +41,16 @@ Module 5 (**Analytics & BI Service**) đóng vai trò là trung tâm phân tích
   * 🔵 **COOL (Xanh dương):** Độ hot < 30% (Bàn ít người chọn, cần tối ưu chương trình khuyến mãi).
 * **Lọc theo 5 phân khu kiến trúc:** Private VIP (`PRIVATE_VIP`), Sân vườn (`OUTDOOR`), Cửa sổ ngắm cảnh (`WINDOW_VIEW`), Quầy Bar (`BAR_COUNTER`), và Tiêu chuẩn (`STANDARD`).
 
-### 3. Phân tích Khách hàng VIP & Hệ thống CRM 4 Hạng
-* Quản lý hồ sơ khách hàng quen thuộc theo 4 hạng hội viên:
+### 3. UC-34: Phân tích Hồ sơ & Phân hạng Khách hàng VIP (VIP Customer Insights & Loyalty CRM)
+* **Mức độ ưu tiên:** Medium | **Đợt triển khai:** Iteration 2 (12/10/2026 - 09/11/2026)
+* **Quản lý hồ sơ khách hàng quen thuộc theo 4 hạng hội viên:**
   * 👑 **PLATINUM:** Chi tiêu > 50M hoặc ghé > 10 lần.
   * 🥇 **GOLD:** Chi tiêu 20M - 50M (6 - 10 lần).
   * 🥈 **SILVER:** Chi tiêu 5M - 20M (3 - 5 lần).
   * 🥉 **BRONZE:** Khách mới ghé (1 - 2 lần).
-* Theo dõi thói quen khách hàng: Vị trí bàn ưa thích, số người đi cùng trung bình (*Average Party Size*), ngày ghé gần nhất.
+* **Theo dõi thói quen khách hàng:** Vị trí bàn ưa thích, số người đi cùng trung bình (*Average Party Size*), ngày ghé gần nhất để phục vụ cá nhân hóa trải nghiệm.
 
-### 4. Tích hợp Kafka Consumer & Bộ công cụ Kiểm thử Simulator
+### 4. Thành phần Kiến trúc Kỹ thuật: Kafka Consumer & Simulator Kiểm thử
 * **Consumer lắng nghe tự động:**
   * Topic `booking-events`: Lắng nghe `COMPLETED` (khách ăn xong) và `NO_SHOW` (khách bùng hẹn).
   * Topic `payment-events`: Lắng nghe `SUCCESS` (khách cọc tiền qua VietQR).

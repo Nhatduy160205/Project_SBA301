@@ -1,6 +1,6 @@
-package com.tablemaster.analytics.dto;
+package com.tablemaster.analytics.dto.response;
 
-import com.tablemaster.analytics.entity.LoyaltyTier;
+import com.tablemaster.analytics.enums.LoyaltyTier;
 import lombok.*;
 
 import java.math.BigDecimal;

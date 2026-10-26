@@ -1,10 +1,10 @@
 package com.tablemaster.analytics;
 
-import com.tablemaster.analytics.dto.DailyShiftSummaryResponse;
-import com.tablemaster.analytics.dto.TableHeatmapResponse;
-import com.tablemaster.analytics.dto.VipCustomerResponse;
+import com.tablemaster.analytics.dto.response.DailyShiftSummaryResponse;
+import com.tablemaster.analytics.dto.response.TableHeatmapResponse;
+import com.tablemaster.analytics.dto.response.VipCustomerResponse;
 import com.tablemaster.analytics.entity.DailyShiftMetric;
-import com.tablemaster.analytics.entity.LoyaltyTier;
+import com.tablemaster.analytics.enums.LoyaltyTier;
 import com.tablemaster.analytics.entity.TablePopularityStat;
 import com.tablemaster.analytics.entity.VipCustomerInsight;
 import com.tablemaster.analytics.repository.DailyShiftMetricRepository;
