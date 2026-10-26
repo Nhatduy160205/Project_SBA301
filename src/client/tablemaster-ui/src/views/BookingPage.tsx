@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar,
@@ -121,6 +121,24 @@ const HOT_SLOTS = [
   { slot: '20:00 - 22:00', startTime: '20:00', shift: 'Bữa Tối (Muộn)' },
 ];
 
+const floorDescriptions: Record<1 | 2 | 3, { name: string; tag: string; view: string }> = {
+  1: {
+    name: 'Tầng 1: Sảnh Chính & View Phố Nguyễn Huệ',
+    tag: '14 Bàn • Cửa kính Panoramic',
+    view: 'Ngắm trọn đại lộ Nguyễn Huệ lung linh, cạnh Sân khấu Acoustic và Quầy Bar mở',
+  },
+  2: {
+    name: 'Tầng 2: Phòng Tiệc VIP & Hầm Rượu Vang',
+    tag: '3 Phòng VIP • Riêng tư tuyệt đối',
+    view: 'Không gian cách âm cao cấp, hầm rượu Bordeaux Grand Cru, phục vụ riêng',
+  },
+  3: {
+    name: 'Tầng 3: Sky Lounge Rooftop Ngoài Trời',
+    tag: '6 Bàn • Chill & Lãng mạn',
+    view: 'Ngắm hoàng hôn và view toàn cảnh thành phố về đêm',
+  },
+};
+
 interface BookingPageProps {
   tables: TableItem[];
   initialFloor?: 1 | 2 | 3;
@@ -132,6 +150,7 @@ interface BookingPageProps {
 
 export const BookingPage: React.FC<BookingPageProps> = ({
   tables,
+  initialFloor = 1,
   onUpdateTableStatus,
   onAddBooking,
   rebookData,
@@ -422,6 +441,10 @@ export const BookingPage: React.FC<BookingPageProps> = ({
     }
   };
 
+  const computeEffectiveSlot = () => {
+    return isCustomTime ? customArrivalTime : selectedSlot;
+  };
+
   const effectiveTimeSlot = computeEffectiveSlot();
 
   const handleOpenDepositModal = async () => {
@@ -489,8 +512,8 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       phone: customerPhone,
       email: customerEmail || 'customer@leprimebistro.vn',
       partySize,
-      floor: 1,
-      tableCode: assignedTable.code || `Bàn ${assignedTable.id}`,
+      floor: tableFloor,
+      tableCode: tableCode,
       tableId: assignedTable.id,
       date: selectedDate,
       timeSlot: effectiveTimeSlot,
