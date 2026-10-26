@@ -73,8 +73,14 @@ export const TableNode: React.FC<TableNodeProps> = ({
             : 'bg-blue-50 text-blue-900 border-blue-500 hover:border-blue-700 shadow-md ring-2 ring-blue-400/40 cursor-pointer';
         }
         return 'bg-blue-50 text-blue-800 border-blue-400 cursor-default';
+      case 'CALL_BILL':
+        return isSelected
+          ? 'bg-purple-100 text-purple-950 border-purple-600 ring-4 ring-purple-500/60 shadow-xl scale-105 z-20 animate-pulse'
+          : 'bg-purple-50 text-purple-900 border-purple-500 hover:border-purple-600 shadow-md ring-2 ring-purple-400/50 cursor-pointer animate-pulse';
       case 'CLEANING':
-        return 'bg-slate-100 text-slate-700 border-slate-300 cursor-default';
+        return isSelected
+          ? 'bg-teal-100 text-teal-950 border-teal-600 ring-4 ring-teal-500/60 shadow-xl scale-105 z-20'
+          : 'bg-teal-50 text-teal-900 border-teal-500 hover:border-teal-600 shadow-md ring-2 ring-teal-400/50 cursor-pointer';
       default:
         return 'bg-gray-50 text-gray-700 border-gray-300';
     }
@@ -92,8 +98,10 @@ export const TableNode: React.FC<TableNodeProps> = ({
         if (diningAlertLevel === 'OVERSTAY') return 'bg-rose-500 animate-ping';
         if (diningAlertLevel === 'LONG_DINING') return 'bg-amber-500';
         return 'bg-blue-600'; // XANH DƯƠNG (SEATED)
+      case 'CALL_BILL':
+        return 'bg-purple-600 animate-ping';
       case 'CLEANING':
-        return 'bg-slate-400';
+        return 'bg-teal-500';
       default:
         return 'bg-gray-400';
     }
@@ -241,6 +249,20 @@ export const TableNode: React.FC<TableNodeProps> = ({
       {isHostView && table.status === 'CONFIRMED' && !isSelected && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap text-[8px] font-sans font-black tracking-wide px-1.5 py-0.5 rounded-full shadow-md bg-indigo-600 text-white border border-indigo-300 flex items-center gap-1 z-20">
           <span>ĐÃ CỌC</span>
+        </div>
+      )}
+
+      {/* Call Bill Badge (Host & Waiter View) */}
+      {isHostView && table.status === 'CALL_BILL' && !isSelected && (
+        <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[8px] font-sans font-black tracking-wide px-2 py-0.5 rounded-full shadow-md bg-purple-600 text-white border border-purple-300 flex items-center gap-1 z-20 animate-bounce">
+          <span>💳 GỌI BILL</span>
+        </div>
+      )}
+
+      {/* Cleaning Badge (Host & Waiter View) */}
+      {isHostView && table.status === 'CLEANING' && !isSelected && (
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap text-[8px] font-sans font-black tracking-wide px-2 py-0.5 rounded-full shadow-md bg-teal-600 text-white border border-teal-300 flex items-center gap-1 z-20">
+          <span>🧹 DỌN BÀN</span>
         </div>
       )}
 

@@ -160,6 +160,163 @@ class HostAudioFeedbackService {
       console.warn('AudioContext playError error:', err);
     }
   }
+
+  // =========================================================================
+  // UC-17: Âm thanh Phản hồi Đổi trạng thái bàn 1 chạm trên Tablet
+  // SEATED -> CALL_BILL -> CLEANING -> AVAILABLE
+  // =========================================================================
+
+  /**
+   * 1. Âm thanh YÊU CẦU TÍNH TIỀN (Call Bill Chime)
+   * Chuông 2 nốt ngân chuông thanh nhã: E5 (659.25Hz) -> B5 (987.77Hz)
+   * Báo hiệu Thu ngân chuẩn bị bill và máy POS
+   */
+  public playCallBill(): void {
+    if (this.isMuted) return;
+
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+
+      // Note 1: E5 (659.25 Hz)
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(659.25, now);
+      gain1.gain.setValueAtTime(0.25, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.18);
+
+      // Note 2: B5 (987.77 Hz) - Ngân vang chuông nhà hàng
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'triangle';
+      osc2.frequency.setValueAtTime(987.77, now + 0.1);
+      gain2.gain.setValueAtTime(0.28, now + 0.1);
+      gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.1);
+      osc2.stop(now + 0.45);
+
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([80, 50, 120]);
+      }
+    } catch (err) {
+      console.warn('AudioContext playCallBill error:', err);
+    }
+  }
+
+  /**
+   * 2. Âm thanh BÁO DỌN BÀN (Cleaning Task Tone)
+   * Chuỗi âm thanh quét dọn: G4 (392Hz) -> C5 (523.25Hz)
+   * Báo hiệu Phục vụ và Tạp vụ vào dọn đĩa, thay khăn bàn
+   */
+  public playCleaning(): void {
+    if (this.isMuted) return;
+
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(392.0, now);
+      gain1.gain.setValueAtTime(0.2, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.14);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(523.25, now + 0.08);
+      gain2.gain.setValueAtTime(0.24, now + 0.08);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.08);
+      osc2.stop(now + 0.28);
+
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([70, 40, 70]);
+      }
+    } catch (err) {
+      console.warn('AudioContext playCleaning error:', err);
+    }
+  }
+
+  /**
+   * 3. Âm thanh BÀN SẴN SÀNG (Table Available Fanfare)
+   * Hợp âm trưởng 4 nốt rực rỡ: C5 (523Hz) -> E5 (659Hz) -> G5 (784Hz) -> C6 (1046Hz)
+   * Báo hiệu Lễ tân bàn đã sạch tinh tươm, sẵn sàng đón lượt khách mới
+   */
+  public playTableAvailable(): void {
+    if (this.isMuted) return;
+
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      const notes = [
+        { freq: 523.25, start: 0, dur: 0.1 },
+        { freq: 659.25, start: 0.07, dur: 0.1 },
+        { freq: 783.99, start: 0.14, dur: 0.12 },
+        { freq: 1046.50, start: 0.21, dur: 0.35 }
+      ];
+
+      notes.forEach(({ freq, start, dur }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + start);
+        gain.gain.setValueAtTime(0.24, now + start);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + start);
+        osc.stop(now + start + dur);
+      });
+
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([50, 30, 50, 30, 90]);
+      }
+    } catch (err) {
+      console.warn('AudioContext playTableAvailable error:', err);
+    }
+  }
+
+  /**
+   * Tự động phát âm thanh theo trạng thái chuyển đổi 1 chạm
+   */
+  public playOneTouchTransition(targetStatus: string): void {
+    switch (targetStatus) {
+      case 'CALL_BILL':
+        this.playCallBill();
+        break;
+      case 'CLEANING':
+        this.playCleaning();
+        break;
+      case 'AVAILABLE':
+        this.playTableAvailable();
+        break;
+      case 'SEATED':
+      default:
+        this.playSuccess();
+        break;
+    }
+  }
 }
 
 export const hostAudioService = new HostAudioFeedbackService();

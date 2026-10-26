@@ -292,5 +292,33 @@ public class BookingController {
         com.tablemaster.booking.dto.response.HostFloorLiveResponse response = bookingService.getHostFloorsLive(floor);
         return ResponseEntity.ok(ApiResponse.success("Lấy sơ đồ sàn Live thành công", response));
     }
+
+    // =========================================================================
+    // UC-17: Đổi trạng thái bàn 1 chạm trên Tablet (One-touch Table Status)
+    // =========================================================================
+
+    /**
+     * PATCH /api/v1/bookings/tables/{tableCode}/one-touch-status
+     * Chuyển nhanh chu trình: SEATED -> CALL_BILL -> CLEANING -> AVAILABLE (<300ms)
+     */
+    @PatchMapping("/tables/{tableCode}/one-touch-status")
+    public ResponseEntity<ApiResponse<com.tablemaster.booking.dto.response.OneTouchTableStatusResponse>> updateOneTouchTableStatusPatch(
+            @PathVariable String tableCode,
+            @Valid @RequestBody com.tablemaster.booking.dto.request.OneTouchTableStatusRequest request) {
+        com.tablemaster.booking.dto.response.OneTouchTableStatusResponse response = bookingService.updateOneTouchTableStatus(tableCode, request);
+        return ResponseEntity.ok(ApiResponse.success("Đổi trạng thái bàn 1 chạm thành công", response));
+    }
+
+    /**
+     * POST /api/v1/bookings/tables/{tableCode}/one-touch-status
+     * Hỗ trợ gọi POST cho các thiết bị Tablet và POS cũ
+     */
+    @PostMapping("/tables/{tableCode}/one-touch-status")
+    public ResponseEntity<ApiResponse<com.tablemaster.booking.dto.response.OneTouchTableStatusResponse>> updateOneTouchTableStatusPost(
+            @PathVariable String tableCode,
+            @Valid @RequestBody com.tablemaster.booking.dto.request.OneTouchTableStatusRequest request) {
+        com.tablemaster.booking.dto.response.OneTouchTableStatusResponse response = bookingService.updateOneTouchTableStatus(tableCode, request);
+        return ResponseEntity.ok(ApiResponse.success("Đổi trạng thái bàn 1 chạm thành công", response));
+    }
 }
 
