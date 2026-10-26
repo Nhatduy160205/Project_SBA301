@@ -181,4 +181,40 @@ public class BookingController {
         BookingResponse response = bookingService.updateSpecialRequests(id, request, staffOrUserId);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật nhu cầu đặc biệt & dị ứng thành công", response));
     }
+
+    /**
+     * POST /api/v1/bookings/event-inquiry
+     * Đặt tiệc Sinh nhật / Sự kiện Bao trọn tầng (Private Banquet Booking - UC-10)
+     */
+    @PostMapping("/event-inquiry")
+    public ResponseEntity<ApiResponse<BookingResponse>> createEventInquiry(
+            @Valid @RequestBody com.tablemaster.booking.dto.request.CreateEventInquiryRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) UUID userId) {
+        BookingResponse response = bookingService.createEventInquiry(request, userId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Yêu cầu đặt tiệc sự kiện đã được ghi nhận. Quản lý ca sẽ liên hệ tư vấn trong 15 phút", response));
+    }
+
+    /**
+     * GET /api/v1/bookings/event-inquiries
+     * Lấy danh sách các đơn đặt tiệc sự kiện đoàn đông (UC-10) cho Quản lý ca & Lễ tân
+     */
+    @GetMapping("/event-inquiries")
+    public ResponseEntity<ApiResponse<List<BookingResponse>>> getEventInquiries() {
+        List<BookingResponse> list = bookingService.getEventInquiries();
+        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách đơn tiệc sự kiện thành công", list));
+    }
+
+    /**
+     * PUT /api/v1/bookings/{id}/event-consultation
+     * Quản lý ca cập nhật kết quả cuộc gọi tư vấn 15 phút cho đơn sự kiện (UC-10)
+     */
+    @PutMapping("/{id}/event-consultation")
+    public ResponseEntity<ApiResponse<BookingResponse>> updateEventConsultation(
+            @PathVariable UUID id,
+            @Valid @RequestBody com.tablemaster.booking.dto.request.UpdateEventConsultationRequest request,
+            @RequestHeader(value = "X-User-Id", required = false) UUID managerUserId) {
+        BookingResponse response = bookingService.updateEventConsultation(id, request, managerUserId);
+        return ResponseEntity.ok(ApiResponse.success("Cập nhật kết quả tư vấn sự kiện thành công", response));
+    }
 }

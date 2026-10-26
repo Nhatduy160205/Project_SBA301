@@ -66,12 +66,48 @@ export interface BookingDetails {
   dietaryNotes?: string;
   babyChairCount?: number;
   candleSetup?: boolean;
+  // UC-10: Đặt tiệc đoàn đông / Bao trọn tầng (Private Banquet & Event Inquiry)
+  eventType?: string;
+  targetFloor?: number;
+  companyName?: string;
+  estimatedBudget?: number;
+  stageAudioRequired?: boolean;
+  decorationRequired?: boolean;
+  callbackDeadline?: string;
+  managerCallStatus?: 'PENDING_CALL' | 'CALLED' | 'PROPOSAL_SENT' | 'ACCEPTED' | 'REJECTED';
+  consultationNotes?: string;
   preOrders: PreOrderItem[];
   depositAmount: number;
   totalEstimatedAmount: number;
   createdAt: string;
-  status: 'PENDING_DEPOSIT' | 'CONFIRMED' | 'CHECKED_IN' | 'COMPLETED' | 'CANCELLED';
+  status: 'PENDING_DEPOSIT' | 'CONFIRMED' | 'CHECKED_IN' | 'COMPLETED' | 'CANCELLED' | 'EVENT_INQUIRY';
   vietqrCode: string;
+}
+
+export interface EventInquiryRequestPayload {
+  guestName: string;
+  guestPhone: string;
+  guestEmail: string;
+  companyName?: string;
+  bookingDate: string;
+  timeSlotId?: string;
+  preferredTime?: string;
+  guestCount: number;
+  eventType: string;
+  targetFloor?: number;
+  estimatedBudget?: number;
+  stageAudioRequired?: boolean;
+  decorationRequired?: boolean;
+  menuPreference?: string;
+  specialNotes?: string;
+}
+
+export interface EventConsultationUpdatePayload {
+  managerCallStatus: string;
+  consultationNotes?: string;
+  agreedDeposit?: number;
+  agreedBudget?: number;
+  targetBookingStatus?: string;
 }
 
 export interface FloorMetric {

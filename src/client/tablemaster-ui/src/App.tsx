@@ -21,6 +21,7 @@ import { RestaurantManagementPage } from './views/restaurant/RestaurantManagemen
 import { INITIAL_TABLES, INITIAL_BOOKINGS, INITIAL_TABLE_ORDERS } from './data/mockData';
 import type { TableItem, TableStatus, BookingDetails, TableOrderRecord, AuthUser } from './types';
 import { bookingApi, type BackendBooking } from './services/bookingApi';
+import { PrivateBanquetModal } from './components/booking/PrivateBanquetModal';
 
 
 export function App() {
@@ -30,6 +31,7 @@ export function App() {
   const [bookings, setBookings] = useState<BookingDetails[]>(INITIAL_BOOKINGS);
   const [tableOrders, setTableOrders] = useState<Record<string, TableOrderRecord>>(INITIAL_TABLE_ORDERS);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
+  const [isBanquetModalOpen, setIsBanquetModalOpen] = useState<boolean>(false);
   const [rebookData, setRebookData] = useState<BookingDetails | null>(null);
 
   useEffect(() => {
@@ -45,8 +47,8 @@ export function App() {
               phone: b.guestPhone,
               email: b.guestEmail,
               partySize: b.guestCount,
-              floor: 1,
-              tableCode: b.tableIds && b.tableIds.length > 0 ? `Bàn VIP` : 'Sảnh',
+              floor: (b.targetFloor as any) || 1,
+              tableCode: b.tableIds && b.tableIds.length > 0 ? `Bàn VIP` : (b.targetFloor === 3 ? 'Rooftop Tầng 3' : 'Sảnh'),
               tableId: b.tableIds && b.tableIds.length > 0 ? b.tableIds[0] : 'f1-t01',
               date: b.bookingDate,
               timeSlot: '19:00 - 21:00',
@@ -59,8 +61,21 @@ export function App() {
               depositAmount: Number(b.totalDeposit) || 0,
               totalEstimatedAmount: Number(b.totalDeposit) || 0,
               createdAt: b.createdAt ? new Date(b.createdAt).toLocaleTimeString('vi-VN') : 'Hôm nay',
-              status: b.status === 'CONFIRMED' || b.status === 'SEATED' ? 'CONFIRMED' : 'PENDING_DEPOSIT',
+              status: b.status === 'EVENT_INQUIRY'
+                ? 'EVENT_INQUIRY'
+                : b.status === 'CONFIRMED' || b.status === 'SEATED'
+                ? 'CONFIRMED'
+                : 'PENDING_DEPOSIT',
               vietqrCode: `TM ${b.bookingCode}`,
+              eventType: b.eventType,
+              targetFloor: b.targetFloor,
+              companyName: b.companyName,
+              estimatedBudget: b.estimatedBudget ? Number(b.estimatedBudget) : undefined,
+              stageAudioRequired: b.stageAudioRequired,
+              decorationRequired: b.decorationRequired,
+              callbackDeadline: b.callbackDeadline,
+              managerCallStatus: b.managerCallStatus,
+              consultationNotes: b.consultationNotes,
             }));
             setBookings((prev) => {
               const existingCodes = new Set(mapped.map((m) => m.bookingId));
@@ -330,7 +345,10 @@ export function App() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <LandingPage onNavigate={handleNavigate} />
+              <LandingPage
+                onNavigate={handleNavigate}
+                onOpenBanquetModal={() => setIsBanquetModalOpen(true)}
+              />
             </motion.div>
           )}
 
@@ -349,6 +367,7 @@ export function App() {
                 onAddBooking={handleAddBooking}
                 rebookData={rebookData}
                 onClearRebook={() => setRebookData(null)}
+                onOpenBanquetModal={() => setIsBanquetModalOpen(true)}
               />
             </motion.div>
           )}
@@ -371,6 +390,11 @@ export function App() {
                 onMergeTables={handleMergeTables}
                 onNavigateToWaiter={() => handleNavigate('waiter')}
                 onNavigateToKds={() => handleNavigate('kds')}
+                onUpdateBooking={(updated) => {
+                  setBookings((prev) =>
+                    prev.map((b) => (b.bookingId === updated.bookingId ? updated : b))
+                  );
+                }}
               />
             </motion.div>
           )}
@@ -548,6 +572,15 @@ export function App() {
         onRebook={(booking) => {
           setRebookData(booking);
           handleNavigate('booking');
+        }}
+      />
+
+      {/* Private Banquet & Floor Buyout Modal (UC-10) */}
+      <PrivateBanquetModal
+        isOpen={isBanquetModalOpen}
+        onClose={() => setIsBanquetModalOpen(false)}
+        onSuccess={(newInquiry) => {
+          setBookings((prev) => [newInquiry, ...prev]);
         }}
       />
     </div>

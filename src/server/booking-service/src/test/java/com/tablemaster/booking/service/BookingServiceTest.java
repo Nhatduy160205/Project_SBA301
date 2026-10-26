@@ -367,4 +367,95 @@ class BookingServiceTest {
 
         verify(bookingEventProducer, times(1)).publishSpecialRequestsUpdated(any(Booking.class));
     }
+
+    @Test
+    void createEventInquiry_Success() {
+        when(bookingRepository.countByBookingDate(any(LocalDate.class))).thenReturn(2L);
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> {
+            Booking b = invocation.getArgument(0);
+            b.setId(UUID.randomUUID());
+            return b;
+        });
+
+        com.tablemaster.booking.dto.request.CreateEventInquiryRequest request =
+                com.tablemaster.booking.dto.request.CreateEventInquiryRequest.builder()
+                        .guestName("Nguyễn Văn Doanh Nghiệp")
+                        .guestPhone("0908889999")
+                        .guestEmail("corp@company.com")
+                        .companyName("Công Ty Cổ Phần Sài Gòn Mới")
+                        .bookingDate(bookingDate.plusDays(10))
+                        .guestCount(45)
+                        .eventType("ROOFTOP_BUYOUT")
+                        .targetFloor(3)
+                        .estimatedBudget(BigDecimal.valueOf(50000000))
+                        .stageAudioRequired(true)
+                        .decorationRequired(true)
+                        .menuPreference("SET_MENU_5_COURSES")
+                        .specialNotes("Yêu cầu chuẩn bị 2 micro không dây và backdrop chúc mừng")
+                        .build();
+
+        BookingResponse response = bookingService.createEventInquiry(request, userId);
+
+        assertNotNull(response);
+        assertEquals("EVENT_INQUIRY", response.getStatus());
+        assertTrue(response.getBookingCode().startsWith("EV"));
+        assertEquals("Nguyễn Văn Doanh Nghiệp", response.getGuestName());
+        assertEquals(45, response.getGuestCount());
+        assertEquals("ROOFTOP_BUYOUT", response.getEventType());
+        assertEquals(3, response.getTargetFloor());
+        assertEquals("Công Ty Cổ Phần Sài Gòn Mới", response.getCompanyName());
+        assertEquals(BigDecimal.valueOf(50000000), response.getEstimatedBudget());
+        assertTrue(response.getStageAudioRequired());
+        assertTrue(response.getDecorationRequired());
+        assertNotNull(response.getCallbackDeadline());
+        assertEquals("PENDING_CALL", response.getManagerCallStatus());
+
+        verify(bookingEventProducer, times(1)).publishEventInquiryCreated(any(Booking.class));
+    }
+
+    @Test
+    void updateEventConsultation_Success() {
+        UUID bookingId = UUID.randomUUID();
+        UUID managerId = UUID.randomUUID();
+
+        Booking eventBooking = Booking.builder()
+                .id(bookingId)
+                .bookingCode("EV2610260001")
+                .guestName("Nguyễn Văn Doanh Nghiệp")
+                .guestPhone("0908889999")
+                .guestEmail("corp@company.com")
+                .bookingDate(bookingDate.plusDays(10))
+                .timeSlotId(timeSlotId)
+                .guestCount(45)
+                .status(BookingStatus.EVENT_INQUIRY)
+                .eventType("ROOFTOP_BUYOUT")
+                .targetFloor(3)
+                .estimatedBudget(BigDecimal.valueOf(50000000))
+                .managerCallStatus("PENDING_CALL")
+                .callbackDeadline(ZonedDateTime.now().plusMinutes(15))
+                .build();
+
+        when(bookingRepository.findById(bookingId)).thenReturn(Optional.of(eventBooking));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        com.tablemaster.booking.dto.request.UpdateEventConsultationRequest consultReq =
+                com.tablemaster.booking.dto.request.UpdateEventConsultationRequest.builder()
+                        .managerCallStatus("CALLED")
+                        .consultationNotes("Đã gọi điện tư vấn anh Nam, chốt gói tiệc Rooftop 45 khách, cọc trước 15.000.000đ")
+                        .agreedBudget(BigDecimal.valueOf(55000000))
+                        .agreedDeposit(BigDecimal.valueOf(15000000))
+                        .targetBookingStatus("AWAITING_PAYMENT")
+                        .build();
+
+        BookingResponse response = bookingService.updateEventConsultation(bookingId, consultReq, managerId);
+
+        assertNotNull(response);
+        assertEquals("AWAITING_PAYMENT", response.getStatus());
+        assertEquals("CALLED", response.getManagerCallStatus());
+        assertEquals(BigDecimal.valueOf(15000000), response.getTotalDeposit());
+        assertEquals(BigDecimal.valueOf(55000000), response.getEstimatedBudget());
+        assertEquals(managerId, response.getReviewedByUserId());
+
+        verify(bookingEventProducer, times(1)).publishEventInquiryConsulted(any(Booking.class));
+    }
 }
