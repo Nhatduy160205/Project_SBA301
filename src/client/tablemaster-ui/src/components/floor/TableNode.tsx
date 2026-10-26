@@ -51,8 +51,8 @@ export const TableNode: React.FC<TableNodeProps> = ({
       case 'CONFIRMED':
         if (isHostView) {
           return isSelected
-            ? 'bg-blue-100 text-blue-950 border-blue-600 ring-4 ring-blue-400/50 shadow-lg scale-105 z-20'
-            : 'bg-blue-50/90 text-blue-900 border-blue-400 hover:border-blue-600 hover:bg-blue-100/90 shadow-sm cursor-pointer';
+            ? 'bg-indigo-100 text-indigo-950 border-indigo-600 ring-4 ring-indigo-400/50 shadow-lg scale-105 z-20'
+            : 'bg-indigo-50/90 text-indigo-900 border-indigo-400 hover:border-indigo-600 hover:bg-indigo-100/90 shadow-sm cursor-pointer';
         }
         return 'bg-rose-50 text-rose-800 border-rose-300 cursor-not-allowed opacity-90';
       case 'SEATED':
@@ -67,9 +67,10 @@ export const TableNode: React.FC<TableNodeProps> = ({
               ? 'bg-amber-100 text-amber-950 border-amber-600 ring-4 ring-amber-500/50 shadow-lg scale-105 z-20'
               : 'bg-amber-50 text-amber-900 border-amber-500 hover:border-amber-600 shadow-sm ring-1 ring-amber-400/60 cursor-pointer';
           }
+          // NORMAL DINING: XANH DƯƠNG (SEATED)
           return isSelected
-            ? 'bg-amber-100 text-amber-950 border-amber-600 ring-4 ring-amber-400/50 shadow-lg scale-105 z-20'
-            : 'bg-amber-50/80 text-amber-900 border-amber-400 hover:border-amber-600 shadow-sm cursor-pointer';
+            ? 'bg-blue-100 text-blue-950 border-blue-600 ring-4 ring-blue-500/50 shadow-xl scale-105 z-20'
+            : 'bg-blue-50 text-blue-900 border-blue-500 hover:border-blue-700 shadow-md ring-2 ring-blue-400/40 cursor-pointer';
         }
         return 'bg-blue-50 text-blue-800 border-blue-400 cursor-default';
       case 'CLEANING':
@@ -86,11 +87,11 @@ export const TableNode: React.FC<TableNodeProps> = ({
       case 'HOLDING':
         return 'bg-amber-500 animate-ping';
       case 'CONFIRMED':
-        return 'bg-blue-500';
+        return 'bg-indigo-500';
       case 'SEATED':
         if (diningAlertLevel === 'OVERSTAY') return 'bg-rose-500 animate-ping';
         if (diningAlertLevel === 'LONG_DINING') return 'bg-amber-500';
-        return 'bg-emerald-500';
+        return 'bg-blue-600'; // XANH DƯƠNG (SEATED)
       case 'CLEANING':
         return 'bg-slate-400';
       default:
@@ -228,17 +229,17 @@ export const TableNode: React.FC<TableNodeProps> = ({
               ? 'bg-rose-600 text-white border-rose-300 animate-pulse ring-2 ring-rose-400'
               : diningAlertLevel === 'LONG_DINING'
               ? 'bg-amber-500 text-white border-amber-300'
-              : 'bg-stone-900 text-emerald-300 border-stone-600'
+              : 'bg-blue-600 text-white border-blue-300'
           }`}
         >
           <Clock className="w-2.5 h-2.5" />
-          <span>{diningDurationFormatted || table.seatedSince || '30p'}</span>
+          <span>{diningDurationFormatted || table.seatedSince || '0p'}</span>
         </div>
       )}
 
       {/* Confirmed Deposit Badge (Host View) */}
       {isHostView && table.status === 'CONFIRMED' && !isSelected && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap text-[8px] font-sans font-black tracking-wide px-1.5 py-0.5 rounded-full shadow-md bg-blue-600 text-white border border-blue-300 flex items-center gap-1 z-20">
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap text-[8px] font-sans font-black tracking-wide px-1.5 py-0.5 rounded-full shadow-md bg-indigo-600 text-white border border-indigo-300 flex items-center gap-1 z-20">
           <span>ĐÃ CỌC</span>
         </div>
       )}
