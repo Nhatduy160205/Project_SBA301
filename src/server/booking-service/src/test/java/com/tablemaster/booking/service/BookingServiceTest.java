@@ -48,6 +48,9 @@ class BookingServiceTest {
     @Mock
     private InvoicePdfService invoicePdfService;
 
+    @Mock
+    private com.tablemaster.booking.client.RestaurantServiceClient restaurantServiceClient;
+
     @InjectMocks
     private BookingServiceImpl bookingService;
 
@@ -457,5 +460,137 @@ class BookingServiceTest {
         assertEquals(managerId, response.getReviewedByUserId());
 
         verify(bookingEventProducer, times(1)).publishEventInquiryConsulted(any(Booking.class));
+    }
+
+    @Test
+    void getETicket_Success() {
+        UUID bookingId = UUID.randomUUID();
+        String bookingCode = "BK2610260001";
+        String salt = com.tablemaster.booking.util.QrSecurityUtil.generateSecretSalt();
+        String token64 = com.tablemaster.booking.util.QrSecurityUtil.generate64CharToken(bookingCode, salt, 1);
+
+        Booking booking = Booking.builder()
+                .id(bookingId)
+                .bookingCode(bookingCode)
+                .guestName("Đặng Hoàng Nam")
+                .guestPhone("0909123456")
+                .guestEmail("nam.dang@gmail.com")
+                .guestCount(4)
+                .bookingDate(bookingDate)
+                .status(BookingStatus.CONFIRMED)
+                .totalDeposit(BigDecimal.valueOf(300000))
+                .qrSecretSalt(salt)
+                .qrRotationCounter(1)
+                .checkinQrToken(token64)
+                .ticketIssuedAt(ZonedDateTime.now())
+                .ticketZnsStatus("DELIVERED")
+                .ticketEmailStatus("SENT")
+                .build();
+
+        when(bookingRepository.findByBookingCode(bookingCode)).thenReturn(Optional.of(booking));
+
+        com.tablemaster.booking.dto.response.ETicketResponse ticket = bookingService.getETicket(bookingCode);
+
+        assertNotNull(ticket);
+        assertEquals(bookingCode, ticket.getBookingCode());
+        assertEquals("Đặng Hoàng Nam", ticket.getGuestName());
+        assertEquals(64, ticket.getDynamicQrToken().length());
+        assertTrue(ticket.getIsConfirmed());
+        assertFalse(ticket.getIsAlreadyCheckedIn());
+        assertEquals(1, ticket.getQrRotationCounter());
+        assertEquals("DELIVERED", ticket.getTicketZnsStatus());
+    }
+
+    @Test
+    void refreshDynamicQrToken_Success() {
+        UUID bookingId = UUID.randomUUID();
+        String bookingCode = "BK2610260001";
+        String salt = com.tablemaster.booking.util.QrSecurityUtil.generateSecretSalt();
+        String initialToken = com.tablemaster.booking.util.QrSecurityUtil.generate64CharToken(bookingCode, salt, 1);
+
+        Booking booking = Booking.builder()
+                .id(bookingId)
+                .bookingCode(bookingCode)
+                .guestName("Đặng Hoàng Nam")
+                .guestPhone("0909123456")
+                .guestEmail("nam.dang@gmail.com")
+                .guestCount(4)
+                .bookingDate(bookingDate)
+                .status(BookingStatus.CONFIRMED)
+                .totalDeposit(BigDecimal.valueOf(300000))
+                .qrSecretSalt(salt)
+                .qrRotationCounter(1)
+                .checkinQrToken(initialToken)
+                .build();
+
+        when(bookingRepository.findByBookingCode(bookingCode)).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        com.tablemaster.booking.dto.response.ETicketResponse ticket = bookingService.refreshDynamicQrToken(bookingCode);
+
+        assertNotNull(ticket);
+        assertEquals(2, ticket.getQrRotationCounter());
+        assertEquals(64, ticket.getDynamicQrToken().length());
+        assertNotEquals(initialToken, ticket.getDynamicQrToken());
+        verify(bookingRepository, times(1)).save(any(Booking.class));
+    }
+
+    @Test
+    void verifyAndCheckIn_Success() {
+        UUID bookingId = UUID.randomUUID();
+        String bookingCode = "BK2610260001";
+        String salt = com.tablemaster.booking.util.QrSecurityUtil.generateSecretSalt();
+        String token64 = com.tablemaster.booking.util.QrSecurityUtil.generate64CharToken(bookingCode, salt, 1);
+
+        Booking booking = Booking.builder()
+                .id(bookingId)
+                .bookingCode(bookingCode)
+                .guestName("Đặng Hoàng Nam")
+                .guestPhone("0909123456")
+                .guestCount(4)
+                .bookingDate(bookingDate)
+                .status(BookingStatus.CONFIRMED)
+                .qrSecretSalt(salt)
+                .qrRotationCounter(1)
+                .checkinQrToken(token64)
+                .build();
+
+        when(bookingRepository.findByCheckinQrToken(token64)).thenReturn(Optional.of(booking));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        com.tablemaster.booking.dto.request.VerifyTicketRequest req =
+                com.tablemaster.booking.dto.request.VerifyTicketRequest.builder()
+                        .qrToken(token64)
+                        .scannerLocation("Cửa Sảnh Nguyễn Huệ")
+                        .build();
+
+        com.tablemaster.booking.dto.response.ETicketResponse ticket = bookingService.verifyAndCheckIn(req);
+
+        assertNotNull(ticket);
+        assertEquals("SEATED", ticket.getStatus());
+        assertTrue(ticket.getIsAlreadyCheckedIn());
+        assertNotNull(ticket.getCheckinScannedAt());
+        verify(bookingEventProducer, times(1)).publishBookingSeated(any(Booking.class));
+    }
+
+    @Test
+    void verifyAndCheckIn_ThrowsWhenAlreadySeated() {
+        String token64 = com.tablemaster.booking.util.QrSecurityUtil.generate64CharToken("BK01", "salt", 1);
+        Booking booking = Booking.builder()
+                .id(UUID.randomUUID())
+                .bookingCode("BK01")
+                .status(BookingStatus.SEATED)
+                .checkinScannedAt(ZonedDateTime.now().minusMinutes(10))
+                .checkinQrToken(token64)
+                .build();
+
+        when(bookingRepository.findByCheckinQrToken(token64)).thenReturn(Optional.of(booking));
+
+        com.tablemaster.booking.dto.request.VerifyTicketRequest req =
+                com.tablemaster.booking.dto.request.VerifyTicketRequest.builder()
+                        .qrToken(token64)
+                        .build();
+
+        assertThrows(InvalidBookingStateException.class, () -> bookingService.verifyAndCheckIn(req));
     }
 }

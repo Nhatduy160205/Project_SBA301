@@ -137,6 +137,32 @@ public class BookingEventProducer {
         broadcastWebSocket("/topic/bookings", payload);
     }
 
+    // UC-12: Cấp phát vé điện tử kèm mã QR động 64 ký tự chống giả mạo
+    public void publishTicketIssued(Booking booking) {
+        Map<String, Object> payload = createBookingPayload(booking);
+        publishEvent(KafkaConfig.TOPIC_TICKET_ISSUED, "BOOKING_EVENT", booking.getId(), "TICKET_ISSUED", payload);
+
+        broadcastWebSocket("/topic/bookings", payload);
+        broadcastWebSocket("/topic/host/checkin", payload);
+    }
+
+    // UC-12: Gửi thông báo vé điện tử qua Zalo Notification Service (ZNS)
+    public void publishZnsSent(Booking booking, String recipientPhone) {
+        Map<String, Object> payload = createBookingPayload(booking);
+        payload.put("notificationChannel", "ZNS");
+        payload.put("recipientPhone", recipientPhone);
+        payload.put("znsTemplateId", "ZNS_ETICKET_CHECKIN_CONFIRMATION");
+        publishEvent(KafkaConfig.TOPIC_NOTIFICATION_ZNS_SENT, "NOTIFICATION_EVENT", booking.getId(), "ZNS_SENT", payload);
+    }
+
+    // UC-12: Gửi thông báo vé điện tử qua Email
+    public void publishEmailSent(Booking booking, String recipientEmail) {
+        Map<String, Object> payload = createBookingPayload(booking);
+        payload.put("notificationChannel", "EMAIL");
+        payload.put("recipientEmail", recipientEmail);
+        publishEvent(KafkaConfig.TOPIC_NOTIFICATION_EMAIL_SENT, "NOTIFICATION_EVENT", booking.getId(), "EMAIL_SENT", payload);
+    }
+
     private Map<String, Object> createBookingPayload(Booking booking) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("bookingId", booking.getId());
@@ -168,6 +194,12 @@ public class BookingEventProducer {
         payload.put("callbackDeadline", booking.getCallbackDeadline());
         payload.put("managerCallStatus", booking.getManagerCallStatus());
         payload.put("consultationNotes", booking.getConsultationNotes());
+        // UC-12: E-Ticket & Dynamic QR 64 ký tự
+        payload.put("ticketIssuedAt", booking.getTicketIssuedAt());
+        payload.put("ticketZnsStatus", booking.getTicketZnsStatus());
+        payload.put("ticketEmailStatus", booking.getTicketEmailStatus());
+        payload.put("qrRotationCounter", booking.getQrRotationCounter() != null ? booking.getQrRotationCounter() : 1);
+        payload.put("checkinScannedAt", booking.getCheckinScannedAt());
 
         if (booking.getBookingTables() != null && !booking.getBookingTables().isEmpty()) {
             List<String> tableIds = booking.getBookingTables().stream()

@@ -143,6 +143,28 @@ public class Booking {
     @Column(name = "checkin_qr_token", unique = true, length = 255)
     private String checkinQrToken;
 
+    // UC-12: Vé điện tử E-Ticket & Dynamic QR Code 64 ký tự chống giả mạo
+    @Column(name = "ticket_issued_at")
+    private ZonedDateTime ticketIssuedAt;
+
+    @Column(name = "ticket_zns_status", length = 30)
+    @Builder.Default
+    private String ticketZnsStatus = "PENDING";
+
+    @Column(name = "ticket_email_status", length = 30)
+    @Builder.Default
+    private String ticketEmailStatus = "PENDING";
+
+    @Column(name = "qr_secret_salt", length = 64)
+    private String qrSecretSalt;
+
+    @Column(name = "qr_rotation_counter")
+    @Builder.Default
+    private Integer qrRotationCounter = 1;
+
+    @Column(name = "checkin_scanned_at")
+    private ZonedDateTime checkinScannedAt;
+
     @Column(name = "seated_at")
     private ZonedDateTime seatedAt;
 

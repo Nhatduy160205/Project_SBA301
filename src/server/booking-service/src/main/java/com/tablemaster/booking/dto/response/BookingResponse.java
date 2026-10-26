@@ -52,6 +52,12 @@ public class BookingResponse {
     private UUID reviewedByUserId;
     private ZonedDateTime paymentDeadline;
     private String checkinQrToken;
+    // UC-12: E-Ticket & Dynamic QR 64 ký tự
+    private ZonedDateTime ticketIssuedAt;
+    private String ticketZnsStatus;
+    private String ticketEmailStatus;
+    private Integer qrRotationCounter;
+    private ZonedDateTime checkinScannedAt;
     private ZonedDateTime seatedAt;
     private ZonedDateTime completedAt;
     private ZonedDateTime createdAt;
@@ -97,6 +103,11 @@ public class BookingResponse {
                 .reviewedByUserId(booking.getReviewedByUserId())
                 .paymentDeadline(booking.getPaymentDeadline())
                 .checkinQrToken(booking.getCheckinQrToken())
+                .ticketIssuedAt(booking.getTicketIssuedAt())
+                .ticketZnsStatus(booking.getTicketZnsStatus())
+                .ticketEmailStatus(booking.getTicketEmailStatus())
+                .qrRotationCounter(booking.getQrRotationCounter())
+                .checkinScannedAt(booking.getCheckinScannedAt())
                 .seatedAt(booking.getSeatedAt())
                 .completedAt(booking.getCompletedAt())
                 .createdAt(booking.getCreatedAt())
