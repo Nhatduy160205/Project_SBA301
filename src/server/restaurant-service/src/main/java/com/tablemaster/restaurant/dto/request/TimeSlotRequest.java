@@ -1,4 +1,4 @@
-package com.tablemaster.restaurant.dto;
+package com.tablemaster.restaurant.dto.request;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -9,16 +9,12 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalTime;
-import java.time.ZonedDateTime;
-import java.util.UUID;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class TimeSlotDto {
-    private UUID id;
-
+public class TimeSlotRequest {
     @NotBlank(message = "Tên khung giờ không được để trống")
     private String slotName;
 
@@ -33,5 +29,4 @@ public class TimeSlotDto {
     private Integer maxCapacity;
 
     private Boolean isActive;
-    private ZonedDateTime createdAt;
 }

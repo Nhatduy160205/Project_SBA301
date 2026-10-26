@@ -1,6 +1,5 @@
-package com.tablemaster.restaurant.dto;
+package com.tablemaster.restaurant.dto.response;
 
-import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,16 +13,11 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class MenuCategoryDto {
+public class MenuCategoryResponse {
     private UUID id;
-
-    @NotBlank(message = "Tên danh mục không được để trống")
     private String name;
-
     private Integer displayOrder;
     private Boolean isActive;
     private ZonedDateTime createdAt;
-
-    // Optional items belonging to this category
-    private List<MenuItemDto> items;
+    private List<MenuItemResponse> items;
 }

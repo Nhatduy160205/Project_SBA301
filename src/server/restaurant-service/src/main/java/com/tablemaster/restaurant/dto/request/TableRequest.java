@@ -1,4 +1,4 @@
-package com.tablemaster.restaurant.dto;
+package com.tablemaster.restaurant.dto.request;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -9,18 +9,14 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.ZonedDateTime;
 import java.util.UUID;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class TableDto {
+public class TableRequest {
     private UUID id;
-
-    @NotNull(message = "ID mặt bằng không được để trống")
-    private UUID floorPlanId;
 
     @NotBlank(message = "Mã bàn không được để trống")
     private String tableCode;
@@ -37,17 +33,4 @@ public class TableDto {
 
     private BigDecimal customDeposit;
     private Boolean isActive;
-
-    @NotNull(message = "Tọa độ X không được để trống")
-    private Float posX;
-
-    @NotNull(message = "Tọa độ Y không được để trống")
-    private Float posY;
-
-    private Float width;
-    private Float height;
-    private Float rotation;
-
-    private String shape;
-    private ZonedDateTime updatedAt;
 }

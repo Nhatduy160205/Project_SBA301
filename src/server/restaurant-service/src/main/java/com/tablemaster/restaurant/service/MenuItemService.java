@@ -1,6 +1,7 @@
 package com.tablemaster.restaurant.service;
 
-import com.tablemaster.restaurant.dto.MenuItemDto;
+import com.tablemaster.restaurant.dto.request.MenuItemRequest;
+import com.tablemaster.restaurant.dto.response.MenuItemResponse;
 import com.tablemaster.restaurant.entity.MenuCategory;
 import com.tablemaster.restaurant.entity.MenuItem;
 import com.tablemaster.restaurant.exception.ErrorCode;
@@ -24,7 +25,7 @@ public class MenuItemService {
     private final MenuCategoryRepository categoryRepository;
 
     @Transactional(readOnly = true)
-    public List<MenuItemDto> getAllMenuItems(UUID categoryId, Boolean activeOnly, Boolean preorderOnly) {
+    public List<MenuItemResponse> getAllMenuItems(UUID categoryId, Boolean activeOnly, Boolean preorderOnly) {
         List<MenuItem> items;
         if (categoryId != null) {
             items = Boolean.TRUE.equals(activeOnly)
@@ -42,65 +43,65 @@ public class MenuItemService {
                 .collect(Collectors.toMap(MenuCategory::getId, MenuCategory::getName));
 
         return items.stream()
-                .map(item -> mapToDto(item, categoryNames.getOrDefault(item.getCategoryId(), "")))
+                .map(item -> mapToResponse(item, categoryNames.getOrDefault(item.getCategoryId(), "")))
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
-    public MenuItemDto getMenuItemById(UUID id) {
+    public MenuItemResponse getMenuItemById(UUID id) {
         MenuItem item = menuItemRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.MENU_ITEM_NOT_FOUND));
         String catName = categoryRepository.findById(item.getCategoryId())
                 .map(MenuCategory::getName).orElse("");
-        return mapToDto(item, catName);
+        return mapToResponse(item, catName);
     }
 
     @Transactional
-    public MenuItemDto createMenuItem(MenuItemDto dto) {
-        MenuCategory category = categoryRepository.findById(dto.getCategoryId())
+    public MenuItemResponse createMenuItem(MenuItemRequest request) {
+        MenuCategory category = categoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.CATEGORY_NOT_FOUND));
 
         MenuItem item = MenuItem.builder()
-                .categoryId(dto.getCategoryId())
-                .name(dto.getName())
-                .description(dto.getDescription())
-                .price(dto.getPrice())
-                .imageUrl(dto.getImageUrl())
-                .isPreorderAvailable(dto.getIsPreorderAvailable() != null ? dto.getIsPreorderAvailable() : true)
-                .isActive(dto.getIsActive() != null ? dto.getIsActive() : true)
+                .categoryId(request.getCategoryId())
+                .name(request.getName())
+                .description(request.getDescription())
+                .price(request.getPrice())
+                .imageUrl(request.getImageUrl())
+                .isPreorderAvailable(request.getIsPreorderAvailable() != null ? request.getIsPreorderAvailable() : true)
+                .isActive(request.getIsActive() != null ? request.getIsActive() : true)
                 .build();
 
         MenuItem saved = menuItemRepository.save(item);
-        return mapToDto(saved, category.getName());
+        return mapToResponse(saved, category.getName());
     }
 
     @Transactional
-    public MenuItemDto updateMenuItem(UUID id, MenuItemDto dto) {
+    public MenuItemResponse updateMenuItem(UUID id, MenuItemRequest request) {
         MenuItem item = menuItemRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.MENU_ITEM_NOT_FOUND));
 
-        MenuCategory category = categoryRepository.findById(dto.getCategoryId())
+        MenuCategory category = categoryRepository.findById(request.getCategoryId())
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.CATEGORY_NOT_FOUND));
 
-        item.setCategoryId(dto.getCategoryId());
-        item.setName(dto.getName());
-        item.setDescription(dto.getDescription());
-        item.setPrice(dto.getPrice());
-        if (dto.getImageUrl() != null) item.setImageUrl(dto.getImageUrl());
-        if (dto.getIsPreorderAvailable() != null) item.setIsPreorderAvailable(dto.getIsPreorderAvailable());
-        if (dto.getIsActive() != null) item.setIsActive(dto.getIsActive());
+        item.setCategoryId(request.getCategoryId());
+        item.setName(request.getName());
+        item.setDescription(request.getDescription());
+        item.setPrice(request.getPrice());
+        if (request.getImageUrl() != null) item.setImageUrl(request.getImageUrl());
+        if (request.getIsPreorderAvailable() != null) item.setIsPreorderAvailable(request.getIsPreorderAvailable());
+        if (request.getIsActive() != null) item.setIsActive(request.getIsActive());
 
         MenuItem saved = menuItemRepository.save(item);
-        return mapToDto(saved, category.getName());
+        return mapToResponse(saved, category.getName());
     }
 
     @Transactional
-    public MenuItemDto toggleActive(UUID id) {
+    public MenuItemResponse toggleActive(UUID id) {
         MenuItem item = menuItemRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.MENU_ITEM_NOT_FOUND));
         item.setIsActive(!item.getIsActive());
         String catName = categoryRepository.findById(item.getCategoryId()).map(MenuCategory::getName).orElse("");
-        return mapToDto(menuItemRepository.save(item), catName);
+        return mapToResponse(menuItemRepository.save(item), catName);
     }
 
     @Transactional
@@ -111,8 +112,8 @@ public class MenuItemService {
         menuItemRepository.deleteById(id);
     }
 
-    private MenuItemDto mapToDto(MenuItem entity, String categoryName) {
-        return MenuItemDto.builder()
+    public MenuItemResponse mapToResponse(MenuItem entity, String categoryName) {
+        return MenuItemResponse.builder()
                 .id(entity.getId())
                 .categoryId(entity.getCategoryId())
                 .categoryName(categoryName)

@@ -1,6 +1,6 @@
 package com.tablemaster.restaurant.exception;
 
-import com.tablemaster.restaurant.dto.ApiResponse;
+import com.tablemaster.restaurant.dto.response.ApiResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
