@@ -1,10 +1,6 @@
 package com.tablemaster.booking.service;
 
-import com.tablemaster.booking.dto.request.ApproveDepositRequest;
-import com.tablemaster.booking.dto.request.CheckInRequest;
-import com.tablemaster.booking.dto.request.CreateBookingRequest;
-import com.tablemaster.booking.dto.request.PreorderItemRequest;
-import com.tablemaster.booking.dto.request.TransferTableRequest;
+import com.tablemaster.booking.dto.request.*;
 import com.tablemaster.booking.dto.response.BookingResponse;
 import com.tablemaster.booking.entity.*;
 import com.tablemaster.booking.enums.BookingStatus;
@@ -428,6 +424,143 @@ public class BookingServiceImpl implements BookingService {
 
         // Bắn Kafka và WebSocket STOMP đồng bộ tức thời sang Tablet Lễ tân và KDS Bếp (UC-08)
         bookingEventProducer.publishSpecialRequestsUpdated(saved);
+
+        return BookingResponse.fromEntity(saved);
+    }
+
+    // =========================================================================
+    // UC-10: Đặt tiệc Sinh nhật / Sự kiện Bao trọn tầng (Private Banquet Booking)
+    // =========================================================================
+
+    @Override
+    @Transactional
+    public BookingResponse createEventInquiry(CreateEventInquiryRequest request, UUID userId) {
+        log.info("Creating private banquet / event inquiry for: {}, company: {}, guests: {}, eventType: {}",
+                request.getGuestName(), request.getCompanyName(), request.getGuestCount(), request.getEventType());
+
+        long countToday = bookingRepository.countByBookingDate(request.getBookingDate());
+        String datePrefix = request.getBookingDate().format(DateTimeFormatter.ofPattern("yyMMdd"));
+        String bookingCode = String.format("EV%s%04d", datePrefix, countToday + 1);
+
+        UUID customerUserId = userId != null ? userId : UUID.fromString("a0000000-0000-0000-0000-000000000005");
+
+        // Quy ước cam kết gọi tư vấn trong 15 phút (15-Minute Callback SLA)
+        ZonedDateTime callbackDeadline = ZonedDateTime.now().plusMinutes(15);
+
+        // Chuẩn bị ghi chú tổng hợp tiệc sự kiện
+        StringBuilder notesBuilder = new StringBuilder();
+        if (request.getCompanyName() != null && !request.getCompanyName().isBlank()) {
+            notesBuilder.append("Đơn vị: ").append(request.getCompanyName()).append(". ");
+        }
+        notesBuilder.append("Loại hình: ").append(request.getEventType());
+        if (request.getTargetFloor() != null) {
+            notesBuilder.append(" (Tầng ").append(request.getTargetFloor()).append(")");
+        }
+        notesBuilder.append(". Số khách: ").append(request.getGuestCount()).append(" người. ");
+        if (request.getEstimatedBudget() != null) {
+            notesBuilder.append("Ngân sách dự kiến: ").append(request.getEstimatedBudget()).append(" đ. ");
+        }
+        if (Boolean.TRUE.equals(request.getStageAudioRequired())) {
+            notesBuilder.append("Cần setup âm thanh & micro sân khấu. ");
+        }
+        if (Boolean.TRUE.equals(request.getDecorationRequired())) {
+            notesBuilder.append("Cần setup hoa tươi & backdrop trang trí. ");
+        }
+        if (request.getMenuPreference() != null) {
+            notesBuilder.append("Menu mong muốn: ").append(request.getMenuPreference()).append(". ");
+        }
+        if (request.getSpecialNotes() != null && !request.getSpecialNotes().isBlank()) {
+            notesBuilder.append("Ghi chú thêm: ").append(request.getSpecialNotes());
+        }
+
+        UUID slotId = request.getTimeSlotId() != null
+                ? request.getTimeSlotId()
+                : UUID.fromString("b1000000-0000-0000-0000-000000000002"); // Slot ca tối mặc định
+
+        Booking booking = Booking.builder()
+                .bookingCode(bookingCode)
+                .userId(customerUserId)
+                .guestName(request.getGuestName())
+                .guestPhone(request.getGuestPhone())
+                .guestEmail(request.getGuestEmail())
+                .bookingDate(request.getBookingDate())
+                .timeSlotId(slotId)
+                .guestCount(request.getGuestCount())
+                .totalDeposit(BigDecimal.ZERO)
+                .status(BookingStatus.EVENT_INQUIRY)
+                .eventType(request.getEventType())
+                .targetFloor(request.getTargetFloor() != null ? request.getTargetFloor() : 3)
+                .companyName(request.getCompanyName())
+                .estimatedBudget(request.getEstimatedBudget())
+                .stageAudioRequired(Boolean.TRUE.equals(request.getStageAudioRequired()))
+                .decorationRequired(Boolean.TRUE.equals(request.getDecorationRequired()))
+                .callbackDeadline(callbackDeadline)
+                .managerCallStatus("PENDING_CALL")
+                .specialNotes(notesBuilder.toString().trim())
+                .staffNotes("Cam kết Quản lý ca gọi tư vấn trực tiếp cho khách trong 15 phút (Hạn chót: " + callbackDeadline.format(DateTimeFormatter.ofPattern("HH:mm")) + ")")
+                .bookingTables(new ArrayList<>())
+                .preorderItems(new ArrayList<>())
+                .build();
+
+        Booking saved = bookingRepository.save(booking);
+        log.info("Saved EVENT_INQUIRY {}: deadline={}", saved.getBookingCode(), saved.getCallbackDeadline());
+
+        // Phát sự kiện Kafka & WebSocket báo chuông đến tài khoản Quản lý ca (Shift Manager)
+        bookingEventProducer.publishEventInquiryCreated(saved);
+
+        return BookingResponse.fromEntity(saved);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BookingResponse> getEventInquiries() {
+        return bookingRepository.findByStatusOrderByCreatedAtDesc(BookingStatus.EVENT_INQUIRY)
+                .stream()
+                .map(BookingResponse::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public BookingResponse updateEventConsultation(UUID bookingId, UpdateEventConsultationRequest request, UUID managerUserId) {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new BookingNotFoundException(bookingId));
+
+        if (request.getManagerCallStatus() != null) {
+            booking.setManagerCallStatus(request.getManagerCallStatus());
+        }
+        if (request.getConsultationNotes() != null) {
+            booking.setConsultationNotes(request.getConsultationNotes());
+            booking.setStaffNotes("Quản lý ca (" + (managerUserId != null ? managerUserId : "Host") + ") tư vấn: " + request.getConsultationNotes());
+        }
+        if (request.getAgreedBudget() != null) {
+            booking.setEstimatedBudget(request.getAgreedBudget());
+        }
+        if (request.getAgreedDeposit() != null) {
+            booking.setTotalDeposit(request.getAgreedDeposit());
+        }
+        if (managerUserId != null) {
+            booking.setReviewedByUserId(managerUserId);
+        }
+
+        // Chuyển trạng thái nếu có chỉ định (VD: AWAITING_PAYMENT, CONFIRMED, REJECTED)
+        if (request.getTargetBookingStatus() != null) {
+            try {
+                BookingStatus targetStatus = BookingStatus.valueOf(request.getTargetBookingStatus());
+                booking.setStatus(targetStatus);
+                if (targetStatus == BookingStatus.AWAITING_PAYMENT) {
+                    booking.setPaymentDeadline(ZonedDateTime.now().plusHours(2));
+                }
+            } catch (IllegalArgumentException e) {
+                log.warn("Invalid target booking status: {}", request.getTargetBookingStatus());
+            }
+        }
+
+        Booking saved = bookingRepository.save(booking);
+        log.info("Updated event consultation for {}: callStatus={}, status={}",
+                saved.getBookingCode(), saved.getManagerCallStatus(), saved.getStatus());
+
+        bookingEventProducer.publishEventInquiryConsulted(saved);
 
         return BookingResponse.fromEntity(saved);
     }

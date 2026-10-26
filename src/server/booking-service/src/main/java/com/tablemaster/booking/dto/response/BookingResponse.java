@@ -39,6 +39,16 @@ public class BookingResponse {
     private String dietaryNotes;
     private Integer babyChairCount;
     private Boolean candleSetup;
+    // UC-10: Private Banquet & Event Inquiry
+    private String eventType;
+    private Integer targetFloor;
+    private String companyName;
+    private BigDecimal estimatedBudget;
+    private Boolean stageAudioRequired;
+    private Boolean decorationRequired;
+    private ZonedDateTime callbackDeadline;
+    private String managerCallStatus;
+    private String consultationNotes;
     private UUID reviewedByUserId;
     private ZonedDateTime paymentDeadline;
     private String checkinQrToken;
@@ -75,6 +85,15 @@ public class BookingResponse {
                 .dietaryNotes(booking.getDietaryNotes())
                 .babyChairCount(booking.getBabyChairCount())
                 .candleSetup(booking.getCandleSetup())
+                .eventType(booking.getEventType())
+                .targetFloor(booking.getTargetFloor())
+                .companyName(booking.getCompanyName())
+                .estimatedBudget(booking.getEstimatedBudget())
+                .stageAudioRequired(booking.getStageAudioRequired())
+                .decorationRequired(booking.getDecorationRequired())
+                .callbackDeadline(booking.getCallbackDeadline())
+                .managerCallStatus(booking.getManagerCallStatus())
+                .consultationNotes(booking.getConsultationNotes())
                 .reviewedByUserId(booking.getReviewedByUserId())
                 .paymentDeadline(booking.getPaymentDeadline())
                 .checkinQrToken(booking.getCheckinQrToken())

@@ -12,6 +12,7 @@ import {
   MapPin,
   Clock,
   Phone,
+  Building2,
 } from 'lucide-react';
 
 import type { ActiveView } from '../components/common/Navbar';
@@ -19,9 +20,10 @@ import { SIGNATURE_DISHES } from '../data/mockData';
 
 interface LandingPageProps {
   onNavigate: (view: ActiveView, floor?: 1 | 2 | 3) => void;
+  onOpenBanquetModal?: () => void;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, onOpenBanquetModal }) => {
   const [activeSlide, setActiveSlide] = useState(0);
 
   const heroImages = [
@@ -175,7 +177,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-2 flex items-center gap-4">
+              <div className="pt-2 flex flex-wrap items-center gap-3">
                 <button
                   onClick={() => onNavigate('booking')}
                   className="btn-tan px-8 py-3.5 text-sm font-semibold flex items-center gap-2 shadow-md hover:brightness-105 active:scale-95 transition-all cursor-pointer"
@@ -183,6 +185,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
                   <span>Đặt Bàn Ngay</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
+                {onOpenBanquetModal && (
+                  <button
+                    onClick={onOpenBanquetModal}
+                    className="px-6 py-3.5 rounded-full border border-[#8C6A43] bg-white/90 hover:bg-[#FAF4EB] text-[#8C6A43] text-sm font-bold flex items-center gap-2 shadow-sm transition-all cursor-pointer hover:border-[#735534]"
+                  >
+                    <Building2 className="w-4 h-4" />
+                    <span>Đặt Tiệc Sự Kiện (20 - 100 Khách)</span>
+                  </button>
+                )}
               </div>
             </motion.div>
 

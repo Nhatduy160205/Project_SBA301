@@ -21,13 +21,23 @@ export interface BackendBooking {
   timeSlotId: string;
   guestCount: number;
   totalDeposit: number;
-  status: 'PENDING_REVIEW' | 'AWAITING_PAYMENT' | 'CONFIRMED' | 'SEATED' | 'COMPLETED' | 'REJECTED' | 'EXPIRED' | 'CANCELLED' | 'NO_SHOW';
+  status: 'PENDING_REVIEW' | 'AWAITING_PAYMENT' | 'CONFIRMED' | 'SEATED' | 'COMPLETED' | 'REJECTED' | 'EXPIRED' | 'CANCELLED' | 'NO_SHOW' | 'EVENT_INQUIRY';
   specialNotes?: string;
   staffNotes?: string;
   occasion?: string;
   dietaryNotes?: string;
   babyChairCount?: number;
   candleSetup?: boolean;
+  // UC-10: Đặt tiệc đoàn đông / Bao trọn tầng (Private Banquet & Event Inquiry)
+  eventType?: string;
+  targetFloor?: number;
+  companyName?: string;
+  estimatedBudget?: number;
+  stageAudioRequired?: boolean;
+  decorationRequired?: boolean;
+  callbackDeadline?: string;
+  managerCallStatus?: string;
+  consultationNotes?: string;
   reviewedByUserId?: string;
   paymentDeadline?: string;
   checkinQrToken?: string;
@@ -885,6 +895,88 @@ export const bookingApi = {
           color: 'GREEN',
           remainingSeconds: 0,
         },
+      };
+    }
+  },
+
+  /**
+   * 17. Đăng ký đặt tiệc sự kiện đoàn đông / bao trọn tầng (UC-10)
+   * POST /api/v1/bookings/event-inquiry
+   */
+  async createEventInquiry(payload: any): Promise<ApiResponse<BackendBooking>> {
+    try {
+      const res = await fetch(`${BASE_URL}/event-inquiry`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': SEED_DATA.USER_ID,
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('Không thể gửi yêu cầu đặt tiệc sự kiện');
+      return res.json();
+    } catch (e: any) {
+      console.warn('Fallback createEventInquiry:', e.message);
+      const code = `EV${new Date().toISOString().slice(2, 10).replace(/-/g, '')}0099`;
+      return {
+        success: true,
+        message: 'Yêu cầu đặt tiệc sự kiện đã được ghi nhận. Quản lý ca sẽ liên hệ tư vấn trong 15 phút',
+        data: {
+          id: `ev-${Date.now()}`,
+          bookingCode: code,
+          status: 'EVENT_INQUIRY',
+          managerCallStatus: 'PENDING_CALL',
+          callbackDeadline: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+          ...payload,
+        } as any,
+      };
+    }
+  },
+
+  /**
+   * 18. Lấy danh sách đơn đặt tiệc sự kiện đoàn đông (UC-10)
+   * GET /api/v1/bookings/event-inquiries
+   */
+  async getEventInquiries(): Promise<ApiResponse<BackendBooking[]>> {
+    try {
+      const res = await fetch(`${BASE_URL}/event-inquiries`);
+      if (!res.ok) throw new Error('Không thể lấy danh sách đơn tiệc sự kiện');
+      return res.json();
+    } catch (e: any) {
+      console.warn('Fallback getEventInquiries:', e.message);
+      return {
+        success: true,
+        message: 'Danh sách đơn sự kiện (fallback)',
+        data: [],
+      };
+    }
+  },
+
+  /**
+   * 19. Cập nhật kết quả tư vấn sau cuộc gọi 15 phút của Quản lý ca (UC-10)
+   * PUT /api/v1/bookings/{id}/event-consultation
+   */
+  async updateEventConsultation(
+    bookingId: string,
+    payload: any
+  ): Promise<ApiResponse<BackendBooking>> {
+    try {
+      const res = await fetch(`${BASE_URL}/${bookingId}/event-consultation`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': SEED_DATA.USER_ID,
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('Không thể cập nhật kết quả tư vấn');
+      return res.json();
+    } catch (e: any) {
+      console.warn('Fallback updateEventConsultation:', e.message);
+      return {
+        success: true,
+        message: 'Cập nhật tư vấn sự kiện thành công (fallback)',
+        data: { id: bookingId, ...payload } as any,
       };
     }
   },

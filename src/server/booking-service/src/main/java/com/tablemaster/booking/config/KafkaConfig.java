@@ -17,6 +17,18 @@ public class KafkaConfig {
     public static final String TOPIC_TABLE_UPDATED = "booking.table.updated";
     public static final String TOPIC_PAYMENT_SUCCESS = "payment.success";
     public static final String TOPIC_BOOKING_SPECIAL_REQUESTS = "booking.special-notes.updated";
+    public static final String TOPIC_EVENT_INQUIRY_CREATED = "booking.event-inquiry.created";
+    public static final String TOPIC_EVENT_INQUIRY_CONSULTED = "booking.event-inquiry.consulted";
+
+    @Bean
+    public NewTopic eventInquiryCreatedTopic() {
+        return TopicBuilder.name(TOPIC_EVENT_INQUIRY_CREATED).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public NewTopic eventInquiryConsultedTopic() {
+        return TopicBuilder.name(TOPIC_EVENT_INQUIRY_CONSULTED).partitions(3).replicas(1).build();
+    }
 
     @Bean
     public NewTopic bookingSpecialRequestsTopic() {

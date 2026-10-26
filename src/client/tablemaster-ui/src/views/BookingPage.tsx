@@ -175,6 +175,7 @@ interface BookingPageProps {
   onAddBooking: (newBooking: BookingDetails) => void;
   rebookData?: BookingDetails | null;
   onClearRebook?: () => void;
+  onOpenBanquetModal?: () => void;
 }
 
 export const BookingPage: React.FC<BookingPageProps> = ({
@@ -184,6 +185,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   onAddBooking,
   rebookData,
   onClearRebook,
+  onOpenBanquetModal,
 }) => {
   // Toast thông báo Re-book 1 chạm
   const [rebookToast, setRebookToast] = useState<string | null>(null);
@@ -836,6 +838,41 @@ export const BookingPage: React.FC<BookingPageProps> = ({
         </div>
       </div>
 
+      {/* UC-10: Large Banquet & Floor Buyout CTA Banner */}
+      {onOpenBanquetModal && (
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#1E1109] via-[#2D1B0F] to-[#1E1109] border-2 border-amber-500/50 p-6 sm:p-7 shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center shrink-0 shadow-lg font-bold">
+              <Sparkles className="w-7 h-7" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-bold uppercase tracking-widest bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2.5 py-0.5 rounded-full">
+                  Private Banquet & Rooftop Buyout (UC-10)
+                </span>
+                <span className="text-xs text-amber-200/70 font-mono">
+                  SLA Tư Vấn Trực Tiếp 15 Phút
+                </span>
+              </div>
+              <h3 className="font-serif text-xl sm:text-2xl font-bold text-white tracking-tight">
+                Đặt Tiệc Đoàn Đông (20 - 100 Khách) hoặc Bao Trọn Tầng Rooftop
+              </h3>
+              <p className="text-xs sm:text-sm text-stone-300 max-w-2xl leading-relaxed">
+                Tổ chức sinh nhật sang trọng, Year-End Party, hội thảo công ty hay gala dinner. Quản lý ca gọi tư vấn trực tiếp thực đơn và lên thiết kế hoa tươi, âm thanh sân khấu trong 15 phút.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenBanquetModal}
+            className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs sm:text-sm font-bold flex items-center gap-2.5 shadow-xl hover:shadow-amber-500/20 transition-all cursor-pointer shrink-0"
+          >
+            <span>Tư Vấn Đặt Tiệc Sự Kiện Ngay</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Success banner if booking created */}
       <AnimatePresence>
         {bookingSuccess && (
@@ -1029,6 +1066,24 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                         );
                       })}
                     </div>
+
+                    {partySize >= 12 && onOpenBanquetModal && (
+                      <div className="p-3 bg-amber-500/10 border border-amber-400/40 rounded-xl flex items-center justify-between text-xs text-amber-950 mt-2">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>
+                            Đoàn từ <strong>15 - 100 khách</strong> hoặc muốn <strong>bao trọn tầng Rooftop</strong>?
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={onOpenBanquetModal}
+                          className="underline font-bold text-amber-800 hover:text-amber-950 ml-2 whitespace-nowrap cursor-pointer"
+                        >
+                          Đăng ký Private Banquet &rarr;
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Date Strip & Calendar Picker */}

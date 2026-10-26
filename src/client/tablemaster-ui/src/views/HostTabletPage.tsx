@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   Clock,
@@ -28,6 +28,9 @@ import {
   ShieldAlert,
   Edit3,
   ChefHat,
+  Phone,
+  PhoneCall,
+  Calendar,
 } from 'lucide-react';
 import type { TableItem, TableStatus, BookingDetails, TableOrderRecord } from '../types';
 import { SIGNATURE_DISHES } from '../data/mockData';
@@ -43,6 +46,7 @@ interface HostTabletPageProps {
   onMergeTables?: (sourceTableId: string, targetTableId: string) => void;
   onNavigateToWaiter?: () => void;
   onNavigateToKds?: () => void;
+  onUpdateBooking?: (updatedBooking: BookingDetails) => void;
 }
 
 export const HostTabletPage: React.FC<HostTabletPageProps> = ({
@@ -55,6 +59,7 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
   onMergeTables,
   onNavigateToWaiter,
   onNavigateToKds,
+  onUpdateBooking,
 }) => {
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -114,6 +119,121 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
     finalPaid: number;
     paymentMethod: string;
   } | null>(null);
+
+  // UC-10: Private Banquet & Event Inquiries Drawer State
+  const [isEventDrawerOpen, setIsEventDrawerOpen] = useState(false);
+  const [eventFilter, setEventFilter] = useState<'ALL' | 'PENDING' | 'CONSULTED'>('ALL');
+  const [selectedInquiryForCall, setSelectedInquiryForCall] = useState<BookingDetails | null>(null);
+  const [consultationCallStatus, setConsultationCallStatus] = useState<'CALLED' | 'PROPOSAL_SENT' | 'ACCEPTED' | 'REJECTED'>('CALLED');
+  const [consultationNotesInput, setConsultationNotesInput] = useState('');
+  const [agreedBudgetInput, setAgreedBudgetInput] = useState<number>(0);
+  const [agreedDepositInput, setAgreedDepositInput] = useState<number>(0);
+  const [targetBookingStatus, setTargetBookingStatus] = useState<BookingDetails['status']>('EVENT_INQUIRY');
+  const [isSavingConsultation, setIsSavingConsultation] = useState(false);
+  const [simulatedCallInquiryId, setSimulatedCallInquiryId] = useState<string | null>(null);
+
+  // Live timer tick for 15-minute SLA countdown
+  const [, setTimerTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimerTick((t) => t + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Filter event inquiries
+  const eventInquiries = bookings.filter(
+    (b) => b.status === 'EVENT_INQUIRY' || b.eventType != null
+  );
+  const pendingEventInquiries = eventInquiries.filter(
+    (b) => b.managerCallStatus === 'PENDING_CALL' || !b.managerCallStatus
+  );
+  const pendingInquiriesCount = pendingEventInquiries.length;
+
+  const calculateSlaRemainingSeconds = (inquiry: BookingDetails): number => {
+    if (inquiry.callbackDeadline) {
+      const deadlineMs = new Date(inquiry.callbackDeadline).getTime();
+      if (!isNaN(deadlineMs)) {
+        return Math.max(0, Math.floor((deadlineMs - Date.now()) / 1000));
+      }
+    }
+    return 15 * 60;
+  };
+
+  const formatSlaTimer = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const handleOpenConsultationModal = (inquiry: BookingDetails) => {
+    setSelectedInquiryForCall(inquiry);
+    setConsultationCallStatus(
+      inquiry.managerCallStatus && inquiry.managerCallStatus !== 'PENDING_CALL'
+        ? inquiry.managerCallStatus
+        : 'CALLED'
+    );
+    setConsultationNotesInput(inquiry.consultationNotes || '');
+    setAgreedBudgetInput(inquiry.estimatedBudget || 50000000);
+    setAgreedDepositInput(inquiry.depositAmount || Math.round((inquiry.estimatedBudget || 50000000) * 0.3));
+    setTargetBookingStatus(inquiry.status || 'EVENT_INQUIRY');
+  };
+
+  const handleSimulateCall = (inquiry: BookingDetails) => {
+    setSimulatedCallInquiryId(inquiry.bookingId);
+    showToast(`Đang kết nối cuộc gọi tới Quý khách ${inquiry.customerName} (${inquiry.phone})...`);
+    setTimeout(() => {
+      setSimulatedCallInquiryId(null);
+      handleOpenConsultationModal(inquiry);
+    }, 1200);
+  };
+
+  const handleSaveConsultation = async () => {
+    if (!selectedInquiryForCall) return;
+    setIsSavingConsultation(true);
+    try {
+      await bookingApi.updateEventConsultation(selectedInquiryForCall.bookingId, {
+        managerCallStatus: consultationCallStatus,
+        consultationNotes: consultationNotesInput,
+        agreedBudget: agreedBudgetInput,
+        agreedDeposit: agreedDepositInput,
+        targetBookingStatus: targetBookingStatus,
+      });
+
+      const updatedBooking: BookingDetails = {
+        ...selectedInquiryForCall,
+        managerCallStatus: consultationCallStatus,
+        consultationNotes: consultationNotesInput,
+        estimatedBudget: agreedBudgetInput,
+        depositAmount: agreedDepositInput,
+        status: targetBookingStatus,
+      };
+
+      if (onUpdateBooking) {
+        onUpdateBooking(updatedBooking);
+      }
+
+      showToast(`Đã lưu biên bản tư vấn & cập nhật trạng thái đơn ${selectedInquiryForCall.bookingId}`);
+      setSelectedInquiryForCall(null);
+    } catch (err: any) {
+      console.warn('Lỗi lưu tư vấn:', err);
+      const updatedBooking: BookingDetails = {
+        ...selectedInquiryForCall,
+        managerCallStatus: consultationCallStatus,
+        consultationNotes: consultationNotesInput,
+        estimatedBudget: agreedBudgetInput,
+        depositAmount: agreedDepositInput,
+        status: targetBookingStatus,
+      };
+      if (onUpdateBooking) {
+        onUpdateBooking(updatedBooking);
+      }
+      showToast(`Đã ghi nhận tư vấn đơn ${selectedInquiryForCall.bookingId}`);
+      setSelectedInquiryForCall(null);
+    } finally {
+      setIsSavingConsultation(false);
+    }
+  };
 
   // Calculate table metrics
   const totalTables = tables.length;
@@ -570,6 +690,21 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
               </button>
             )}
 
+            {/* UC-10: Large Banquet & Floor Buyout Drawer trigger */}
+            <button
+              type="button"
+              onClick={() => setIsEventDrawerOpen(true)}
+              className="relative px-4 py-2 rounded-2xl bg-gradient-to-r from-purple-900 to-indigo-900 hover:from-purple-800 hover:to-indigo-800 text-white text-xs font-bold flex items-center gap-2 transition-all shadow-md cursor-pointer border border-purple-400/40"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300" />
+              <span>Tiệc Sự Kiện & Rooftop (UC-10)</span>
+              {pendingInquiriesCount > 0 && (
+                <span className="w-5 h-5 rounded-full bg-rose-500 text-white font-mono text-[10px] flex items-center justify-center animate-bounce shadow-xs">
+                  {pendingInquiriesCount}
+                </span>
+              )}
+            </button>
+
             <button
               type="button"
               onClick={() => setIsScannerOpen(true)}
@@ -580,6 +715,38 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
             </button>
           </div>
         </div>
+
+        {/* SLA Callback Alert Banner for Shift Manager (UC-10) */}
+        {pendingInquiriesCount > 0 && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-rose-950 via-purple-950 to-rose-950 border-2 border-rose-400 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-rose-600 text-white flex items-center justify-center font-bold shrink-0 animate-pulse shadow-md">
+                <Phone className="w-6 h-6" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-rose-500 px-2.5 py-0.5 rounded-full text-white">
+                    Cam Kết Gọi Tư Vấn Trong 15 Phút (SLA)
+                  </span>
+                  <span className="text-xs text-rose-200">
+                    Có <strong>{pendingInquiriesCount} đơn tiệc đoàn đông / bao trọn tầng</strong> cần Quản lý ca gọi tư vấn trực tiếp
+                  </span>
+                </div>
+                <p className="text-xs text-rose-100/90 leading-relaxed">
+                  Bao trọn Tầng 3 Rooftop & Tiệc Sinh Nhật VIP: Vui lòng gọi điện tư vấn và ghi nhận tiền cọc thỏa thuận.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsEventDrawerOpen(true)}
+              className="px-5 py-2.5 rounded-xl bg-white hover:bg-rose-50 text-rose-950 font-bold text-xs transition-colors shadow-md cursor-pointer shrink-0 flex items-center gap-1.5"
+            >
+              <span>Xem Đơn & Gọi Ngay</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
 
         {/* Real-time Status Metric Counters */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -2058,6 +2225,405 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
               >
                 <Sparkles className="w-4 h-4" />
                 <span>Lưu & Đồng Bộ Sang KDS Bếp</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UC-10: Shift Manager Private Banquet & Event Inquiries Drawer */}
+      {isEventDrawerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-[#E8DFD1] shadow-2xl max-w-4xl w-full p-6 sm:p-8 space-y-6 max-h-[92vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-[#E8DFD1] shrink-0">
+              <div className="flex items-start gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-800 to-indigo-900 text-white flex items-center justify-center shrink-0 shadow-md">
+                  <Sparkles className="w-6 h-6 text-amber-300" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-100 text-purple-900 border border-purple-300 px-2 py-0.5 rounded-full">
+                      Private Banquet Booking (UC-10)
+                    </span>
+                    <span className="text-xs text-rose-600 font-bold flex items-center gap-1 font-mono">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>SLA Gọi Tư Vấn: 15 Phút</span>
+                    </span>
+                  </div>
+                  <h3 className="font-serif text-2xl font-bold text-[#2C221E] mt-1">
+                    Đơn Tiệc Đoàn Đông & Bao Trọn Tầng Rooftop
+                  </h3>
+                  <p className="text-xs text-[#78716C] mt-0.5">
+                    Quản lý ca trực tiếp liên hệ tư vấn thực đơn, thống nhất ngân sách và ghi nhận tiền đặt cọc.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEventDrawerOpen(false)}
+                className="p-2 text-[#78716C] hover:text-[#2C221E] rounded-xl hover:bg-[#FAF7F2] transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center gap-2 shrink-0">
+              {[
+                { id: 'ALL', label: `Tất Cả (${eventInquiries.length})` },
+                { id: 'PENDING', label: `🚨 Cần Gọi Ngay (${pendingInquiriesCount})` },
+                { id: 'CONSULTED', label: `✅ Đã Tư Vấn (${eventInquiries.length - pendingInquiriesCount})` },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setEventFilter(tab.id as any)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    eventFilter === tab.id
+                      ? 'bg-purple-900 text-white shadow-xs'
+                      : 'bg-[#FAF7F2] text-[#6B5E54] hover:bg-stone-100 border border-[#E8DFD1]'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Inquiries List */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+              {eventInquiries
+                .filter((inquiry) => {
+                  if (eventFilter === 'PENDING') return inquiry.managerCallStatus === 'PENDING_CALL' || !inquiry.managerCallStatus;
+                  if (eventFilter === 'CONSULTED') return inquiry.managerCallStatus && inquiry.managerCallStatus !== 'PENDING_CALL';
+                  return true;
+                })
+                .map((inquiry) => {
+                  const remSec = calculateSlaRemainingSeconds(inquiry);
+                  const isPending = inquiry.managerCallStatus === 'PENDING_CALL' || !inquiry.managerCallStatus;
+                  const isCalling = simulatedCallInquiryId === inquiry.bookingId;
+
+                  return (
+                    <div
+                      key={inquiry.bookingId}
+                      className={`p-5 rounded-2xl border transition-all ${
+                        isPending
+                          ? 'bg-purple-50/40 border-purple-200 shadow-xs'
+                          : 'bg-white border-[#E8DFD1]'
+                      }`}
+                    >
+                      {/* Top Header of Card */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-stone-200/70">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-bold text-xs bg-stone-900 text-white px-2.5 py-1 rounded-lg">
+                            #{inquiry.bookingId}
+                          </span>
+                          <span className="text-xs font-bold text-purple-900 bg-purple-100 border border-purple-300 px-2.5 py-1 rounded-lg">
+                            {inquiry.eventType === 'ROOFTOP_BUYOUT'
+                              ? '🌆 Bao Trọn Rooftop Tầng 3'
+                              : inquiry.eventType === 'COMPANY_PARTY'
+                              ? '🏢 Tiệc Công Ty'
+                              : inquiry.eventType === 'BIRTHDAY_GALA'
+                              ? '🎂 Tiệc Sinh Nhật VIP'
+                              : inquiry.eventType === 'WORKSHOP_NETWORKING'
+                              ? '🤝 Workshop & Networking'
+                              : inquiry.eventType === 'WEDDING_ENGAGEMENT'
+                              ? '💍 Tiệc Đính Hôn Thân Mật'
+                              : '✨ Tiệc Sự Kiện Đoàn Đông'}
+                          </span>
+                          <span className="text-xs text-stone-500 font-mono flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-stone-400" />
+                            <span>{inquiry.date} • {inquiry.timeSlot}</span>
+                          </span>
+                        </div>
+
+                        {/* 15-Minute SLA Countdown or Status Badge */}
+                        <div>
+                          {isPending ? (
+                            remSec > 600 ? (
+                              <span className="text-xs font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-3 py-1 rounded-xl flex items-center gap-1.5 font-mono">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                <span>⏱️ SLA Còn {formatSlaTimer(remSec)}</span>
+                              </span>
+                            ) : remSec > 0 ? (
+                              <span className="text-xs font-bold text-rose-800 bg-rose-100 border border-rose-300 px-3 py-1 rounded-xl flex items-center gap-1.5 font-mono animate-pulse">
+                                <span className="w-2 h-2 rounded-full bg-rose-600 animate-ping" />
+                                <span>🚨 Khẩn Cấp! Còn {formatSlaTimer(remSec)}</span>
+                              </span>
+                            ) : (
+                              <span className="text-xs font-bold text-white bg-rose-600 border border-rose-700 px-3 py-1 rounded-xl flex items-center gap-1.5 font-mono animate-bounce">
+                                <span>⚠️ Quá hạn SLA 15 phút!</span>
+                              </span>
+                            )
+                          ) : (
+                            <span className={`text-xs font-bold px-3 py-1 rounded-xl border flex items-center gap-1.5 ${
+                              inquiry.managerCallStatus === 'ACCEPTED'
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : inquiry.managerCallStatus === 'PROPOSAL_SENT'
+                                ? 'bg-indigo-100 text-indigo-800 border-indigo-300'
+                                : inquiry.managerCallStatus === 'CALLED'
+                                ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                : 'bg-stone-100 text-stone-700 border-stone-300'
+                            }`}>
+                              <span>
+                                {inquiry.managerCallStatus === 'ACCEPTED'
+                                  ? '🥂 Đã Chốt Tiệc / Nhận Cọc'
+                                  : inquiry.managerCallStatus === 'PROPOSAL_SENT'
+                                  ? '📋 Đã Gửi Thực Đơn'
+                                  : inquiry.managerCallStatus === 'CALLED'
+                                  ? '📞 Đã Gọi Tư Vấn'
+                                  : '✕ Khách Từ Chối'}
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Card Content Details */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 text-xs">
+                        {/* Organizer Contact */}
+                        <div className="space-y-1.5">
+                          <p className="font-bold text-stone-900 text-sm flex items-center gap-1.5">
+                            <Users className="w-4 h-4 text-purple-700" />
+                            <span>{inquiry.customerName}</span>
+                            {inquiry.companyName && (
+                              <span className="text-xs font-normal text-purple-900 bg-purple-100/70 px-2 py-0.5 rounded-md">
+                                {inquiry.companyName}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-stone-600 flex items-center gap-2">
+                            <Phone className="w-3.5 h-3.5 text-stone-400" />
+                            <strong className="text-stone-900 font-mono text-sm">{inquiry.phone}</strong>
+                          </p>
+                          <p className="text-stone-600 flex items-center gap-2">
+                            <span>✉️</span>
+                            <span>{inquiry.email}</span>
+                          </p>
+                        </div>
+
+                        {/* Banquet Specs */}
+                        <div className="space-y-1.5 bg-stone-50/70 p-3 rounded-xl border border-stone-200/60">
+                          <div className="flex items-center justify-between">
+                            <span className="text-stone-600">Quy mô tiệc:</span>
+                            <strong className="text-stone-900 font-mono font-bold text-sm">
+                              {inquiry.partySize} Thực Khách
+                            </strong>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-stone-600">Không gian tiệc:</span>
+                            <strong className="text-purple-900 font-bold">
+                              {inquiry.targetFloor === 3
+                                ? 'Tầng 3 (Sky Lounge Rooftop)'
+                                : inquiry.targetFloor === 2
+                                ? 'Tầng 2 (VIP Salon Cellar)'
+                                : 'Tầng 1 (Grand Bistro)'}
+                            </strong>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-stone-600">Ngân sách dự kiến:</span>
+                            <strong className="text-amber-800 font-mono font-bold">
+                              {new Intl.NumberFormat('vi-VN').format(inquiry.estimatedBudget || 0)} đ
+                            </strong>
+                          </div>
+                          {inquiry.depositAmount > 0 && (
+                            <div className="flex items-center justify-between pt-1 border-t border-stone-200">
+                              <span className="text-emerald-700 font-semibold">Tiền cọc đã ghi nhận:</span>
+                              <strong className="text-emerald-800 font-mono font-bold">
+                                {new Intl.NumberFormat('vi-VN').format(inquiry.depositAmount)} đ
+                              </strong>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* AV & Decor Badges */}
+                      <div className="pt-3 flex flex-wrap items-center gap-2">
+                        {inquiry.stageAudioRequired && (
+                          <span className="text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2.5 py-1 rounded-lg">
+                            🎤 Âm thanh sân khấu & 2 Micro không dây
+                          </span>
+                        )}
+                        {inquiry.decorationRequired && (
+                          <span className="text-[11px] font-bold bg-rose-100 text-rose-900 border border-rose-300 px-2.5 py-1 rounded-lg">
+                            🌸 Hoa tươi & Backdrop thiết kế riêng
+                          </span>
+                        )}
+                        {inquiry.notes && (
+                          <div className="w-full text-stone-600 text-xs italic bg-stone-50 p-2.5 rounded-xl border border-stone-200 mt-1">
+                            "{inquiry.notes}"
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Consultation Notes from Manager */}
+                      {inquiry.consultationNotes && (
+                        <div className="mt-3 p-3 rounded-xl bg-indigo-50/70 border border-indigo-200 text-xs text-indigo-950 space-y-1">
+                          <p className="font-bold flex items-center gap-1.5 text-indigo-900">
+                            <FileText className="w-3.5 h-3.5 text-indigo-700" />
+                            <span>Ghi Chú Tư Vấn Của Quản Lý Ca:</span>
+                          </p>
+                          <p className="text-indigo-900/90 leading-relaxed">
+                            {inquiry.consultationNotes}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Card Action Buttons */}
+                      <div className="flex flex-wrap items-center justify-end gap-3 pt-4 mt-3 border-t border-stone-200">
+                        <button
+                          type="button"
+                          onClick={() => handleSimulateCall(inquiry)}
+                          disabled={isCalling}
+                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-2 shadow-xs cursor-pointer transition-all"
+                        >
+                          <PhoneCall className={`w-4 h-4 ${isCalling ? 'animate-spin' : ''}`} />
+                          <span>{isCalling ? 'Đang Kết Nối...' : `Gọi Tư Vấn (${inquiry.phone})`}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenConsultationModal(inquiry)}
+                          className="px-4 py-2 rounded-xl bg-purple-900 hover:bg-purple-800 text-white font-bold text-xs flex items-center gap-2 shadow-xs cursor-pointer transition-all"
+                        >
+                          <Edit3 className="w-4 h-4 text-amber-300" />
+                          <span>Ghi Nhận Tư Vấn & Chốt Cọc</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {eventInquiries.length === 0 && (
+                <div className="p-12 text-center text-stone-500 space-y-3">
+                  <Sparkles className="w-12 h-12 text-stone-300 mx-auto" />
+                  <p className="font-serif text-lg text-stone-700">Chưa có đơn tiệc đoàn đông nào</p>
+                  <p className="text-xs text-stone-400">
+                    Khi khách hàng đăng ký tổ chức tiệc trên website, đơn sẽ ngay lập tức xuất hiện tại đây cùng đồng hồ đếm ngược 15 phút.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UC-10: Shift Manager Consultation Form Modal */}
+      {selectedInquiryForCall && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border border-[#E8DFD1] shadow-2xl max-w-lg w-full p-6 sm:p-7 space-y-5">
+            <div className="flex items-start justify-between pb-3 border-b border-[#E8DFD1]">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-100 text-purple-900 px-2.5 py-0.5 rounded-full">
+                  Biên Bản Tư Vấn Trực Tiếp (UC-10)
+                </span>
+                <h3 className="font-serif text-xl font-bold text-[#2C221E] mt-1">
+                  Ghi Nhận Kết Quả Tư Vấn Tiệc
+                </h3>
+                <p className="text-xs text-[#78716C]">
+                  Khách: <strong>{selectedInquiryForCall.customerName}</strong> ({selectedInquiryForCall.partySize} khách • {selectedInquiryForCall.phone})
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedInquiryForCall(null)}
+                className="p-1.5 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-100 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Call Status */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-[#2C221E] block">
+                  Trạng Thái Tư Vấn Của Quản Lý (SLA Callback):
+                </label>
+                <select
+                  value={consultationCallStatus}
+                  onChange={(e) => setConsultationCallStatus(e.target.value as any)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-[#E8DFD1] bg-white text-xs font-semibold text-[#2C221E] focus:outline-none focus:border-purple-600"
+                >
+                  <option value="CALLED">📞 Đã gọi tư vấn sơ bộ (Đang chốt thực đơn)</option>
+                  <option value="PROPOSAL_SENT">📋 Đã gửi báo giá & thực đơn chi tiết qua Email/Zalo</option>
+                  <option value="ACCEPTED">🥂 Khách đồng ý chốt tiệc (Ký thỏa thuận / Đã chuyển cọc)</option>
+                  <option value="REJECTED">✕ Khách từ chối / Không chốt được lịch</option>
+                </select>
+              </div>
+
+              {/* Agreed Budget & Deposit */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="font-bold text-[#2C221E] block">Ngân Sách Thống Nhất (VNĐ):</label>
+                  <input
+                    type="number"
+                    value={agreedBudgetInput}
+                    onChange={(e) => setAgreedBudgetInput(Number(e.target.value) || 0)}
+                    step="1000000"
+                    className="w-full px-3 py-2 rounded-xl border border-[#E8DFD1] text-xs font-mono font-bold text-stone-900 focus:outline-none focus:border-purple-600"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="font-bold text-[#2C221E] block">Tiền Cọc Thỏa Thuận (VNĐ):</label>
+                  <input
+                    type="number"
+                    value={agreedDepositInput}
+                    onChange={(e) => setAgreedDepositInput(Number(e.target.value) || 0)}
+                    step="500000"
+                    className="w-full px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50/30 text-xs font-mono font-bold text-emerald-900 focus:outline-none focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+
+              {/* Target Booking Status */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-[#2C221E] block">
+                  Cập Nhật Trạng Thái Đơn Hàng Booking:
+                </label>
+                <select
+                  value={targetBookingStatus}
+                  onChange={(e) => setTargetBookingStatus(e.target.value as any)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-[#E8DFD1] bg-white text-xs font-semibold text-[#2C221E] focus:outline-none focus:border-purple-600"
+                >
+                  <option value="EVENT_INQUIRY">EVENT_INQUIRY (Vẫn giữ trạng thái chờ tư vấn)</option>
+                  <option value="AWAITING_PAYMENT">AWAITING_PAYMENT (Chờ khách chuyển khoản cọc VietQR)</option>
+                  <option value="CONFIRMED">CONFIRMED (Đã nhận tiền cọc - Khóa lịch tổ chức)</option>
+                  <option value="CANCELLED">CANCELLED (Hủy đơn đặt tiệc)</option>
+                </select>
+              </div>
+
+              {/* Consultation Notes */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-[#2C221E] block">
+                  Ghi Chú Chi Tiết Buổi Tư Vấn (Món ăn, giờ đón khách, hoa tươi, thanh toán...):
+                </label>
+                <textarea
+                  rows={3}
+                  value={consultationNotesInput}
+                  onChange={(e) => setConsultationNotesInput(e.target.value)}
+                  placeholder="VD: Đã gọi anh Trí lúc 14:15. Khách chốt Set Menu 5 món cho 50 người, cần thêm 2 chai vang Pháp mở màn. Setup hoa tươi tông trắng vàng. Hẹn cọc trước ngày 10/11..."
+                  className="w-full p-3 rounded-xl border border-[#E8DFD1] text-xs text-[#2C221E] focus:outline-none focus:border-purple-600 font-medium leading-relaxed"
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[#E8DFD1]">
+              <button
+                type="button"
+                onClick={() => setSelectedInquiryForCall(null)}
+                className="px-4 py-2.5 rounded-xl border border-[#E8DFD1] text-xs font-semibold text-[#78716C] hover:bg-[#FAF7F2] cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveConsultation}
+                disabled={isSavingConsultation}
+                className="px-5 py-2.5 rounded-xl bg-purple-900 hover:bg-purple-800 text-white text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all"
+              >
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>{isSavingConsultation ? 'Đang Lưu...' : 'Lưu Biên Bản & Đồng Bộ Hệ Thống'}</span>
               </button>
             </div>
           </div>

@@ -116,6 +116,27 @@ public class BookingEventProducer {
         publishEvent(KafkaConfig.TOPIC_TABLE_UPDATED, "TABLE_OPERATION", bookingId, "TABLE_TRANSFERRED", payload);
     }
 
+    // UC-10: Phát sự kiện Đơn Đặt Tiệc Sự Kiện / Bao Trọn Tầng (EVENT_INQUIRY)
+    public void publishEventInquiryCreated(Booking booking) {
+        Map<String, Object> payload = createBookingPayload(booking);
+        publishEvent(KafkaConfig.TOPIC_EVENT_INQUIRY_CREATED, "BOOKING_EVENT", booking.getId(), "EVENT_INQUIRY_CREATED", payload);
+
+        // Kích hoạt chuông thông báo tới Quản lý ca & Lễ tân qua WebSocket STOMP
+        broadcastWebSocket("/topic/manager/event-inquiries", payload);
+        broadcastWebSocket("/topic/host/table-notes", payload);
+        broadcastWebSocket("/topic/bookings", payload);
+    }
+
+    // UC-10: Cập nhật kết quả tư vấn sau cuộc gọi 15 phút của Quản lý ca
+    public void publishEventInquiryConsulted(Booking booking) {
+        Map<String, Object> payload = createBookingPayload(booking);
+        publishEvent(KafkaConfig.TOPIC_EVENT_INQUIRY_CONSULTED, "BOOKING_EVENT", booking.getId(), "EVENT_INQUIRY_CONSULTED", payload);
+
+        broadcastWebSocket("/topic/manager/event-inquiries", payload);
+        broadcastWebSocket("/topic/host/table-notes", payload);
+        broadcastWebSocket("/topic/bookings", payload);
+    }
+
     private Map<String, Object> createBookingPayload(Booking booking) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("bookingId", booking.getId());
@@ -137,6 +158,16 @@ public class BookingEventProducer {
         payload.put("candleSetup", Boolean.TRUE.equals(booking.getCandleSetup()));
         payload.put("specialNotes", booking.getSpecialNotes());
         payload.put("staffNotes", booking.getStaffNotes());
+        // UC-10: Private Banquet & Event Inquiry
+        payload.put("eventType", booking.getEventType());
+        payload.put("targetFloor", booking.getTargetFloor());
+        payload.put("companyName", booking.getCompanyName());
+        payload.put("estimatedBudget", booking.getEstimatedBudget());
+        payload.put("stageAudioRequired", Boolean.TRUE.equals(booking.getStageAudioRequired()));
+        payload.put("decorationRequired", Boolean.TRUE.equals(booking.getDecorationRequired()));
+        payload.put("callbackDeadline", booking.getCallbackDeadline());
+        payload.put("managerCallStatus", booking.getManagerCallStatus());
+        payload.put("consultationNotes", booking.getConsultationNotes());
 
         if (booking.getBookingTables() != null && !booking.getBookingTables().isEmpty()) {
             List<String> tableIds = booking.getBookingTables().stream()

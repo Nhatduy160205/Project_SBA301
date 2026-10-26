@@ -38,6 +38,13 @@ public interface BookingService {
     // UC-08: Ghi chú Nhu cầu Đặc biệt & Dị ứng (Special Requests & Dietary Notes)
     BookingResponse updateSpecialRequests(UUID bookingId, com.tablemaster.booking.dto.request.UpdateSpecialRequestsRequest request, UUID staffOrUserId);
 
+    // UC-10: Đặt tiệc Sinh nhật / Sự kiện Bao trọn tầng (Private Banquet Booking)
+    BookingResponse createEventInquiry(com.tablemaster.booking.dto.request.CreateEventInquiryRequest request, UUID userId);
+
+    List<BookingResponse> getEventInquiries();
+
+    BookingResponse updateEventConsultation(UUID bookingId, com.tablemaster.booking.dto.request.UpdateEventConsultationRequest request, UUID managerUserId);
+
     void checkAndExpireBookings();
 
     byte[] generateDepositInvoicePdf(UUID bookingId);
