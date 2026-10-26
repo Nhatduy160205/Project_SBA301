@@ -9,7 +9,6 @@ public enum ErrorCode {
     RESOURCE_NOT_FOUND("Không tìm thấy dữ liệu yêu cầu", HttpStatus.NOT_FOUND),
     RESTAURANT_PROFILE_NOT_FOUND("Không tìm thấy thông tin cấu hình nhà hàng", HttpStatus.NOT_FOUND),
     RESTAURANT_NOT_FOUND("Không tìm thấy thông tin nhà hàng", HttpStatus.NOT_FOUND),
-    FLOOR_PLAN_NOT_FOUND("Không tìm thấy sơ đồ tầng", HttpStatus.NOT_FOUND),
     TABLE_NOT_FOUND("Không tìm thấy bàn", HttpStatus.NOT_FOUND),
     TIME_SLOT_NOT_FOUND("Không tìm thấy khung giờ", HttpStatus.NOT_FOUND),
     CATEGORY_NOT_FOUND("Không tìm thấy danh mục món", HttpStatus.NOT_FOUND),
@@ -27,7 +26,6 @@ public enum ErrorCode {
     CONFLICT("Dữ liệu xung đột hoặc đã tồn tại", HttpStatus.CONFLICT),
     TIME_SLOT_ALREADY_EXISTS("Khung giờ đã tồn tại trong hệ thống", HttpStatus.CONFLICT),
     TABLE_CODE_ALREADY_EXISTS("Mã bàn đã tồn tại trong hệ thống", HttpStatus.CONFLICT),
-    FLOOR_PLAN_ALREADY_EXISTS("Đã tồn tại sơ đồ cho tầng này", HttpStatus.CONFLICT),
     BLACKOUT_DATE_ALREADY_EXISTS("Đã tồn tại cấu hình sự kiện cho ngày này", HttpStatus.CONFLICT),
 
     // 500 INTERNAL SERVER ERROR

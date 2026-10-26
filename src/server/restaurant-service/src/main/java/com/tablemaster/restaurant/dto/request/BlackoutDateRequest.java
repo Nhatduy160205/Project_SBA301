@@ -1,4 +1,4 @@
-package com.tablemaster.restaurant.dto;
+package com.tablemaster.restaurant.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -9,17 +9,13 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.ZonedDateTime;
-import java.util.UUID;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class BlackoutDateDto {
-    private UUID id;
-
-    @NotNull(message = "Ngày diễn ra sự kiện không được để trống")
+public class BlackoutDateRequest {
+    @NotNull(message = "Ngày sự kiện không được để trống")
     private LocalDate eventDate;
 
     @NotBlank(message = "Tên sự kiện / ngày lễ không được để trống")
@@ -29,5 +25,4 @@ public class BlackoutDateDto {
     private BigDecimal customDepositAmount;
     private Boolean requireSpecialMenu;
     private String note;
-    private ZonedDateTime createdAt;
 }

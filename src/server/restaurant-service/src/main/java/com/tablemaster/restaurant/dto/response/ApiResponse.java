@@ -1,4 +1,4 @@
-package com.tablemaster.restaurant.dto;
+package com.tablemaster.restaurant.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -13,14 +13,14 @@ public class ApiResponse<T> {
     private boolean success;
     private String message;
     private T data;
-    private long timestamp;
+    @Builder.Default
+    private long timestamp = System.currentTimeMillis();
 
     public static <T> ApiResponse<T> success(T data) {
         return ApiResponse.<T>builder()
                 .success(true)
-                .message("Success")
+                .message("Thành công")
                 .data(data)
-                .timestamp(System.currentTimeMillis())
                 .build();
     }
 
@@ -29,7 +29,6 @@ public class ApiResponse<T> {
                 .success(true)
                 .message(message)
                 .data(data)
-                .timestamp(System.currentTimeMillis())
                 .build();
     }
 
@@ -37,7 +36,7 @@ public class ApiResponse<T> {
         return ApiResponse.<T>builder()
                 .success(false)
                 .message(message)
-                .timestamp(System.currentTimeMillis())
+                .data(null)
                 .build();
     }
 }
