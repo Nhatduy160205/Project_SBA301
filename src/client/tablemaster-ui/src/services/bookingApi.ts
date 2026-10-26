@@ -128,6 +128,52 @@ export interface AvailabilitySearchResponse {
   alternativeSlots?: TimeSlotAvailabilitySummary[];
 }
 
+// UC-06: Khóa Giữ bàn 5 phút & Xử lý Tranh chấp (Redlock Concurrency Hold)
+export interface HoldTableRequestPayload {
+  tableId: string;
+  tableCode?: string;
+  bookingDate?: string;
+  timeSlotId?: string;
+  guestCount?: number;
+  floorPlanId?: string;
+  floorNumber?: number;
+  previousHoldToken?: string;
+  previousTableId?: string;
+}
+
+export interface HoldTableResponsePayload {
+  success: boolean;
+  holdToken: string;
+  tableId: string;
+  tableCode: string;
+  floorNumber: number;
+  expiresAt: string;
+  holdDurationSeconds: number; // 300
+  status: 'HOLDING';
+  color: 'YELLOW';
+  message: string;
+}
+
+export interface ReleaseHoldRequestPayload {
+  tableId: string;
+  holdToken?: string;
+  tableCode?: string;
+}
+
+export interface TableStateUpdatePayload {
+  tableId: string;
+  tableCode?: string;
+  floorPlanId?: string;
+  floorNumber?: number;
+  status: 'AVAILABLE' | 'HOLDING' | 'OCCUPIED' | 'CONFIRMED';
+  color: string;
+  expiresAt?: string;
+  remainingSeconds?: number;
+  holdToken?: string;
+  heldByUserId?: string;
+  message?: string;
+}
+
 
 // Fallback UUIDs từ Seed Data cơ sở dữ liệu
 export const SEED_DATA = {
@@ -146,11 +192,32 @@ export const SEED_DATA = {
 
 // Map ID bàn mock sang UUID tương ứng trong PostgreSQL
 export const TABLE_ID_MAP: Record<string, string> = {
+  // Tầng 1
   'f1-t01': SEED_DATA.TABLES.BAR_01,
   'f1-t02': SEED_DATA.TABLES.WIN_01,
-  'f1-t03': SEED_DATA.TABLES.VIP_01,
+  'f1-t03': SEED_DATA.TABLES.WIN_01,
   'f1-t04': SEED_DATA.TABLES.OUT_01,
   'f1-t05': SEED_DATA.TABLES.OUT_02,
+  'f1-t06': SEED_DATA.TABLES.VIP_01,
+  'f1-t07': SEED_DATA.TABLES.BAR_01,
+  'f1-t08': SEED_DATA.TABLES.WIN_01,
+  'f1-t09': SEED_DATA.TABLES.VIP_01,
+  'f1-t10': SEED_DATA.TABLES.OUT_01,
+  'f1-t11': SEED_DATA.TABLES.OUT_02,
+  'f1-t12': SEED_DATA.TABLES.BAR_01,
+  // Tầng 2 (VIP Salons)
+  'f2-v01': SEED_DATA.TABLES.VIP_01,
+  'f2-v02': SEED_DATA.TABLES.VIP_01,
+  'f2-v03': SEED_DATA.TABLES.VIP_01,
+  'f2-v04': SEED_DATA.TABLES.VIP_01,
+  'f2-v05': SEED_DATA.TABLES.VIP_01,
+  'f2-v06': SEED_DATA.TABLES.VIP_01,
+  // Tầng 3 (Sky Lounge)
+  'f3-sky01': SEED_DATA.TABLES.OUT_01,
+  'f3-sky02': SEED_DATA.TABLES.OUT_02,
+  'f3-sky03': SEED_DATA.TABLES.OUT_01,
+  'f3-sky04': SEED_DATA.TABLES.OUT_02,
+  'f3-sky05': SEED_DATA.TABLES.OUT_01,
 };
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -642,6 +709,113 @@ export const bookingApi = {
     const res = await fetch(`${BASE_URL}/availability/check-table?${q.toString()}`);
     if (!res.ok) throw new Error('Không thể kiểm tra tình trạng bàn');
     return res.json();
+  },
+
+  /**
+   * 13. Khóa Giữ bàn 5 phút bằng Redlock (UC-06, BR-02)
+   * POST /api/v1/bookings/hold
+   */
+  async holdTable(payload: HoldTableRequestPayload): Promise<ApiResponse<HoldTableResponsePayload>> {
+    const formattedPayload = {
+      ...payload,
+      tableId: ensureUUID(payload.tableId),
+      previousTableId: payload.previousTableId ? ensureUUID(payload.previousTableId) : undefined,
+    };
+
+    try {
+      const res = await fetch(`${BASE_URL}/hold`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': SEED_DATA.USER_ID,
+        },
+        body: JSON.stringify(formattedPayload),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        if (res.status === 409) {
+          const conflictErr: any = new Error(data?.message || 'Bàn này đang có người thao tác, vui lòng chọn bàn khác!');
+          conflictErr.status = 409;
+          conflictErr.isConflict = true;
+          throw conflictErr;
+        }
+        throw new Error(data?.message || `Lỗi khi khóa giữ bàn (${res.status})`);
+      }
+
+      return data;
+    } catch (err: any) {
+      if (err.isConflict || err.status === 409) {
+        throw err;
+      }
+      console.warn('⚠️ [Redlock API] Backend không phản hồi, chuyển chế độ Giữ Bàn Standalone (300s):', err.message);
+      // Fallback khi chạy giao diện độc lập: mô phỏng phiên giữ bàn 300s (BR-02)
+      const expiresAt = new Date(Date.now() + 300 * 1000).toISOString();
+      return {
+        success: true,
+        message: 'Khóa giữ bàn 5 phút thành công (Standalone Fallback)',
+        data: {
+          success: true,
+          holdToken: `hold-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          tableId: formattedPayload.tableId,
+          tableCode: payload.tableCode || 'Bàn',
+          floorNumber: payload.floorNumber || 1,
+          expiresAt,
+          holdDurationSeconds: 300,
+          status: 'HOLDING',
+          color: 'YELLOW',
+          message: 'Đã kích hoạt khóa giữ bàn 300 giây thành công (05:00)',
+        },
+      };
+    }
+  },
+
+  /**
+   * 14. Giải phóng khóa giữ bàn khi khách hủy chọn hoặc đổi bàn
+   * POST /api/v1/bookings/release-hold
+   */
+  async releaseHold(payload: ReleaseHoldRequestPayload): Promise<ApiResponse<void>> {
+    const formattedPayload = {
+      ...payload,
+      tableId: ensureUUID(payload.tableId),
+    };
+    try {
+      const res = await fetch(`${BASE_URL}/release-hold`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': SEED_DATA.USER_ID,
+        },
+        body: JSON.stringify(formattedPayload),
+      });
+      return res.json().catch(() => ({ success: true, message: 'Đã giải phóng bàn', data: undefined as any }));
+    } catch (e: any) {
+      return { success: true, message: 'Đã giải phóng bàn (fallback)', data: undefined as any };
+    }
+  },
+
+  /**
+   * 15. Kiểm tra trạng thái và thời gian giữ bàn còn lại
+   * GET /api/v1/bookings/hold-status/{tableId}
+   */
+  async getHoldStatus(tableId: string): Promise<ApiResponse<TableStateUpdatePayload>> {
+    try {
+      const res = await fetch(`${BASE_URL}/hold-status/${ensureUUID(tableId)}`);
+      if (!res.ok) throw new Error('Không thể kiểm tra trạng thái giữ bàn');
+      return res.json();
+    } catch (e: any) {
+      return {
+        success: true,
+        message: 'Fallback status',
+        data: {
+          tableId,
+          status: 'AVAILABLE',
+          color: 'GREEN',
+          remainingSeconds: 0,
+        },
+      };
+    }
   },
 };
 

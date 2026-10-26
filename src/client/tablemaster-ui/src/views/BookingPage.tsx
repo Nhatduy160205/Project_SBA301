@@ -7,6 +7,7 @@ import {
   Sparkles,
   MapPin,
   CheckCircle2,
+  AlertTriangle,
   Heart,
   ShieldCheck,
   User,
@@ -35,7 +36,17 @@ import {
 import type { TableItem, SignatureDish, BookingDetails } from '../types';
 import { SIGNATURE_DISHES } from '../data/mockData';
 import { QRPaymentModal } from '../components/common/QRPaymentModal';
-import { bookingApi, ensureUUID, SEED_DATA, type CreateBookingRequestPayload } from '../services/bookingApi';
+import { AvailabilitySearchEngine } from '../components/booking/AvailabilitySearchEngine';
+import { FloorPlanCanvas } from '../components/floor/FloorPlanCanvas';
+import { SpatialFloor3D } from '../components/floor/SpatialFloor3D';
+import { webSocketFloorService } from '../services/websocketService';
+import {
+  bookingApi,
+  ensureUUID,
+  SEED_DATA,
+  type CreateBookingRequestPayload,
+  type TableAvailabilityDto,
+} from '../services/bookingApi';
 
 const OCCASIONS = [
   { id: 'date', label: 'Hẹn hò lãng mạn', icon: Heart },
@@ -140,7 +151,20 @@ export const BookingPage: React.FC<BookingPageProps> = ({
 
   // Step 2: Occasion & Preferences (Ghi chú thêm)
   const [showSection2, setShowSection2] = useState<boolean>(true);
-  const [selectedOccasion, setSelectedOccasion] = useState<string | null>(null);
+  const [currentFloor, setCurrentFloor] = useState<1 | 2 | 3>(initialFloor);
+  const [floorViewMode, setFloorViewMode] = useState<'floor2d' | 'floor3d' | 'cards'>('floor2d');
+  const [selectedTable, setSelectedTable] = useState<TableAvailabilityDto | null>(null);
+
+  // UC-06: Khóa Giữ bàn 5 phút & Xử lý Tranh chấp (Redlock Concurrency Hold)
+  const [holdToken, setHoldToken] = useState<string | null>(null);
+  const [holdExpiresAt, setHoldExpiresAt] = useState<number | null>(null);
+  const [holdRemainingSeconds, setHoldRemainingSeconds] = useState<number>(300);
+  const [conflictError, setConflictError] = useState<string | null>(null);
+  const [isHoldingTable, setIsHoldingTable] = useState<boolean>(false);
+
+  // Step 3: Occasion & Preferences
+  const [showSection3, setShowSection3] = useState<boolean>(true);
+  const [selectedOccasion, setSelectedOccasion] = useState<string | null>('date');
   const [customNotes, setCustomNotes] = useState<string>('Ưu tiên bàn gần cửa sổ ngắm trọn phố Nguyễn Huệ giúp mình nhé!');
 
   // Step 3: Pre-orders
@@ -237,8 +261,165 @@ export const BookingPage: React.FC<BookingPageProps> = ({
     return matched || tables[0];
   };
 
-  const computeEffectiveSlot = () => {
-    return isCustomTime ? customArrivalTime : selectedSlot;
+  const activeTableItem = useMemo(() => {
+    if (selectedTable) {
+      return tables.find((t) => t.id === selectedTable.tableId || t.code === selectedTable.tableCode) || null;
+    }
+    return null;
+  }, [tables, selectedTable]);
+
+  // Định dạng chuỗi mm:ss cho đồng hồ đếm ngược 05:00
+  const formatCountdown = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  // UC-06: Đếm ngược 05:00 (300 giây) khi Redlock giữ bàn thành công
+  useEffect(() => {
+    if (!selectedTable || !holdExpiresAt) {
+      setHoldRemainingSeconds(300);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const diffMs = holdExpiresAt - now;
+      const sec = Math.max(0, Math.floor(diffMs / 1000));
+      setHoldRemainingSeconds(sec);
+
+      if (sec <= 0) {
+        clearInterval(interval);
+        // Hết hạn 300s tự động giải phóng bàn
+        if (selectedTable && holdToken) {
+          bookingApi.releaseHold({
+            tableId: ensureUUID(selectedTable.tableId),
+            holdToken: holdToken,
+            tableCode: selectedTable.tableCode,
+          });
+        }
+        onUpdateTableStatus(selectedTable.tableId, 'AVAILABLE');
+        setSelectedTable(null);
+        setHoldToken(null);
+        setHoldExpiresAt(null);
+        setConflictError('⏰ Đã hết thời hạn 5 phút giữ bàn tạm thời (300 giây). Bàn đã được tự động giải phóng để nhường quyền cho khách hàng khác!');
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [selectedTable, holdExpiresAt, holdToken, onUpdateTableStatus]);
+
+  // UC-06: Lắng nghe WebSocket STOMP đồng bộ thời gian thực đổi màu bàn toàn hệ thống
+  useEffect(() => {
+    const unsubscribe = webSocketFloorService.subscribeToTableUpdates((update) => {
+      if (!update || !update.tableId) return;
+
+      console.log('⚡ [STOMP Floor Sync] Cập nhật bàn:', update);
+
+      if (update.status === 'HOLDING') {
+        // Nếu không phải phiên giữ của chính client này thì cập nhật trạng thái HOLDING (vàng)
+        if (!holdToken || update.holdToken !== holdToken) {
+          onUpdateTableStatus(update.tableId, 'HOLDING');
+        }
+      } else if (update.status === 'AVAILABLE') {
+        onUpdateTableStatus(update.tableId, 'AVAILABLE');
+      } else if (update.status === 'CONFIRMED') {
+        onUpdateTableStatus(update.tableId, 'CONFIRMED');
+      }
+    });
+
+    return () => unsubscribe();
+  }, [holdToken, onUpdateTableStatus]);
+
+  // Handle table selection directly on 2D / 3D Floor Canvas - Kích hoạt Redis Redlock 300s (UC-06, BR-02)
+  const handleSelectTableFromFloor = async (table: TableItem) => {
+    if (table.status !== 'AVAILABLE') {
+      if (table.status === 'HOLDING') {
+        setConflictError(`Bàn ${table.code} hiện đang được khách hàng khác giữ chỗ trong 5 phút. Vui lòng chọn bàn khác!`);
+      }
+      return;
+    }
+
+    setIsHoldingTable(true);
+    setConflictError(null);
+
+    try {
+      // 1. Gọi backend kích hoạt Redis Redlock giữ bàn 300 giây (BR-02)
+      const res = await bookingApi.holdTable({
+        tableId: table.id,
+        tableCode: table.code,
+        bookingDate: selectedDate,
+        timeSlotId: SEED_DATA.TIME_SLOT_ID,
+        guestCount: partySize,
+        floorNumber: table.floor,
+        previousHoldToken: holdToken || undefined,
+        previousTableId: selectedTable?.tableId || undefined,
+      });
+
+      if (res && res.data) {
+        const expiresTime = new Date(res.data.expiresAt).getTime();
+        setHoldToken(res.data.holdToken);
+        setHoldExpiresAt(expiresTime);
+        setHoldRemainingSeconds(res.data.holdDurationSeconds || 300);
+
+        const dto: TableAvailabilityDto = {
+          tableId: table.id,
+          tableCode: table.code,
+          floorNumber: table.floor,
+          floorName: table.floor === 1
+            ? 'Tầng 1 - Sảnh Vòm & Bar'
+            : table.floor === 2
+            ? 'Tầng 2 - Phòng VIP Riêng Tư'
+            : 'Tầng 3 - Sky Lounge Ngoài Trời',
+          zoneType: table.zone,
+          minCapacity: Math.max(1, table.capacity - 2),
+          maxCapacity: table.capacity,
+          customDeposit: table.depositPrice || 200000,
+          shape: table.shape,
+          isAvailable: true,
+          status: 'HELD',
+          statusMessage: `Bàn ${table.code} đang được bạn giữ chỗ 5 phút (Redlock)`,
+          satisfiesCapacityRule: partySize <= table.capacity,
+          isBookedInDb: false,
+          isHeldInRedis: true,
+          recommended: false,
+        };
+
+        setSelectedTable(dto);
+        onUpdateTableStatus(table.id, 'HOLDING');
+      }
+    } catch (err: any) {
+      console.warn('❌ [Redlock Concurrency Hold] Tranh chấp bàn:', err.message);
+      if (err.isConflict || err.status === 409) {
+        setConflictError(err.message || `Bàn ${table.code} vừa có khách hàng khác chọn trước. Vui lòng chọn bàn khác!`);
+        onUpdateTableStatus(table.id, 'HOLDING');
+      } else {
+        setConflictError(`Không thể giữ bàn ${table.code}: ${err.message}`);
+      }
+    } finally {
+      setIsHoldingTable(false);
+    }
+  };
+
+  const handleDeselectTable = async () => {
+    if (!selectedTable) return;
+    const oldId = selectedTable.tableId;
+    const oldCode = selectedTable.tableCode;
+    const oldToken = holdToken;
+
+    setSelectedTable(null);
+    setHoldToken(null);
+    setHoldExpiresAt(null);
+    setHoldRemainingSeconds(300);
+    onUpdateTableStatus(oldId, 'AVAILABLE');
+
+    if (oldToken) {
+      await bookingApi.releaseHold({
+        tableId: oldId,
+        holdToken: oldToken,
+        tableCode: oldCode,
+      });
+    }
   };
 
   const effectiveTimeSlot = computeEffectiveSlot();
@@ -250,7 +431,11 @@ export const BookingPage: React.FC<BookingPageProps> = ({
     }
 
     const assignedTable = findMatchingTable();
-    const tableUUID = ensureUUID(assignedTable.id);
+    const tableUUID = ensureUUID(selectedTable ? selectedTable.tableId : assignedTable.id);
+    const tableCode = selectedTable
+      ? `Bàn ${selectedTable.tableCode}`
+      : (assignedTable.code || `Bàn ${assignedTable.id}`);
+    const tableFloor = (selectedTable?.floorNumber as 1 | 2 | 3) || currentFloor;
 
     const preOrderItems = Object.entries(selectedDishes)
       .map(([id, quantity]) => {
@@ -347,10 +532,24 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       setBookingSuccess(confirmedBooking);
       setIsQRModalOpen(false);
 
-      // Auto update table state for host
+      // Giải phóng phiên giữ tạm thời Redlock khi đã cọc tiền thành công
+      if (selectedTable && holdToken) {
+        bookingApi.releaseHold({
+          tableId: ensureUUID(selectedTable.tableId),
+          holdToken: holdToken,
+          tableCode: selectedTable.tableCode,
+        });
+      }
+      setHoldToken(null);
+      setHoldExpiresAt(null);
+      setHoldRemainingSeconds(300);
+
       const matched = findMatchingTable();
       if (matched) {
         onUpdateTableStatus(matched.id, 'CONFIRMED');
+      }
+      if (selectedTable) {
+        onUpdateTableStatus(selectedTable.tableId, 'CONFIRMED');
       }
     }
   };
@@ -489,7 +688,44 @@ export const BookingPage: React.FC<BookingPageProps> = ({
         )}
       </AnimatePresence>
 
-      {/* MAIN RESERVATION WORKFLOW (2-COLUMN MODERN LAYOUT) */}
+      {/* 409 Conflict & Redlock Notification Banner (UC-06) */}
+      <AnimatePresence>
+        {conflictError && (
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            className="p-4 rounded-2xl bg-gradient-to-r from-rose-500/15 via-rose-50 to-amber-500/15 border-2 border-rose-400 flex items-center justify-between text-xs text-rose-950 shadow-lg"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center font-bold shrink-0 shadow-sm animate-pulse">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-rose-950 uppercase tracking-wider text-[11px]">
+                    Thông Báo Tranh Chấp Bàn (Redlock 409 Conflict)
+                  </span>
+                  <span className="text-[10px] bg-rose-200 text-rose-900 px-2 py-0.5 rounded-full font-mono font-bold">
+                    BR-02
+                  </span>
+                </div>
+                <p className="text-rose-900 font-medium">
+                  {conflictError}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setConflictError(null)}
+              className="p-1.5 text-rose-700 hover:text-rose-950 hover:bg-rose-100 rounded-lg cursor-pointer transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MAIN RESERVATION WORKFLOW (2-COLUMN MODERN LUXURY LAYOUT) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* LEFT COLUMN (7 COLS): STEP 1, 2, 3 SELECTIONS */}
         <div className="lg:col-span-8 space-y-8">
@@ -817,9 +1053,21 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                     <h2 className="font-serif text-xl font-bold text-[#2C221E]">
                       Ghi Chú Thêm
                     </h2>
-                    {!showSection2 && customNotes && (
-                      <span className="text-[11px] font-medium text-[#8C6A43] bg-[#FAF4EB] px-2.5 py-0.5 rounded-full border border-[#E8DFD1] max-w-xs truncate">
-                        {customNotes}
+                    {selectedTable ? (
+                      <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-300 shadow-xs flex items-center gap-1">
+                        <Check className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>Đã chọn: Bàn {selectedTable.tableCode} ({selectedTable.floorName})</span>
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-semibold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200 flex items-center gap-1.5">
+                        {isHoldingTable ? (
+                          <>
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                            <span>Đang kích hoạt Redis Redlock giữ bàn...</span>
+                          </>
+                        ) : (
+                          <span>Click chọn bàn yêu thích trên sơ đồ</span>
+                        )}
                       </span>
                     )}
                   </div>
@@ -847,7 +1095,253 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                   exit={{ opacity: 0, height: 0 }}
                   className="space-y-6 overflow-hidden"
                 >
-                  {/* Optional Occasion Selector */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-stone-50 p-2 rounded-2xl border border-stone-200">
+              <div className="grid grid-cols-3 gap-2 flex-1">
+                {[
+                  { floor: 1 as const, label: 'Tầng 1: Sảnh Chính', sub: 'View Nguyễn Huệ', icon: '🏛️' },
+                  { floor: 2 as const, label: 'Tầng 2: Phòng VIP', sub: 'Hầm Rượu Bordeaux', icon: '🍷' },
+                  { floor: 3 as const, label: 'Tầng 3: Sky Lounge', sub: 'Ban Công Rooftop', icon: '🌆' },
+                ].map((f) => {
+                  const isCurrent = currentFloor === f.floor;
+                  return (
+                    <button
+                      key={f.floor}
+                      type="button"
+                      onClick={() => setCurrentFloor(f.floor)}
+                      className={`p-2.5 rounded-xl text-left transition-all cursor-pointer border flex items-center gap-2.5 ${
+                        isCurrent
+                          ? 'bg-white border-amber-400 text-stone-900 shadow-sm ring-1 ring-amber-400/40 font-bold'
+                          : 'bg-transparent border-transparent hover:bg-white/60 text-stone-600'
+                      }`}
+                    >
+                      <span className="text-lg">{f.icon}</span>
+                      <div className="min-w-0">
+                        <p className="text-xs truncate">{f.label}</p>
+                        <p className="text-[10px] text-stone-400 truncate">{f.sub}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Legend Pill */}
+              <div className="hidden xl:flex items-center gap-3 text-[11px] font-semibold text-stone-600 px-3 py-1.5 bg-white rounded-xl border border-stone-200">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-2xs" />
+                  <span>Trống</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span>Giữ 5p</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                  <span>Đã kín</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-amber-700">
+                  <Sparkles className="w-3 h-3 text-amber-500" />
+                  <span>Bạn chọn</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Current Floor Highlight Bar */}
+            <div className="px-4 py-2.5 bg-gradient-to-r from-amber-500/10 via-amber-50 to-transparent rounded-2xl border border-amber-300/60 flex items-center justify-between text-xs text-amber-950">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  <strong>{floorDescriptions[currentFloor].name}</strong> — {floorDescriptions[currentFloor].view}
+                </span>
+              </div>
+              <span className="hidden sm:inline-block text-[11px] font-bold text-amber-800 font-mono">
+                {floorDescriptions[currentFloor].tag}
+              </span>
+            </div>
+
+            {/* Interactive Canvas or Smart Cards View */}
+            <div className="pt-1">
+              {floorViewMode === 'floor2d' && (
+                <div className="space-y-4">
+                  <FloorPlanCanvas
+                    floorNumber={currentFloor}
+                    tables={tables}
+                    selectedTable={activeTableItem}
+                    onSelectTable={handleSelectTableFromFloor}
+                  />
+                  <p className="text-[11px] text-stone-500 text-center italic">
+                    💡 <strong>Mẹo:</strong> Click trực tiếp vào bàn xanh để giữ chỗ. Dùng chuột phóng to/thu nhỏ hoặc cuộn để xem góc nhìn thuận tiện nhất.
+                  </p>
+                </div>
+              )}
+
+              {floorViewMode === 'floor3d' && (
+                <div className="space-y-4">
+                  <SpatialFloor3D
+                    floorNumber={currentFloor}
+                    tables={tables}
+                    selectedTable={activeTableItem}
+                    onSelectTable={handleSelectTableFromFloor}
+                    viewMode="3d"
+                    onToggleViewMode={() => setFloorViewMode('floor2d')}
+                  />
+                </div>
+              )}
+
+              {floorViewMode === 'cards' && (
+                <AvailabilitySearchEngine
+                  initialDate={selectedDate}
+                  initialPartySize={partySize}
+                  initialFloor={currentFloor}
+                  selectedTableId={selectedTable?.tableId}
+                  onSelectTable={async (table, params) => {
+                    setSelectedDate(params.date);
+                    setPartySize(params.totalGuests);
+                    if (table.floorNumber === 1 || table.floorNumber === 2 || table.floorNumber === 3) {
+                      setCurrentFloor(table.floorNumber as 1 | 2 | 3);
+                    }
+                    const matched = tables.find((t) => t.id === table.tableId || t.code === table.tableCode);
+                    if (matched) {
+                      await handleSelectTableFromFloor(matched);
+                    } else {
+                      const syntheticTable: TableItem = {
+                        id: table.tableId,
+                        code: table.tableCode,
+                        floor: (table.floorNumber as 1 | 2 | 3) || 1,
+                        shape: (table.shape as any) || 'rect',
+                        capacity: table.maxCapacity || 4,
+                        x: 100,
+                        y: 100,
+                        width: 100,
+                        height: 70,
+                        status: 'AVAILABLE',
+                        zone: (table.zoneType as any) || 'STANDARD',
+                        depositPrice: table.customDeposit || 200000,
+                      };
+                      await handleSelectTableFromFloor(syntheticTable);
+                    }
+                  }}
+                />
+              )}
+            </div>
+
+            {/* SELECTED TABLE SPOTLIGHT CARD */}
+            {selectedTable && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-5 bg-gradient-to-r from-amber-500/15 via-white to-amber-500/10 border-2 border-amber-400 rounded-3xl shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-slate-950 flex flex-col items-center justify-center font-serif font-black shadow-md shrink-0">
+                    <span className="text-[10px] tracking-widest font-sans uppercase">BÀN</span>
+                    <span className="text-base leading-none">{selectedTable.tableCode}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-serif text-lg font-bold text-stone-900">
+                        Bàn {selectedTable.tableCode} • {selectedTable.floorName}
+                      </h4>
+                      <span className="text-[10px] font-bold text-amber-950 bg-amber-100 px-2.5 py-0.5 rounded-full border border-amber-400 flex items-center gap-1 shadow-xs">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                        <span>🟡 Đang Khóa Giữ (Redlock 300s)</span>
+                      </span>
+                    </div>
+                    <p className="text-xs text-stone-600">
+                      Sức chứa: <strong>{selectedTable.minCapacity} – {selectedTable.maxCapacity} khách</strong> • Khu vực: <strong>{selectedTable.zoneType}</strong>
+                    </p>
+                    <p className="text-[11px] text-amber-800">
+                      {selectedTable.zoneType === 'WINDOW_VIEW'
+                        ? '🪟 Bàn sát cửa kính lớn, ngắm trọn vẹn phố đi bộ Nguyễn Huệ lung linh về đêm'
+                        : selectedTable.zoneType === 'VIP'
+                        ? '👑 Phòng VIP riêng tư, cách âm cao cấp kèm phục vụ chuyên biệt'
+                        : selectedTable.zoneType === 'OUTDOOR'
+                        ? '🌿 Ban công Sky Lounge thoáng đãng ngắm toàn cảnh thành phố'
+                        : '🍸 Cạnh quầy Bar & Bếp mở, thưởng thức cocktail pha chế trực tiếp'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Redlock Live 05:00 Countdown Box */}
+                <div className="flex items-center gap-3 self-end md:self-auto flex-wrap">
+                  <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 p-2 px-3.5 rounded-2xl border border-amber-300 shadow-md flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-xl bg-slate-950 text-amber-400 flex items-center justify-center shrink-0 font-bold">
+                      <Clock className="w-3.5 h-3.5 animate-pulse" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-amber-950">
+                        <ShieldCheck className="w-3 h-3 text-emerald-900" />
+                        <span>Thời gian giữ bàn (BR-02):</span>
+                      </div>
+                      <div className="font-mono text-base font-black text-slate-950 leading-none">
+                        {formatCountdown(holdRemainingSeconds)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-[10px] text-stone-500 block uppercase font-bold">Tiền cọc giữ bàn:</span>
+                    <span className="font-serif text-base font-bold text-amber-700">
+                      {new Intl.NumberFormat('vi-VN').format(depositRequired)} đ
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDeselectTable}
+                    className="p-2 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                    title="Bỏ chọn & Giải phóng bàn này"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
+
+          {/* STEP 3: DỊP TIỆC & GHI CHÚ CHU ĐÁO */}
+          <section className="bg-white border-2 border-stone-200/90 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 transition-all hover:border-amber-400/60">
+            <div className="flex items-center justify-between pb-4 border-b border-stone-200">
+              <div className="flex items-center gap-3">
+                <span className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-800 border border-amber-500/30 flex items-center justify-center font-bold text-xs font-mono shrink-0">
+                  03
+                </span>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="font-serif text-xl font-bold text-stone-900">
+                      Dịp Dùng Bữa & Ghi Chú Chu Đáo
+                    </h2>
+                    {selectedOccasion && (
+                      <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-300">
+                        {OCCASIONS.find(o => o.id === selectedOccasion)?.label}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-stone-500">
+                    Nhà hàng sẽ chuẩn bị bài trí nến, hoa hoặc hỗ trợ vị trí đặc biệt theo mong muốn
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowSection3(!showSection3)}
+                className="w-8 h-8 rounded-full bg-stone-100 border border-stone-200 flex items-center justify-center text-stone-600 hover:bg-stone-200 cursor-pointer transition-colors shrink-0"
+              >
+                {showSection3 ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            </div>
+
+            <AnimatePresence>
+              {showSection3 && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="space-y-6 overflow-hidden"
+                >
+                  {/* Occasion Cards */}
                   <div className="space-y-2.5">
                     <label className="text-xs font-bold uppercase tracking-wider text-[#6B5E54] flex items-center justify-between">
                       <span>Dịp dùng bữa của quý khách:</span>
@@ -1362,6 +1856,26 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                 </span>
                 <span className="font-bold text-[#2C221E]">{partySize} Khách</span>
               </div>
+
+              {selectedTable && (
+                <div className="p-2.5 rounded-xl bg-gradient-to-r from-amber-950 via-amber-900/60 to-amber-950 border border-amber-500/40 space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <div className="flex items-center gap-1.5 text-amber-300 font-bold">
+                      <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                      <span>Giữ chỗ tạm thời (Redlock):</span>
+                    </div>
+                    <span className="font-mono font-black text-amber-300 text-xs bg-black/50 px-2 py-0.5 rounded border border-amber-500/30">
+                      {formatCountdown(holdRemainingSeconds)}
+                    </span>
+                  </div>
+                  <div className="w-full bg-stone-800 h-1 rounded-full overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-amber-500 to-amber-300 h-full rounded-full transition-all duration-1000"
+                      style={{ width: `${Math.min(100, Math.max(0, (holdRemainingSeconds / 300) * 100))}%` }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {selectedOccasion && (
                 <div className="flex items-center justify-between text-xs pt-2 border-t border-[#E8DFD1]">
