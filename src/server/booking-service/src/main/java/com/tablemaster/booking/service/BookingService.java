@@ -35,6 +35,9 @@ public interface BookingService {
 
     BookingResponse transferTable(UUID bookingId, TransferTableRequest request, UUID staffId);
 
+    // UC-08: Ghi chú Nhu cầu Đặc biệt & Dị ứng (Special Requests & Dietary Notes)
+    BookingResponse updateSpecialRequests(UUID bookingId, com.tablemaster.booking.dto.request.UpdateSpecialRequestsRequest request, UUID staffOrUserId);
+
     void checkAndExpireBookings();
 
     byte[] generateDepositInvoicePdf(UUID bookingId);

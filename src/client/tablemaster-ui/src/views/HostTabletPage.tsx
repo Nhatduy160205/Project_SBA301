@@ -22,9 +22,16 @@ import {
   Merge,
   ArrowRight,
   Info,
+  Baby,
+  Cake,
+  Flame,
+  ShieldAlert,
+  Edit3,
+  ChefHat,
 } from 'lucide-react';
 import type { TableItem, TableStatus, BookingDetails, TableOrderRecord } from '../types';
 import { SIGNATURE_DISHES } from '../data/mockData';
+import { bookingApi } from '../services/bookingApi';
 
 interface HostTabletPageProps {
   tables: TableItem[];
@@ -35,17 +42,19 @@ interface HostTabletPageProps {
   onTransferTable?: (sourceTableId: string, targetTableId: string) => void;
   onMergeTables?: (sourceTableId: string, targetTableId: string) => void;
   onNavigateToWaiter?: () => void;
+  onNavigateToKds?: () => void;
 }
 
 export const HostTabletPage: React.FC<HostTabletPageProps> = ({
   tables,
-  bookings: _bookings = [],
+  bookings = [],
   tableOrders,
   setTableOrders,
   onUpdateTableStatus,
   onTransferTable,
   onMergeTables,
   onNavigateToWaiter,
+  onNavigateToKds,
 }) => {
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -85,6 +94,15 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
   const [customDishName, setCustomDishName] = useState('');
   const [customDishPrice, setCustomDishPrice] = useState<string>('50000');
   const [customDishNotes, setCustomDishNotes] = useState('');
+
+  // UC-08: Special Requests & Dietary Notes Edit Modal State
+  const [isEditSpecialModalOpen, setIsEditSpecialModalOpen] = useState(false);
+  const [editingTableId, setEditingTableId] = useState<string>('');
+  const [editOccasion, setEditOccasion] = useState<string>('');
+  const [editBabyChairCount, setEditBabyChairCount] = useState<number>(0);
+  const [editCandleSetup, setEditCandleSetup] = useState<boolean>(false);
+  const [editDietaryNotes, setEditDietaryNotes] = useState<string>('');
+  const [editStaffNotes, setEditStaffNotes] = useState<string>('');
 
   // Payment Confirmation State
   const [isPaymentSuccessOpen, setIsPaymentSuccessOpen] = useState(false);
@@ -152,6 +170,8 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
     const nowStr = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
     onUpdateTableStatus(table.id, 'SEATED', table.currentGuestName || 'Khách Đặt Online');
 
+    const matchedBooking = bookings.find((b: BookingDetails) => b.tableId === table.id || b.tableCode.includes(table.code));
+
     setTableOrders((prev) => {
       const existing = prev[table.id];
       if (existing) {
@@ -160,26 +180,102 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
           [table.id]: {
             ...existing,
             seatedAtTime: `${nowStr} (Vừa nhận bàn)`,
+            occasion: existing.occasion || matchedBooking?.occasion,
+            dietaryNotes: existing.dietaryNotes || matchedBooking?.dietaryNotes,
+            babyChairCount: existing.babyChairCount ?? matchedBooking?.babyChairCount ?? 0,
+            candleSetup: existing.candleSetup ?? matchedBooking?.candleSetup ?? false,
           },
         };
       }
+
+      // Convert preorder items to order items if present
+      const preOrderItems = matchedBooking?.preOrders?.map((po: any) => ({
+        dishId: po.dish.id,
+        name: po.dish.name,
+        price: po.dish.price,
+        quantity: po.quantity,
+        status: 'PREPARING' as const,
+        category: po.dish.category,
+        notes: po.preparationNotes,
+      })) || [];
+
       return {
         ...prev,
         [table.id]: {
           tableCode: table.code,
-          guestName: table.currentGuestName || 'Khách Đặt Online',
-          phone: table.guestPhone || '090***',
+          guestName: table.currentGuestName || matchedBooking?.customerName || 'Khách Đặt Online',
+          phone: table.guestPhone || matchedBooking?.phone || '090***',
           source: 'ONLINE',
-          guestCount: table.capacity,
+          guestCount: matchedBooking?.partySize || table.capacity,
           seatedAtTime: `${nowStr} (Vừa nhận bàn)`,
-          notes: 'Đặt bàn qua cổng Online Le Prime Bistro',
-          depositAmount: table.depositPrice || 200000,
-          items: [],
+          notes: matchedBooking?.notes || 'Đặt bàn qua cổng Online Le Prime Bistro',
+          occasion: matchedBooking?.occasion,
+          dietaryNotes: matchedBooking?.dietaryNotes,
+          babyChairCount: matchedBooking?.babyChairCount || 0,
+          candleSetup: matchedBooking?.candleSetup || false,
+          depositAmount: matchedBooking?.depositAmount || table.depositPrice || 200000,
+          items: preOrderItems,
         },
       };
     });
 
     showToast(`Check-in thành công: Bàn ${table.code} (${table.currentGuestName || 'Khách Online'}).`);
+  };
+
+  // UC-08: Open Special Requests & Dietary Edit Modal
+  const handleOpenEditSpecialModal = (tableId: string) => {
+    const order = tableOrders[tableId];
+    const table = tables.find((t) => t.id === tableId);
+    const booking = bookings.find((b: BookingDetails) => b.tableId === tableId || (table && b.tableCode.includes(table.code)));
+
+    setEditingTableId(tableId);
+    setEditOccasion(order?.occasion || booking?.occasion || 'BIRTHDAY');
+    setEditBabyChairCount(order?.babyChairCount ?? booking?.babyChairCount ?? 0);
+    setEditCandleSetup(order?.candleSetup ?? booking?.candleSetup ?? false);
+    setEditDietaryNotes(order?.dietaryNotes || booking?.dietaryNotes || '');
+    setEditStaffNotes(order?.notes || booking?.notes || '');
+    setIsEditSpecialModalOpen(true);
+  };
+
+  // UC-08: Save Special Requests & Sync to KDS Bếp
+  const handleSaveSpecialRequests = async () => {
+    if (!editingTableId) return;
+
+    setTableOrders((prev) => {
+      const current = prev[editingTableId];
+      if (!current) return prev;
+      return {
+        ...prev,
+        [editingTableId]: {
+          ...current,
+          occasion: editOccasion,
+          babyChairCount: editBabyChairCount,
+          candleSetup: editCandleSetup,
+          dietaryNotes: editDietaryNotes,
+          notes: editStaffNotes,
+        },
+      };
+    });
+
+    const table = tables.find((t) => t.id === editingTableId);
+    const booking = bookings.find((b: BookingDetails) => b.tableId === editingTableId || (table && b.tableCode.includes(table.code)));
+
+    if (booking && booking.tableId) {
+      try {
+        await bookingApi.updateSpecialRequests(booking.tableId, {
+          occasion: editOccasion,
+          dietaryNotes: editDietaryNotes,
+          babyChairCount: editBabyChairCount,
+          candleSetup: editCandleSetup,
+          specialNotes: editStaffNotes,
+        });
+      } catch (e) {
+        console.warn('Backend sync in local state:', e);
+      }
+    }
+
+    setIsEditSpecialModalOpen(false);
+    showToast(`✅ Đã đồng bộ Nhu cầu đặc biệt & Dị ứng sang KDS Bếp cho bàn ${table?.code || ''}!`);
   };
 
   const handleAddDishToTable = (tableId: string, dish: typeof SIGNATURE_DISHES[0]) => {
@@ -463,6 +559,17 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
               </button>
             )}
 
+            {onNavigateToKds && (
+              <button
+                type="button"
+                onClick={onNavigateToKds}
+                className="px-4 py-2 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 border border-amber-300 text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-2xs"
+              >
+                <ChefHat className="w-4 h-4 text-amber-700" />
+                <span>Màn Hình Bếp (KDS)</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => setIsScannerOpen(true)}
@@ -677,6 +784,55 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
                       <p className="text-[11px] text-[#475569]">
                         SĐT: {table.guestPhone || '090***'}
                       </p>
+
+                      {/* UC-08 Badges for Online Booking */}
+                      {(() => {
+                        const matchingBk = bookings.find(
+                          (b: BookingDetails) =>
+                            b.tableId === table.id ||
+                            b.tableCode.includes(table.code) ||
+                            (table.currentGuestName && b.customerName === table.currentGuestName)
+                        );
+                        if (!matchingBk) return null;
+                        const hasSpecial =
+                          matchingBk.occasion ||
+                          matchingBk.babyChairCount ||
+                          matchingBk.candleSetup ||
+                          matchingBk.dietaryNotes;
+                        if (!hasSpecial) return null;
+
+                        return (
+                          <div className="space-y-1 pt-1 border-t border-blue-100">
+                            <div className="flex flex-wrap items-center gap-1">
+                              {matchingBk.occasion && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                                  <Cake className="w-2.5 h-2.5 text-amber-600" />
+                                  {matchingBk.occasion}
+                                </span>
+                              )}
+                              {matchingBk.babyChairCount && matchingBk.babyChairCount > 0 ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-bold">
+                                  <Baby className="w-2.5 h-2.5 text-blue-600" />
+                                  {matchingBk.babyChairCount} Ghế bé
+                                </span>
+                              ) : null}
+                              {matchingBk.candleSetup && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200 text-[10px] font-bold">
+                                  <Flame className="w-2.5 h-2.5 text-rose-600" />
+                                  Nến
+                                </span>
+                              )}
+                            </div>
+                            {matchingBk.dietaryNotes && (
+                              <div className="flex items-start gap-1 p-1 bg-rose-50 border border-rose-200 rounded text-rose-800 text-[10px] font-semibold leading-tight">
+                                <ShieldAlert className="w-3 h-3 text-rose-600 shrink-0 mt-0.5" />
+                                <span className="line-clamp-2">{matchingBk.dietaryNotes}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
                       <div className="flex items-center justify-between text-[10px] text-[#1E3A8A] font-semibold pt-1 border-t border-blue-100">
                         <span>Tiền cọc đã trả:</span>
                         <span className="font-mono">{new Intl.NumberFormat('vi-VN').format(table.depositPrice)} đ</span>
@@ -694,6 +850,47 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
                           {currentOrder?.source === 'ONLINE' ? '✨ Online' : '🚶 Vãng lai'}
                         </span>
                       </div>
+
+                      {/* UC-08 Badges for Seated Order */}
+                      {(() => {
+                        const hasSpecial =
+                          currentOrder?.occasion ||
+                          currentOrder?.babyChairCount ||
+                          currentOrder?.candleSetup ||
+                          currentOrder?.dietaryNotes;
+                        if (!hasSpecial) return null;
+
+                        return (
+                          <div className="space-y-1 pt-1 border-t border-[#E8DFD1]">
+                            <div className="flex flex-wrap items-center gap-1">
+                              {currentOrder?.occasion && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                                  <Cake className="w-2.5 h-2.5 text-amber-600" />
+                                  {currentOrder.occasion}
+                                </span>
+                              )}
+                              {currentOrder?.babyChairCount && currentOrder.babyChairCount > 0 ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-bold">
+                                  <Baby className="w-2.5 h-2.5 text-blue-600" />
+                                  {currentOrder.babyChairCount} Ghế bé
+                                </span>
+                              ) : null}
+                              {currentOrder?.candleSetup && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200 text-[10px] font-bold">
+                                  <Flame className="w-2.5 h-2.5 text-rose-600" />
+                                  Nến
+                                </span>
+                              )}
+                            </div>
+                            {currentOrder?.dietaryNotes && (
+                              <div className="flex items-start gap-1 p-1 bg-rose-50 border border-rose-200 rounded text-rose-800 text-[10px] font-semibold leading-tight">
+                                <ShieldAlert className="w-3 h-3 text-rose-600 shrink-0 mt-0.5" />
+                                <span className="line-clamp-2">{currentOrder.dietaryNotes}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       <div className="grid grid-cols-2 gap-2 text-[11px] text-[#78716C] pt-1 border-t border-[#E8DFD1]">
                         <div>
@@ -747,23 +944,35 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
                   )}
 
                   {isSeated && (
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedTableForPOS(table)}
-                        className="py-2 rounded-xl bg-[#FAF7F2] hover:bg-[#F3ECE0] text-[#2C221E] border border-[#E8DFD1] text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        <FileText className="w-3 h-3 text-[#8C6A43]" />
-                        <span>Order / Thêm Món</span>
-                      </button>
+                    <div className="space-y-1.5">
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTableForPOS(table)}
+                          className="py-2 rounded-xl bg-[#FAF7F2] hover:bg-[#F3ECE0] text-[#2C221E] border border-[#E8DFD1] text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <FileText className="w-3 h-3 text-[#8C6A43]" />
+                          <span>Order / Thêm Món</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTableForPOS(table)}
+                          className="py-2 rounded-xl bg-[#8C6A43] hover:bg-[#735534] text-white text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                        >
+                          <Receipt className="w-3 h-3" />
+                          <span>Tính Tiền</span>
+                        </button>
+                      </div>
 
                       <button
                         type="button"
-                        onClick={() => setSelectedTableForPOS(table)}
-                        className="py-2 rounded-xl bg-[#8C6A43] hover:bg-[#735534] text-white text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer shadow-xs"
+                        onClick={() => handleOpenEditSpecialModal(table.id)}
+                        className="w-full py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                        title="Xem & Cập nhật Nhu cầu đặc biệt & Cảnh báo dị ứng cho bếp"
                       >
-                        <Receipt className="w-3 h-3" />
-                        <span>Tính Tiền</span>
+                        <Sparkles className="w-3 h-3 text-amber-700" />
+                        <span>Nhu Cầu Đặc Biệt & Dị Ứng (KDS)</span>
                       </button>
                     </div>
                   )}
@@ -1183,6 +1392,79 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
                     </h4>
                   </div>
 
+                  {/* UC-08: Nhu cầu Đặc biệt & Dị ứng Card */}
+                  {(() => {
+                    const current = tableOrders[selectedTableForPOS.id];
+                    const hasSpecial = current?.occasion || current?.babyChairCount || current?.candleSetup || current?.dietaryNotes;
+                    return (
+                      <div className={`p-3.5 rounded-2xl border text-xs space-y-2.5 transition-all ${
+                        current?.dietaryNotes 
+                          ? 'bg-rose-50/80 border-rose-200' 
+                          : hasSpecial 
+                          ? 'bg-[#FAF4EB] border-[#C4A480]' 
+                          : 'bg-white border-[#E8DFD1]'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-[#8C6A43]" />
+                            <span className="font-bold text-[#2C221E] uppercase tracking-wider text-[11px]">
+                              Nhu Cầu Đặc Biệt & Dị Ứng
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditSpecialModal(selectedTableForPOS.id)}
+                            className="text-[11px] font-bold text-[#8C6A43] hover:text-[#735534] flex items-center gap-1 cursor-pointer hover:underline"
+                          >
+                            <Edit3 className="w-3 h-3" />
+                            <span>Chỉnh sửa / Đồng bộ KDS</span>
+                          </button>
+                        </div>
+
+                        {/* Badges row */}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {current?.occasion && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">
+                              <Cake className="w-3 h-3 text-amber-700" />
+                              {current.occasion}
+                            </span>
+                          )}
+                          {current?.babyChairCount && current.babyChairCount > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300 text-[10px] font-bold">
+                              <Baby className="w-3 h-3 text-blue-700" />
+                              {current.babyChairCount} Ghế trẻ em
+                            </span>
+                          ) : null}
+                          {current?.candleSetup && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-900 border border-rose-300 text-[10px] font-bold">
+                              <Flame className="w-3 h-3 text-rose-700" />
+                              Setup Nến Thơm
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Dietary Notes alert */}
+                        {current?.dietaryNotes ? (
+                          <div className="p-2.5 rounded-xl bg-white/90 border border-rose-300 text-rose-900 flex items-start gap-2 shadow-2xs">
+                            <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                            <div className="space-y-0.5">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 block">
+                                Cảnh Báo Bếp (Dị ứng / Lưu ý nấu nướng):
+                              </span>
+                              <p className="text-xs font-semibold text-rose-950 leading-relaxed">
+                                {current.dietaryNotes}
+                              </p>
+                            </div>
+                          </div>
+                        ) : !hasSpecial ? (
+                          <p className="text-[11px] text-[#78716C] italic">
+                            Chưa có ghi chú đặc biệt. Bấm "Chỉnh sửa" nếu khách cần thêm ghế trẻ em, nến thơm, hoặc kiêng gia vị.
+                          </p>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
+
                   {/* Pricing Breakdown */}
                   {(() => {
                     const current = tableOrders[selectedTableForPOS.id];
@@ -1568,6 +1850,216 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
             >
               Giả Lập Quét Vé Khách Tới (Ông Đặng Hoàng Nam • Bàn T-03)
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 9. UC-08: SPECIAL REQUESTS & DIETARY NOTES EDIT MODAL */}
+      {isEditSpecialModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1412]/60 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="w-full max-w-lg bg-white rounded-3xl border border-[#E8DFD1] shadow-2xl p-6 sm:p-7 space-y-6 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-4 border-b border-[#E8DFD1]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-[#8C6A43]" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-[#2C221E]">
+                    Nhu Cầu Đặc Biệt & Dị Ứng
+                  </h3>
+                  <p className="text-xs text-[#78716C]">
+                    Bàn {tables.find((t) => t.id === editingTableId)?.code || editingTableId} • Đồng bộ tức thì sang KDS Bếp
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditSpecialModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-[#FAF7F2] flex items-center justify-center text-[#78716C] hover:text-[#2C221E] cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+              {/* Occasion Selection */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-[#2C221E] block">
+                  Mục Đích Bữa Tiệc (Occasion):
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {['Không có', 'Sinh nhật', 'Kỷ niệm', 'Hẹn hò', 'Gặp đối tác', 'Gia đình'].map((occ) => {
+                    const isSelected = (occ === 'Không có' && !editOccasion) || editOccasion === occ;
+                    return (
+                      <button
+                        key={occ}
+                        type="button"
+                        onClick={() => setEditOccasion(occ === 'Không có' ? '' : occ)}
+                        className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#8C6A43] text-white border-[#8C6A43] shadow-2xs'
+                            : 'bg-[#FAF7F2] text-[#44403C] border-[#E8DFD1] hover:bg-white'
+                        }`}
+                      >
+                        {occ}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Extra Facilities: Baby Chair & Candles */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                <div className="p-3 bg-[#FAF7F2] rounded-2xl border border-[#E8DFD1] space-y-2">
+                  <span className="text-xs font-bold text-[#2C221E] flex items-center gap-1.5">
+                    <Baby className="w-4 h-4 text-blue-600" />
+                    <span>Ghế ăn em bé (High-chair)</span>
+                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-[#78716C]">Số lượng:</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditBabyChairCount(Math.max(0, editBabyChairCount - 1))}
+                        className="w-7 h-7 rounded-lg bg-white border border-[#E8DFD1] flex items-center justify-center font-bold text-xs hover:bg-[#FAF4EB] cursor-pointer"
+                      >
+                        -
+                      </button>
+                      <span className="font-mono font-bold text-sm w-5 text-center text-[#2C221E]">
+                        {editBabyChairCount}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setEditBabyChairCount(Math.min(5, editBabyChairCount + 1))}
+                        className="w-7 h-7 rounded-lg bg-white border border-[#E8DFD1] flex items-center justify-center font-bold text-xs hover:bg-[#FAF4EB] cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-[#FAF7F2] rounded-2xl border border-[#E8DFD1] space-y-2">
+                  <span className="text-xs font-bold text-[#2C221E] flex items-center gap-1.5">
+                    <Flame className="w-4 h-4 text-rose-600" />
+                    <span>Setup nến thơm</span>
+                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-[#78716C]">Thắp nến lãng mạn</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditCandleSetup(!editCandleSetup)}
+                      className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${
+                        editCandleSetup ? 'bg-[#8C6A43]' : 'bg-[#D6C7B2]'
+                      }`}
+                    >
+                      <span
+                        className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-transform shadow-xs ${
+                          editCandleSetup ? 'left-5.5' : 'left-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dietary notes & Allergy Warnings */}
+              <div className="space-y-2 pt-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4 text-rose-600" />
+                    <span>Lưu Ý Ăn Uống & Cảnh Báo Dị Ứng Cho Bếp:</span>
+                  </label>
+                  <span className="text-[10px] text-rose-600 font-semibold bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">
+                    KDS Bếp ưu tiên
+                  </span>
+                </div>
+
+                {/* Quick chip suggestions */}
+                <div className="flex flex-wrap gap-1.5 pb-1">
+                  {[
+                    'Không rắc tiêu vào thức ăn vì có trẻ nhỏ',
+                    'Dị ứng hải sản có vỏ',
+                    'Dị ứng đậu phộng',
+                    'Không ăn cay',
+                    'Ăn chay (Vegetarian)',
+                    'Không hành tỏi',
+                    'Không bột ngọt',
+                  ].map((preset) => {
+                    const isIncluded = editDietaryNotes.includes(preset);
+                    return (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => {
+                          if (isIncluded) {
+                            setEditDietaryNotes(
+                              editDietaryNotes
+                                .split(', ')
+                                .filter((s) => s.trim() !== preset)
+                                .join(', ')
+                            );
+                          } else {
+                            setEditDietaryNotes(
+                              editDietaryNotes ? `${editDietaryNotes}, ${preset}` : preset
+                            );
+                          }
+                        }}
+                        className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                          isIncluded
+                            ? 'bg-rose-600 text-white border-rose-600 shadow-2xs font-bold'
+                            : 'bg-rose-50/60 text-rose-800 border-rose-200 hover:bg-rose-100 font-medium'
+                        }`}
+                      >
+                        {isIncluded ? '✓ ' : '+ '}
+                        {preset}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <textarea
+                  value={editDietaryNotes}
+                  onChange={(e) => setEditDietaryNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Ghi chú chi tiết cho đầu bếp (VD: Không rắc tiêu vì có bé nhỏ, dị ứng tôm cua...)"
+                  className="w-full p-3 rounded-xl border border-rose-300 bg-rose-50/30 text-xs text-rose-950 focus:outline-none focus:border-rose-500 font-medium leading-relaxed"
+                />
+              </div>
+
+              {/* Staff internal notes */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[#2C221E] block">
+                  Ghi Chú Nội Bộ Phục Vụ / Lễ Tân:
+                </label>
+                <input
+                  type="text"
+                  value={editStaffNotes}
+                  onChange={(e) => setEditStaffNotes(e.target.value)}
+                  placeholder="Ghi chú phục vụ (VD: Khách VIP thân thiết, chuẩn bị bánh kem...)"
+                  className="w-full px-3 py-2 rounded-xl border border-[#E8DFD1] text-xs text-[#2C221E] focus:outline-none focus:border-[#C4A480]"
+                />
+              </div>
+            </div>
+
+            {/* Modal actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-[#E8DFD1]">
+              <button
+                type="button"
+                onClick={() => setIsEditSpecialModalOpen(false)}
+                className="px-4 py-2.5 rounded-xl border border-[#E8DFD1] text-xs font-semibold text-[#78716C] hover:bg-[#FAF7F2] cursor-pointer"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveSpecialRequests}
+                className="px-5 py-2.5 rounded-xl bg-[#8C6A43] hover:bg-[#735534] text-white text-xs font-bold flex items-center gap-2 shadow-xs cursor-pointer transition-all"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Lưu & Đồng Bộ Sang KDS Bếp</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

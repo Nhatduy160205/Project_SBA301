@@ -61,6 +61,11 @@ export interface BookingDetails {
   date: string;
   timeSlot: string;
   notes?: string;
+  // UC-08: Nhu cầu đặc biệt & Dị ứng
+  occasion?: string;
+  dietaryNotes?: string;
+  babyChairCount?: number;
+  candleSetup?: boolean;
   preOrders: PreOrderItem[];
   depositAmount: number;
   totalEstimatedAmount: number;
@@ -94,6 +99,11 @@ export interface TableOrderRecord {
   guestCount: number;
   seatedAtTime: string;
   notes?: string;
+  // UC-08: Nhu cầu đặc biệt & Dị ứng
+  occasion?: string;
+  dietaryNotes?: string;
+  babyChairCount?: number;
+  candleSetup?: boolean;
   depositAmount: number;
   items: OrderItem[];
 }

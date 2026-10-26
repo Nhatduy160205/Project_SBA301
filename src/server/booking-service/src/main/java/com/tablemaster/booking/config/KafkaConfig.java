@@ -16,6 +16,12 @@ public class KafkaConfig {
     public static final String TOPIC_BOOKING_EXPIRED = "booking.expired";
     public static final String TOPIC_TABLE_UPDATED = "booking.table.updated";
     public static final String TOPIC_PAYMENT_SUCCESS = "payment.success";
+    public static final String TOPIC_BOOKING_SPECIAL_REQUESTS = "booking.special-notes.updated";
+
+    @Bean
+    public NewTopic bookingSpecialRequestsTopic() {
+        return TopicBuilder.name(TOPIC_BOOKING_SPECIAL_REQUESTS).partitions(3).replicas(1).build();
+    }
 
     @Bean
     public NewTopic bookingCreatedTopic() {

@@ -1,8 +1,8 @@
 import React from 'react';
-import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut, Building2, History } from 'lucide-react';
+import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut, Building2, History, ChefHat } from 'lucide-react';
 import type { AuthUser } from '../../types';
 
-export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'admin' | 'restaurant';
+export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'kds' | 'restaurant' | 'admin';
 
 interface NavbarProps {
   currentView: ActiveView;
@@ -88,6 +88,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <span className="text-sm">📱</span>
             <span>App Phục Vụ</span>
+          </button>
+          <button
+            onClick={() => onNavigate('kds')}
+            className={`transition-all py-1.5 flex items-center gap-1.5 cursor-pointer ${
+              currentView === 'kds'
+                ? 'text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
+                : 'text-[#78716C] hover:text-[#1C1917]'
+            }`}
+          >
+            <ChefHat className="w-4 h-4 text-[#C4A480]" />
+            <span>Bếp (KDS)</span>
           </button>
           <button
             onClick={() => onNavigate('restaurant')}

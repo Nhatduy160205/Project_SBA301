@@ -35,6 +35,10 @@ public class BookingResponse {
     private String status;
     private String specialNotes;
     private String staffNotes;
+    private String occasion;
+    private String dietaryNotes;
+    private Integer babyChairCount;
+    private Boolean candleSetup;
     private UUID reviewedByUserId;
     private ZonedDateTime paymentDeadline;
     private String checkinQrToken;
@@ -67,6 +71,10 @@ public class BookingResponse {
                 .status(booking.getStatus().name())
                 .specialNotes(booking.getSpecialNotes())
                 .staffNotes(booking.getStaffNotes())
+                .occasion(booking.getOccasion())
+                .dietaryNotes(booking.getDietaryNotes())
+                .babyChairCount(booking.getBabyChairCount())
+                .candleSetup(booking.getCandleSetup())
                 .reviewedByUserId(booking.getReviewedByUserId())
                 .paymentDeadline(booking.getPaymentDeadline())
                 .checkinQrToken(booking.getCheckinQrToken())

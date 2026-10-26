@@ -7,10 +7,12 @@ import com.tablemaster.booking.repository.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.ZonedDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -21,6 +23,7 @@ public class BookingEventProducer {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final OutboxEventRepository outboxEventRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
     /**
      * Gửi event trực tiếp qua Kafka và lưu vào Transactional Outbox để đảm bảo tính tin cậy
@@ -48,14 +51,39 @@ public class BookingEventProducer {
         outboxEventRepository.save(outbox);
     }
 
+    private void broadcastWebSocket(String destination, Object payload) {
+        if (messagingTemplate != null) {
+            try {
+                messagingTemplate.convertAndSend(destination, payload);
+                log.info("Broadcasted WebSocket STOMP message to [{}]", destination);
+            } catch (Exception e) {
+                log.warn("Không thể broadcast WebSocket tới [{}]: {}", destination, e.getMessage());
+            }
+        }
+    }
+
     public void publishBookingCreated(Booking booking) {
         Map<String, Object> payload = createBookingPayload(booking);
         publishEvent(KafkaConfig.TOPIC_BOOKING_CREATED, "BOOKING", booking.getId(), "BOOKING_CREATED", payload);
+        broadcastWebSocket("/topic/kitchen/kds", payload);
+        broadcastWebSocket("/topic/host/table-notes", payload);
+        broadcastWebSocket("/topic/bookings", payload);
     }
 
     public void publishBookingConfirmed(Booking booking) {
         Map<String, Object> payload = createBookingPayload(booking);
         publishEvent(KafkaConfig.TOPIC_BOOKING_CONFIRMED, "BOOKING", booking.getId(), "BOOKING_CONFIRMED", payload);
+        broadcastWebSocket("/topic/kitchen/kds", payload);
+        broadcastWebSocket("/topic/host/table-notes", payload);
+        broadcastWebSocket("/topic/bookings", payload);
+    }
+
+    public void publishSpecialRequestsUpdated(Booking booking) {
+        Map<String, Object> payload = createBookingPayload(booking);
+        publishEvent(KafkaConfig.TOPIC_BOOKING_SPECIAL_REQUESTS, "BOOKING", booking.getId(), "SPECIAL_REQUESTS_UPDATED", payload);
+        broadcastWebSocket("/topic/kitchen/kds", payload);
+        broadcastWebSocket("/topic/host/table-notes", payload);
+        broadcastWebSocket("/topic/bookings", payload);
     }
 
     public void publishBookingSeated(Booking booking) {
@@ -103,6 +131,19 @@ public class BookingEventProducer {
         payload.put("status", booking.getStatus().name());
         payload.put("checkinQrToken", booking.getCheckinQrToken());
         payload.put("paymentDeadline", booking.getPaymentDeadline());
+        payload.put("occasion", booking.getOccasion());
+        payload.put("dietaryNotes", booking.getDietaryNotes());
+        payload.put("babyChairCount", booking.getBabyChairCount() != null ? booking.getBabyChairCount() : 0);
+        payload.put("candleSetup", Boolean.TRUE.equals(booking.getCandleSetup()));
+        payload.put("specialNotes", booking.getSpecialNotes());
+        payload.put("staffNotes", booking.getStaffNotes());
+
+        if (booking.getBookingTables() != null && !booking.getBookingTables().isEmpty()) {
+            List<String> tableIds = booking.getBookingTables().stream()
+                    .map(bt -> bt.getId().getTableId().toString())
+                    .collect(java.util.stream.Collectors.toList());
+            payload.put("tableIds", tableIds);
+        }
 
         if (booking.getPreorderItems() != null && !booking.getPreorderItems().isEmpty()) {
             java.util.List<Map<String, Object>> items = booking.getPreorderItems().stream()

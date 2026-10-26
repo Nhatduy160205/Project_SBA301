@@ -280,4 +280,91 @@ class BookingServiceTest {
 
         verify(bookingEventProducer, times(1)).publishBookingCreated(any(Booking.class));
     }
+
+    @Test
+    void createBooking_WithSpecialRequestsAndDietaryNotes_Success() {
+        CreateBookingRequest request = CreateBookingRequest.builder()
+                .guestName("Lê Hoàng Nam")
+                .guestPhone("0912345678")
+                .guestEmail("nam.le@example.com")
+                .bookingDate(bookingDate)
+                .timeSlotId(timeSlotId)
+                .guestCount(4)
+                .tableIds(List.of(tableId))
+                .occasion("BIRTHDAY")
+                .dietaryNotes("Không rắc tiêu vào thức ăn vì có trẻ nhỏ, Dị ứng hải sản có vỏ")
+                .babyChairCount(1)
+                .candleSetup(true)
+                .specialNotes("Ưu tiên bàn góc yên tĩnh, bánh kem viết tên Minh Anh")
+                .build();
+
+        when(bookingRepository.findBookedTableIds(eq(bookingDate), eq(timeSlotId), anyList()))
+                .thenReturn(Collections.emptyList());
+        when(bookingRepository.countByBookingDate(bookingDate)).thenReturn(1L);
+
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> {
+            Booking b = invocation.getArgument(0);
+            if (b.getId() == null) {
+                b.setId(UUID.randomUUID());
+            }
+            b.setCreatedAt(ZonedDateTime.now());
+            b.setUpdatedAt(ZonedDateTime.now());
+            return b;
+        });
+
+        BookingResponse response = bookingService.createBooking(request, userId);
+
+        assertNotNull(response);
+        assertEquals("BIRTHDAY", response.getOccasion());
+        assertEquals("Không rắc tiêu vào thức ăn vì có trẻ nhỏ, Dị ứng hải sản có vỏ", response.getDietaryNotes());
+        assertEquals(1, response.getBabyChairCount());
+        assertTrue(response.getCandleSetup());
+        assertEquals("Ưu tiên bàn góc yên tĩnh, bánh kem viết tên Minh Anh", response.getSpecialNotes());
+
+        verify(bookingEventProducer, times(1)).publishBookingCreated(any(Booking.class));
+    }
+
+    @Test
+    void updateSpecialRequests_Success() {
+        UUID bookingId = UUID.randomUUID();
+        Booking existing = Booking.builder()
+                .id(bookingId)
+                .bookingCode("BK2610260001")
+                .guestName("Trần Tuấn Kiệt")
+                .guestPhone("0988889999")
+                .guestEmail("kiet.tran@example.com")
+                .bookingDate(bookingDate)
+                .timeSlotId(timeSlotId)
+                .guestCount(2)
+                .status(BookingStatus.CONFIRMED)
+                .occasion("ROMANTIC_DATE")
+                .babyChairCount(0)
+                .candleSetup(false)
+                .build();
+
+        when(bookingRepository.findById(bookingId)).thenReturn(Optional.of(existing));
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        com.tablemaster.booking.dto.request.UpdateSpecialRequestsRequest updateReq =
+                com.tablemaster.booking.dto.request.UpdateSpecialRequestsRequest.builder()
+                        .occasion("ANNIVERSARY")
+                        .dietaryNotes("Không ăn cay, dị ứng đậu phộng")
+                        .babyChairCount(1)
+                        .candleSetup(true)
+                        .specialNotes("Kỷ niệm 3 năm ngày cưới, chuẩn bị nến thơm và 1 ghế ăn em bé high-chair")
+                        .staffNotes("Lễ tân đã xác nhận qua điện thoại và ghi chú cho Bếp trưởng")
+                        .build();
+
+        BookingResponse response = bookingService.updateSpecialRequests(bookingId, updateReq, UUID.randomUUID());
+
+        assertNotNull(response);
+        assertEquals("ANNIVERSARY", response.getOccasion());
+        assertEquals("Không ăn cay, dị ứng đậu phộng", response.getDietaryNotes());
+        assertEquals(1, response.getBabyChairCount());
+        assertTrue(response.getCandleSetup());
+        assertEquals("Kỷ niệm 3 năm ngày cưới, chuẩn bị nến thơm và 1 ghế ăn em bé high-chair", response.getSpecialNotes());
+        assertEquals("Lễ tân đã xác nhận qua điện thoại và ghi chú cho Bếp trưởng", response.getStaffNotes());
+
+        verify(bookingEventProducer, times(1)).publishSpecialRequestsUpdated(any(Booking.class));
+    }
 }
