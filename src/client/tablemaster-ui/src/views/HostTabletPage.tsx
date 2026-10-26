@@ -31,17 +31,18 @@ import {
   Phone,
   PhoneCall,
   Calendar,
-  AlertTriangle,
   Layers,
   LayoutGrid,
   Radio,
   Timer,
+  Camera,
 } from 'lucide-react';
 import type { TableItem, TableStatus, BookingDetails, TableOrderRecord, HostFloorLivePayload } from '../types';
 import { SIGNATURE_DISHES } from '../data/mockData';
 import { bookingApi } from '../services/bookingApi';
 import { FloorPlanCanvas } from '../components/floor/FloorPlanCanvas';
 import { websocketService } from '../services/websocketService';
+import { HostCameraQrScanner } from '../components/host/HostCameraQrScanner';
 
 interface HostTabletPageProps {
   tables: TableItem[];
@@ -102,13 +103,8 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
   // Feedback Toast
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
 
-  // UC-12: QR Scanner Modal & Dynamic Token Verification State
+  // UC-16: Host Camera QR Scanner Modal State
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [scannerInputToken, setScannerInputToken] = useState('');
-  const [isVerifyingScan, setIsVerifyingScan] = useState(false);
-  const [scanVerificationData, setScanVerificationData] = useState<any | null>(null);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [scanResult, setScanResult] = useState<string | null>(null);
 
 
   // Quick Menu Category for Add Dishes inside POS
@@ -768,59 +764,6 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
     setIsPaymentSuccessOpen(true);
   };
 
-  // UC-12: Quét và xác thực mã vé QR 64 ký tự chống giả mạo
-  const handleExecuteVerifyCheckin = async (tokenToVerify: string) => {
-    if (!tokenToVerify.trim()) return;
-    setIsVerifyingScan(true);
-    setScanError(null);
-    setScanResult(null);
-    setScanVerificationData(null);
-
-    try {
-      const res = await bookingApi.verifyAndCheckIn({
-        qrToken: tokenToVerify.trim(),
-        scannerLocation: 'Quầy Lễ Tân Trực Sảnh (Tầng 1)',
-      });
-
-      if (res.success && res.data) {
-        const bk = res.data;
-        let targetTable = tables.find((t) => bk.tableIds && bk.tableIds.includes(t.id));
-        if (!targetTable) {
-          targetTable = tables.find((t) => t.code === 'T-03') || tables.find((t) => t.status === 'AVAILABLE') || tables[0];
-        }
-
-        if (targetTable) {
-          handleCheckInOnlineBooking(targetTable);
-        }
-
-        setScanVerificationData({
-          bookingCode: bk.bookingCode || 'BK2610260001',
-          guestName: bk.guestName || 'Quý Khách Hàng',
-          guestPhone: bk.guestPhone || '0909 123 456',
-          guestCount: bk.guestCount || 4,
-          tableCode: targetTable ? targetTable.code : 'T-03',
-          deposit: bk.totalDeposit || 300000,
-          scannedAt: new Date().toLocaleTimeString('vi-VN'),
-        });
-        setScanResult('Check-in thành công! Khách đã được đón vào bàn.');
-        showToast(`✅ Quét vé thành công: Khách ${bk.guestName || 'Online'} đã vào bàn ${targetTable?.code}!`);
-      } else {
-        throw new Error(res.message || 'Mã vé không hợp lệ hoặc đã sử dụng');
-      }
-    } catch (err: any) {
-      console.warn('Lỗi xác thực QR:', err);
-      setScanError(err.message || 'Mã QR không hợp lệ hoặc vé này đã được check-in trước đó (Chống gian lận 1-Time Use)');
-    } finally {
-      setIsVerifyingScan(false);
-    }
-  };
-
-  const handleSimulateScan = () => {
-    // Giả lập quét mã 64 ký tự HMAC hợp lệ
-    const validToken = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
-    setScannerInputToken(validToken);
-    handleExecuteVerifyCheckin(validToken);
-  };
 
 
   // Filter tables by floor, search query, and dining status
@@ -952,8 +895,8 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
               onClick={() => setIsScannerOpen(true)}
               className="px-4 py-2 rounded-2xl bg-[#8C6A43] text-white hover:bg-[#735534] text-xs font-bold flex items-center gap-2 transition-all shadow-xs cursor-pointer"
             >
-              <QrCode className="w-4 h-4" />
-              <span>Quét QR Check-in (UC-12)</span>
+              <Camera className="w-4 h-4 text-amber-300" />
+              <span>Camera Quét Vé QR (UC-16)</span>
             </button>
           </div>
         </div>
@@ -1261,9 +1204,9 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
             {[
               { id: 'ALL', label: 'Tất Cả', count: currentFloorTables.length },
               { id: 'AVAILABLE', label: '🟢 Trống', count: currentFloorStats.available },
-              { id: 'SEATED', label: '🟠 Đang Ăn', count: currentFloorStats.seated },
-              { id: 'CONFIRMED', label: '🔵 Đã Cọc', count: currentFloorStats.reserved },
-              { id: 'LONG_DINING', label: '⏱️ &gt;75p', count: currentFloorStats.longDiningCount + currentFloorStats.overstayCount },
+              { id: 'SEATED', label: '🔵 Xanh Dương (Seated)', count: currentFloorStats.seated },
+              { id: 'CONFIRMED', label: '🟣 Đã Cọc', count: currentFloorStats.reserved },
+              { id: 'LONG_DINING', label: '⏱️ >75p', count: currentFloorStats.longDiningCount + currentFloorStats.overstayCount },
             ].map((tab) => {
               const isSelected = statusFilter === tab.id;
               return (
@@ -1371,12 +1314,12 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
                   <span className="text-[#44403C]">Đang Giữ 5p (Redlock)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-md bg-blue-100 border border-blue-500" />
-                  <span className="text-[#44403C]">Đã Cọc Giữ Chỗ (Confirmed)</span>
+                  <span className="w-3 h-3 rounded-md bg-indigo-100 border border-indigo-500" />
+                  <span className="text-[#44403C]">Đã Cọc (Confirmed)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-md bg-amber-200 border border-amber-500" />
-                  <span className="text-[#44403C]">Đang Ăn (&lt;75p)</span>
+                  <span className="w-3 h-3 rounded-md bg-blue-100 border border-blue-600" />
+                  <span className="text-blue-900 font-bold">Xanh Dương • Đang Ăn (Seated &lt;75p)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="w-3 h-3 rounded-md bg-amber-300 border border-amber-600" />
@@ -2877,199 +2820,23 @@ export const HostTabletPage: React.FC<HostTabletPageProps> = ({
         </div>
       )}
 
-      {/* 8. UC-12: HIGH-SECURITY DYNAMIC QR DOOR CHECK-IN SCANNER */}
-      {isScannerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#1A1412]/70 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in duration-200">
-          <div className="w-full max-w-lg bg-white rounded-3xl p-6 sm:p-7 border border-[#E8DFD1] shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-[#E8DFD1] pb-3.5">
-              <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded-full">
-                  Cửa Ra Vào & Sảnh Đón Khách (UC-12)
-                </span>
-                <h3 className="text-base sm:text-lg font-serif font-bold text-[#2C221E] flex items-center gap-2 mt-1">
-                  <QrCode className="w-5 h-5 text-[#8C6A43]" />
-                  <span>Quét Vé Điện Tử Dynamic QR Check-in</span>
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsScannerOpen(false);
-                  setScanError(null);
-                  setScanResult(null);
-                  setScanVerificationData(null);
-                  setScannerInputToken('');
-                }}
-                className="w-8 h-8 rounded-full bg-[#FAF7F2] flex items-center justify-center text-[#78716C] hover:text-[#2C221E] cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Viewfinder Frame with Laser Sweep Animation */}
-            <div className="relative w-full h-56 bg-slate-950 rounded-2xl overflow-hidden flex flex-col items-center justify-center p-4 border border-amber-500/30 shadow-inner">
-              {/* Laser animation */}
-              <div className="absolute inset-x-0 h-0.5 bg-gradient-to-r from-transparent via-amber-400 to-transparent shadow-[0_0_15px_#F59E0B] animate-bounce opacity-80" />
-
-              {/* Viewfinder box */}
-              <div className="relative w-40 h-40 border-2 border-dashed border-amber-400/70 rounded-2xl flex flex-col items-center justify-center bg-white/5 backdrop-blur-2xs">
-                <span className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-amber-400" />
-                <span className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-amber-400" />
-                <span className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-amber-400" />
-                <span className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-amber-400" />
-
-                <QrCode className="w-12 h-12 text-amber-300/40 animate-pulse" />
-                <span className="text-[10px] text-amber-200/90 font-mono mt-2 font-medium">
-                  CAMERA SCANNER READY
-                </span>
-              </div>
-
-              <div className="absolute bottom-2 text-center">
-                <span className="text-[10px] text-stone-400 font-mono">
-                  Bảo mật 64-char HMAC • Tự động đổi mỗi 60s
-                </span>
-              </div>
-            </div>
-
-            {/* Manual Token Input Box */}
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-[#2C221E] block">
-                Nhập Mã Token 64 Ký Tự Hoặc Mã Đặt Chỗ (BK...):
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={scannerInputToken}
-                  onChange={(e) => setScannerInputToken(e.target.value)}
-                  placeholder="Dán token 64 ký tự hoặc nhập mã BK2610260001..."
-                  className="flex-1 px-3.5 py-2.5 rounded-xl border border-[#E8DFD1] bg-[#FAF7F2] text-xs font-mono text-[#2C221E] focus:outline-none focus:border-[#8C6A43]"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleExecuteVerifyCheckin(scannerInputToken)}
-                  disabled={isVerifyingScan || !scannerInputToken.trim()}
-                  className="px-4 py-2.5 rounded-xl bg-[#8C6A43] hover:bg-[#735534] text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-50 shrink-0"
-                >
-                  {isVerifyingScan ? 'Đang xác thực...' : 'Quét Ngay'}
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Demo Preset Buttons */}
-            <div className="space-y-1.5 pt-1">
-              <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider block">
-                Phím Thao Tác Nhanh (Demo Check-in):
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={handleSimulateScan}
-                  disabled={isVerifyingScan}
-                  className="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 text-[11px] font-bold text-left flex items-center gap-2 transition-all cursor-pointer"
-                >
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>Quét Vé Hợp Lệ (Bàn T-03 • Token 64-char)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const seatedToken = 'already_seated_token_simulation_fraud_test_64char_token_example';
-                    setScannerInputToken(seatedToken);
-                    handleExecuteVerifyCheckin(seatedToken);
-                  }}
-                  disabled={isVerifyingScan}
-                  className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-300 text-rose-900 text-[11px] font-bold text-left flex items-center gap-2 transition-all cursor-pointer"
-                >
-                  <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
-                  <span>Thử Quét Lại Vé Đã Seated (Chống Gian Lận)</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Anti-fraud Warning Card if verification fails */}
-            {scanError && (
-              <div className="p-4 bg-rose-50 border-2 border-rose-300 rounded-2xl text-xs text-rose-950 space-y-1.5 animate-in fade-in">
-                <div className="flex items-center gap-2 text-rose-800 font-bold text-sm">
-                  <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
-                  <span>CẢNH BÁO AN NINH CỬA RA VÀO (ANTI-FRAUD)</span>
-                </div>
-                <p className="text-rose-900 leading-relaxed font-medium">
-                  {scanError}
-                </p>
-                <p className="text-[11px] text-rose-700 italic">
-                  Chính sách an ninh: Mỗi mã QR chỉ quét được 1 lần duy nhất và xoay sau 60 giây. Tuyệt đối không chấp nhận ảnh chụp màn hình chia sẻ lại.
-                </p>
-              </div>
-            )}
-
-            {/* Scan Result Notice */}
-            {scanResult && !scanError && (
-              <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-800 font-bold flex items-center gap-2 animate-in fade-in">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{scanResult}</span>
-              </div>
-            )}
-
-            {/* Verification Success Details */}
-            {scanVerificationData && (
-
-              <div className="p-4 bg-emerald-50 border-2 border-emerald-400 rounded-2xl text-xs text-emerald-950 space-y-2 animate-in fade-in">
-                <div className="flex items-center justify-between pb-2 border-b border-emerald-200">
-                  <div className="flex items-center gap-2 font-bold text-emerald-900 text-sm">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                    <span>XÁC THỰC THÀNH CÔNG • ĐÃ MỞ BÀN</span>
-                  </div>
-                  <span className="font-mono text-[10px] text-emerald-800 bg-emerald-200/60 px-2 py-0.5 rounded-md font-bold">
-                    {scanVerificationData.scannedAt}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span className="text-stone-500 block text-[10px]">Mã đơn:</span>
-                    <strong className="font-mono text-emerald-900 font-bold">{scanVerificationData.bookingCode}</strong>
-                  </div>
-                  <div>
-                    <span className="text-stone-500 block text-[10px]">Bàn tiếp đón:</span>
-                    <strong className="font-mono text-amber-900 font-bold text-sm">{scanVerificationData.tableCode}</strong>
-                  </div>
-                  <div>
-                    <span className="text-stone-500 block text-[10px]">Thực khách:</span>
-                    <strong className="text-stone-900 font-bold">{scanVerificationData.guestName} ({scanVerificationData.guestCount} người)</strong>
-                  </div>
-                  <div>
-                    <span className="text-stone-500 block text-[10px]">Tiền cọc ghi nhận:</span>
-                    <strong className="font-mono text-emerald-800 font-bold">{new Intl.NumberFormat('vi-VN').format(scanVerificationData.deposit)} đ</strong>
-                  </div>
-                </div>
-
-                <div className="pt-1 text-[11px] text-emerald-800">
-                  Bàn <strong>{scanVerificationData.tableCode}</strong> đã được chuyển sang trạng thái <strong>ĐÃ VÀO BÀN (SEATED)</strong>. Nhân viên có thể dẫn khách vào vị trí.
-                </div>
-              </div>
-            )}
-
-            {/* Footer Close */}
-            <div className="pt-2 border-t border-[#E8DFD1] flex justify-end">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsScannerOpen(false);
-                  setScanError(null);
-                  setScanResult(null);
-                  setScanVerificationData(null);
-                  setScannerInputToken('');
-                }}
-                className="px-5 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-white text-xs font-bold transition-all cursor-pointer"
-              >
-                Đóng Máy Quét
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 8. UC-16: HOST CAMERA QR SCANNER & LIVE CHECK-IN MODAL */}
+      <HostCameraQrScanner
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        tables={tables}
+        bookings={bookings}
+        onCheckInSuccess={(table, guestName) => {
+          handleCheckInOnlineBooking(table);
+          websocketService.simulateBroadcast({
+            tableId: table.id,
+            tableCode: table.code,
+            status: 'SEATED',
+            color: '#2563EB',
+          });
+          showToast(`✅ Quét vé thành công: Khách ${guestName} đã vào bàn ${table.code} (Trạng thái: XANH DƯƠNG - SEATED)!`);
+        }}
+      />
 
 
       {/* 9. UC-08: SPECIAL REQUESTS & DIETARY NOTES EDIT MODAL */}

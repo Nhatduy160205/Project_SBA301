@@ -89,6 +89,10 @@ public class BookingEventProducer {
     public void publishBookingSeated(Booking booking) {
         Map<String, Object> payload = createBookingPayload(booking);
         publishEvent(KafkaConfig.TOPIC_BOOKING_SEATED, "BOOKING", booking.getId(), "BOOKING_SEATED", payload);
+        broadcastWebSocket("/topic/host/checkin", payload);
+        broadcastWebSocket("/topic/tables/status", payload);
+        broadcastWebSocket("/topic/host/floors-live", payload);
+        broadcastWebSocket("/topic/bookings", payload);
     }
 
     public void publishBookingCompleted(Booking booking) {

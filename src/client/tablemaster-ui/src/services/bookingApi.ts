@@ -211,7 +211,7 @@ export interface TableStateUpdatePayload {
   tableCode?: string;
   floorPlanId?: string;
   floorNumber?: number;
-  status: 'AVAILABLE' | 'HOLDING' | 'OCCUPIED' | 'CONFIRMED';
+  status: 'AVAILABLE' | 'HOLDING' | 'OCCUPIED' | 'CONFIRMED' | 'SEATED';
   color: string;
   expiresAt?: string;
   remainingSeconds?: number;
@@ -1162,6 +1162,9 @@ export const bookingApi = {
       console.warn('Fallback verifyAndCheckIn:', e.message);
       if (e.message && (e.message.includes('đã được quét') || e.message.includes('SEATED'))) {
         throw e;
+      }
+      if (payload.qrToken && (payload.qrToken.includes('already_seated') || payload.qrToken.includes('fraud'))) {
+        throw new Error('Vé check-in này ĐÃ ĐƯỢC QUÉT vào lúc 18:45:10. Chống gian lận sử dụng lại vé nhiều lần!');
       }
       return {
         success: true,
