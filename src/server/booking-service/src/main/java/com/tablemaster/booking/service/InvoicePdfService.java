@@ -159,18 +159,41 @@ public class InvoicePdfService {
             int itemIndex = 1;
             NumberFormat currencyFormatter = NumberFormat.getInstance(new Locale("vi", "VN"));
 
+            // Tính khoản cọc món ăn đặt trước (UC-07)
+            BigDecimal preorderTotal = BigDecimal.ZERO;
+            if (booking.getPreorderItems() != null) {
+                for (BookingPreorderItem item : booking.getPreorderItems()) {
+                    if (item.getSubtotal() != null) {
+                        preorderTotal = preorderTotal.add(item.getSubtotal());
+                    }
+                }
+            }
+
+            // Khoản cọc giữ bàn = tổng cọc - cọc món ăn (hoặc tối thiểu cọc tiêu chuẩn)
+            BigDecimal tableDeposit = booking.getTotalDeposit() != null ? booking.getTotalDeposit().subtract(preorderTotal) : BigDecimal.valueOf(200000);
+            if (tableDeposit.compareTo(BigDecimal.ZERO) < 0) {
+                tableDeposit = BigDecimal.valueOf(200000);
+            }
+
             // Khoản cọc giữ bàn tiêu chuẩn
             itemsTable.addCell(createCell(String.valueOf(itemIndex++), TextAlignment.CENTER));
             itemsTable.addCell(createCell("Coc giu ban tieu chuan (" + booking.getGuestCount() + " khach)", TextAlignment.LEFT));
             itemsTable.addCell(createCell("1", TextAlignment.CENTER));
-            itemsTable.addCell(createCell("200,000 d", TextAlignment.RIGHT));
-            itemsTable.addCell(createCell("200,000 d", TextAlignment.RIGHT));
+            itemsTable.addCell(createCell(currencyFormatter.format(tableDeposit) + " d", TextAlignment.RIGHT));
+            itemsTable.addCell(createCell(currencyFormatter.format(tableDeposit) + " d", TextAlignment.RIGHT));
 
-            // Danh sách món đặt trước nếu có
+            // Danh sách món Signature đặt trước nếu có (UC-07)
             if (booking.getPreorderItems() != null && !booking.getPreorderItems().isEmpty()) {
                 for (BookingPreorderItem item : booking.getPreorderItems()) {
+                    String dishTitle = item.getItemName() != null && !item.getItemName().isBlank()
+                            ? item.getItemName()
+                            : "Mon Signature Dat Truoc (Pre-order Menu Item)";
+                    if (item.getNotes() != null && !item.getNotes().isBlank()) {
+                        dishTitle += "\n[Yeu cau cong phu: " + item.getNotes() + "]";
+                    }
+
                     itemsTable.addCell(createCell(String.valueOf(itemIndex++), TextAlignment.CENTER));
-                    itemsTable.addCell(createCell("Mon an dat truoc (Pre-order Menu Item)", TextAlignment.LEFT));
+                    itemsTable.addCell(createCell(dishTitle, TextAlignment.LEFT));
                     itemsTable.addCell(createCell(String.valueOf(item.getQuantity()), TextAlignment.CENTER));
                     itemsTable.addCell(createCell(currencyFormatter.format(item.getUnitPrice()) + " d", TextAlignment.RIGHT));
                     itemsTable.addCell(createCell(currencyFormatter.format(item.getSubtotal()) + " d", TextAlignment.RIGHT));

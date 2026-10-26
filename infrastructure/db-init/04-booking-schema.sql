@@ -42,9 +42,11 @@ CREATE TABLE booking_preorder_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     booking_id UUID NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
     menu_item_id UUID NOT NULL,
+    item_name VARCHAR(150),
     quantity INT NOT NULL CHECK (quantity > 0),
     unit_price DECIMAL(12, 2) NOT NULL,
-    subtotal DECIMAL(12, 2) NOT NULL
+    subtotal DECIMAL(12, 2) NOT NULL,
+    notes TEXT
 );
 
 CREATE TABLE table_order_items (

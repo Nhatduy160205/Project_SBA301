@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Download,
   UtensilsCrossed,
+  Sparkles,
 } from 'lucide-react';
 import type { BookingDetails, AuthUser } from '../../types';
 import { SIGNATURE_DISHES } from '../../data/mockData';
@@ -72,13 +73,22 @@ export const BookingHistoryModal: React.FC<BookingHistoryModalProps> = ({
             notes: b.specialNotes,
             preOrders: b.preorderItems
               ? b.preorderItems.map((item) => {
-                  const dish = SIGNATURE_DISHES.find((d) => d.id === item.menuItemId) || SIGNATURE_DISHES[0];
+                  const dish = SIGNATURE_DISHES.find((d) => d.id === item.menuItemId || d.name === item.itemName) || {
+                    id: item.menuItemId,
+                    name: item.itemName || 'Món Signature Đặt Trước',
+                    category: 'Steak & Main',
+                    price: item.unitPrice || 0,
+                    description: item.notes || '',
+                    image: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80',
+                  };
                   return {
                     dish: {
                       ...dish,
+                      name: item.itemName || dish.name,
                       price: item.unitPrice || dish.price,
                     },
                     quantity: item.quantity,
+                    preparationNotes: item.notes || '',
                   };
                 })
               : [],
@@ -405,6 +415,34 @@ export const BookingHistoryModal: React.FC<BookingHistoryModalProps> = ({
                             Đã cọc VietQR 100%
                           </span>
                         </div>
+
+                        {/* Pre-order Signature Dishes (UC-07) */}
+                        {b.preOrders && b.preOrders.length > 0 && (
+                          <div className="p-3 bg-[#FAF4EB]/80 rounded-xl border border-[#E8DFD1] space-y-1.5 sm:col-span-3 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] text-[#8C6A43] uppercase font-bold tracking-wider flex items-center gap-1">
+                                <Sparkles className="w-3 h-3 text-[#8C6A43]" />
+                                Món Ăn Signature Đặt Trước ({b.preOrders.reduce((s, p) => s + p.quantity, 0)} phần):
+                              </span>
+                              <span className="text-[10px] text-[#8C6A43] font-bold font-mono">
+                                Cọc món: {new Intl.NumberFormat('vi-VN').format(b.preOrders.reduce((s, p) => s + p.dish.price * p.quantity, 0))} đ
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                              {b.preOrders.map((p, idx) => (
+                                <div key={idx} className="bg-white p-2.5 rounded-lg border border-[#F2ECE1] space-y-0.5 shadow-2xs">
+                                  <div className="flex justify-between items-center font-bold text-[#1C1917] text-xs">
+                                    <span>{p.quantity}x {p.dish.name}</span>
+                                    <span className="font-mono text-[#8C6A43]">{new Intl.NumberFormat('vi-VN').format(p.dish.price * p.quantity)} đ</span>
+                                  </div>
+                                  {p.preparationNotes && (
+                                    <p className="text-[10px] text-[#78716C] italic leading-tight">↳ Yêu cầu: {p.preparationNotes}</p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Action Buttons: 3 Tính năng trọng tâm UC-03 */}

@@ -19,6 +19,9 @@ public class PreorderItemRequest {
     @NotNull(message = "ID món ăn không được để trống")
     private UUID menuItemId;
 
+    @Size(max = 150, message = "Tên món tối đa 150 ký tự")
+    private String itemName;
+
     @NotNull(message = "Số lượng không được để trống")
     @Min(value = 1, message = "Số lượng phải ít nhất 1")
     private Integer quantity;
@@ -26,4 +29,7 @@ public class PreorderItemRequest {
     @NotNull(message = "Đơn giá không được để trống")
     @DecimalMin(value = "0.0", inclusive = false, message = "Đơn giá phải lớn hơn 0")
     private BigDecimal unitPrice;
+
+    // Ghi chú chuẩn bị công phu (Độ chín Wagyu A5 & ủ nhiệt 45p, Decant rượu vang 30p, Chữ viết bánh sinh nhật...)
+    private String notes;
 }

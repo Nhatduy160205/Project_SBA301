@@ -31,6 +31,9 @@ public class BookingPreorderItem {
     @Column(name = "menu_item_id", nullable = false)
     private UUID menuItemId;
 
+    @Column(name = "item_name", length = 150)
+    private String itemName;
+
     @Column(name = "quantity", nullable = false)
     private Integer quantity;
 
@@ -39,4 +42,7 @@ public class BookingPreorderItem {
 
     @Column(name = "subtotal", precision = 12, scale = 2, nullable = false)
     private BigDecimal subtotal;
+
+    @Column(name = "notes", columnDefinition = "TEXT")
+    private String notes;
 }

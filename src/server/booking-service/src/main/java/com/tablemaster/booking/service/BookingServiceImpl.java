@@ -99,24 +99,47 @@ public class BookingServiceImpl implements BookingService {
             }
         }
 
-        // 5. Lưu món ăn đặt trước (CascadeType.ALL tự động lưu các phần tử trong collection)
+        // 5. Lưu món ăn đặt trước và tính cộng dồn tiền cọc món ăn vào tổng hóa đơn cọc (UC-07)
+        BigDecimal preorderTotal = BigDecimal.ZERO;
         if (request.getPreorderItems() != null && !request.getPreorderItems().isEmpty()) {
             for (PreorderItemRequest itemReq : request.getPreorderItems()) {
                 BigDecimal subtotal = itemReq.getUnitPrice().multiply(BigDecimal.valueOf(itemReq.getQuantity()));
+                preorderTotal = preorderTotal.add(subtotal);
+
                 BookingPreorderItem item = BookingPreorderItem.builder()
                         .booking(savedBooking)
                         .menuItemId(itemReq.getMenuItemId())
+                        .itemName(itemReq.getItemName())
                         .quantity(itemReq.getQuantity())
                         .unitPrice(itemReq.getUnitPrice())
                         .subtotal(subtotal)
+                        .notes(itemReq.getNotes())
                         .build();
                 savedBooking.getPreorderItems().add(item);
             }
         }
 
+        // Tính tổng tiền cọc cộng dồn: Tiền cọc giữ bàn + Tiền cọc các món Signature đặt trước (UC-07)
+        BigDecimal tableDeposit;
+        if (request.getTotalDeposit() != null && request.getTotalDeposit().compareTo(BigDecimal.ZERO) > 0) {
+            if (request.getTotalDeposit().compareTo(preorderTotal) >= 0) {
+                // Client đã gửi tổng cọc (gồm cọc bàn + cọc món)
+                tableDeposit = request.getTotalDeposit().subtract(preorderTotal);
+            } else {
+                // Client gửi riêng khoản cọc bàn
+                tableDeposit = request.getTotalDeposit();
+            }
+        } else {
+            // Mức cọc bàn tiêu chuẩn Le Prime Bistro mặc định là 200,000 VND
+            tableDeposit = BigDecimal.valueOf(200000);
+        }
+
+        BigDecimal accumulatedTotalDeposit = tableDeposit.add(preorderTotal);
+        savedBooking.setTotalDeposit(accumulatedTotalDeposit);
+
         savedBooking = bookingRepository.save(savedBooking);
 
-        // 6. Bắn event Kafka qua Outbox
+        // 6. Bắn event Kafka qua Outbox (Mang đầy đủ danh sách món và tổng cọc đã cộng dồn)
         bookingEventProducer.publishBookingCreated(savedBooking);
 
         return BookingResponse.fromEntity(savedBooking);
@@ -170,10 +193,15 @@ public class BookingServiceImpl implements BookingService {
         booking.setReviewedByUserId(staffId);
         booking.setStaffNotes(request.getStaffNotes());
 
-        if (request.getDepositAmount() != null && request.getDepositAmount().compareTo(BigDecimal.ZERO) > 0) {
+        BigDecimal depositAmount = request.getDepositAmount();
+        if (depositAmount == null || depositAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            depositAmount = booking.getTotalDeposit();
+        }
+
+        if (depositAmount != null && depositAmount.compareTo(BigDecimal.ZERO) > 0) {
             // Chuyển sang AWAITING_PAYMENT, chờ khách quét VietQR cọc tiền
             booking.setStatus(BookingStatus.AWAITING_PAYMENT);
-            booking.setTotalDeposit(request.getDepositAmount());
+            booking.setTotalDeposit(depositAmount);
 
             int minutes = (request.getDeadlineMinutes() != null && request.getDeadlineMinutes() > 0)
                     ? request.getDeadlineMinutes() : 30;

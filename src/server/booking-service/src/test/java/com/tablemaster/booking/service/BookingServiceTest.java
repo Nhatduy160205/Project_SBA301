@@ -3,6 +3,7 @@ package com.tablemaster.booking.service;
 import com.tablemaster.booking.dto.request.ApproveDepositRequest;
 import com.tablemaster.booking.dto.request.CheckInRequest;
 import com.tablemaster.booking.dto.request.CreateBookingRequest;
+import com.tablemaster.booking.dto.request.PreorderItemRequest;
 import com.tablemaster.booking.dto.response.BookingResponse;
 import com.tablemaster.booking.entity.Booking;
 import com.tablemaster.booking.enums.BookingStatus;
@@ -193,5 +194,90 @@ class BookingServiceTest {
         assertNotNull(result);
         assertEquals(4, result.length);
         verify(invoicePdfService, times(1)).generateInvoicePdf(booking);
+    }
+
+    @Test
+    void createBooking_WithSignaturePreorderDishes_AccumulatesTotalDeposit() {
+        // UC-07: Chọn Món ăn Signature Đặt trước (Wagyu A5, Decant vang, Bánh sinh nhật...)
+        UUID wagyuMenuId = UUID.randomUUID();
+        UUID wineMenuId = UUID.randomUUID();
+        UUID cakeMenuId = UUID.randomUUID();
+
+        PreorderItemRequest wagyuItem = PreorderItemRequest.builder()
+                .menuItemId(wagyuMenuId)
+                .itemName("Thăn Bò Wagyu A5 Miyazaki 250g")
+                .quantity(2)
+                .unitPrice(BigDecimal.valueOf(1850000))
+                .notes("Độ chín: Medium-Rare, ủ nhiệt 45 phút")
+                .build();
+
+        PreorderItemRequest wineItem = PreorderItemRequest.builder()
+                .menuItemId(wineMenuId)
+                .itemName("Vang Đỏ Château Margaux 2018")
+                .quantity(1)
+                .unitPrice(BigDecimal.valueOf(4200000))
+                .notes("Chiết thở bình decanter pha lê trước 30 phút")
+                .build();
+
+        PreorderItemRequest cakeItem = PreorderItemRequest.builder()
+                .menuItemId(cakeMenuId)
+                .itemName("Bánh Kem Sinh Nhật Thiết Kế Riêng")
+                .quantity(1)
+                .unitPrice(BigDecimal.valueOf(450000))
+                .notes("Viết chữ: Chúc Mừng Sinh Nhật Minh Anh 26th")
+                .build();
+
+        CreateBookingRequest request = CreateBookingRequest.builder()
+                .guestName("Hoàng Nhật Duy")
+                .guestPhone("0909123456")
+                .guestEmail("nhanvien@tablemaster.vn")
+                .bookingDate(bookingDate)
+                .timeSlotId(timeSlotId)
+                .guestCount(4)
+                .tableIds(List.of(tableId))
+                .totalDeposit(BigDecimal.valueOf(200000)) // Tiền cọc giữ bàn
+                .preorderItems(List.of(wagyuItem, wineItem, cakeItem))
+                .build();
+
+        when(bookingRepository.findBookedTableIds(eq(bookingDate), eq(timeSlotId), anyList()))
+                .thenReturn(Collections.emptyList());
+        when(bookingRepository.countByBookingDate(bookingDate)).thenReturn(5L);
+
+        when(bookingRepository.save(any(Booking.class))).thenAnswer(invocation -> {
+            Booking b = invocation.getArgument(0);
+            if (b.getId() == null) {
+                b.setId(UUID.randomUUID());
+            }
+            b.setCreatedAt(ZonedDateTime.now());
+            b.setUpdatedAt(ZonedDateTime.now());
+            return b;
+        });
+
+        BookingResponse response = bookingService.createBooking(request, userId);
+
+        assertNotNull(response);
+        // Kiểm tra tiền cọc tích lũy: Cọc bàn (200k) + 2*Wagyu (3.7M) + Vang (4.2M) + Bánh (450k) = 8,550,000 VND
+        BigDecimal expectedTotalDeposit = BigDecimal.valueOf(8550000);
+        assertEquals(0, expectedTotalDeposit.compareTo(response.getTotalDeposit()), "Tổng tiền cọc phải được cộng dồn chính xác");
+
+        // Kiểm tra danh sách món đặt trước đã được map đầy đủ thông tin & ghi chú công phu
+        assertNotNull(response.getPreorderItems());
+        assertEquals(3, response.getPreorderItems().size());
+
+        BookingResponse.PreorderItemResponse respWagyu = response.getPreorderItems().get(0);
+        assertEquals("Thăn Bò Wagyu A5 Miyazaki 250g", respWagyu.getItemName());
+        assertEquals(2, respWagyu.getQuantity());
+        assertEquals("Độ chín: Medium-Rare, ủ nhiệt 45 phút", respWagyu.getNotes());
+        assertEquals(0, BigDecimal.valueOf(3700000).compareTo(respWagyu.getSubtotal()));
+
+        BookingResponse.PreorderItemResponse respWine = response.getPreorderItems().get(1);
+        assertEquals("Vang Đỏ Château Margaux 2018", respWine.getItemName());
+        assertEquals("Chiết thở bình decanter pha lê trước 30 phút", respWine.getNotes());
+
+        BookingResponse.PreorderItemResponse respCake = response.getPreorderItems().get(2);
+        assertEquals("Bánh Kem Sinh Nhật Thiết Kế Riêng", respCake.getItemName());
+        assertEquals("Viết chữ: Chúc Mừng Sinh Nhật Minh Anh 26th", respCake.getNotes());
+
+        verify(bookingEventProducer, times(1)).publishBookingCreated(any(Booking.class));
     }
 }
