@@ -35,9 +35,29 @@ public class BookingResponse {
     private String status;
     private String specialNotes;
     private String staffNotes;
+    private String occasion;
+    private String dietaryNotes;
+    private Integer babyChairCount;
+    private Boolean candleSetup;
+    // UC-10: Private Banquet & Event Inquiry
+    private String eventType;
+    private Integer targetFloor;
+    private String companyName;
+    private BigDecimal estimatedBudget;
+    private Boolean stageAudioRequired;
+    private Boolean decorationRequired;
+    private ZonedDateTime callbackDeadline;
+    private String managerCallStatus;
+    private String consultationNotes;
     private UUID reviewedByUserId;
     private ZonedDateTime paymentDeadline;
     private String checkinQrToken;
+    // UC-12: E-Ticket & Dynamic QR 64 ký tự
+    private ZonedDateTime ticketIssuedAt;
+    private String ticketZnsStatus;
+    private String ticketEmailStatus;
+    private Integer qrRotationCounter;
+    private ZonedDateTime checkinScannedAt;
     private ZonedDateTime seatedAt;
     private ZonedDateTime completedAt;
     private ZonedDateTime createdAt;
@@ -67,9 +87,27 @@ public class BookingResponse {
                 .status(booking.getStatus().name())
                 .specialNotes(booking.getSpecialNotes())
                 .staffNotes(booking.getStaffNotes())
+                .occasion(booking.getOccasion())
+                .dietaryNotes(booking.getDietaryNotes())
+                .babyChairCount(booking.getBabyChairCount())
+                .candleSetup(booking.getCandleSetup())
+                .eventType(booking.getEventType())
+                .targetFloor(booking.getTargetFloor())
+                .companyName(booking.getCompanyName())
+                .estimatedBudget(booking.getEstimatedBudget())
+                .stageAudioRequired(booking.getStageAudioRequired())
+                .decorationRequired(booking.getDecorationRequired())
+                .callbackDeadline(booking.getCallbackDeadline())
+                .managerCallStatus(booking.getManagerCallStatus())
+                .consultationNotes(booking.getConsultationNotes())
                 .reviewedByUserId(booking.getReviewedByUserId())
                 .paymentDeadline(booking.getPaymentDeadline())
                 .checkinQrToken(booking.getCheckinQrToken())
+                .ticketIssuedAt(booking.getTicketIssuedAt())
+                .ticketZnsStatus(booking.getTicketZnsStatus())
+                .ticketEmailStatus(booking.getTicketEmailStatus())
+                .qrRotationCounter(booking.getQrRotationCounter())
+                .checkinScannedAt(booking.getCheckinScannedAt())
                 .seatedAt(booking.getSeatedAt())
                 .completedAt(booking.getCompletedAt())
                 .createdAt(booking.getCreatedAt())
@@ -88,9 +126,11 @@ public class BookingResponse {
                     .map(item -> PreorderItemResponse.builder()
                             .id(item.getId())
                             .menuItemId(item.getMenuItemId())
+                            .itemName(item.getItemName())
                             .quantity(item.getQuantity())
                             .unitPrice(item.getUnitPrice())
                             .subtotal(item.getSubtotal())
+                            .notes(item.getNotes())
                             .build())
                     .collect(Collectors.toList()));
         }
@@ -106,8 +146,10 @@ public class BookingResponse {
     public static class PreorderItemResponse {
         private UUID id;
         private UUID menuItemId;
+        private String itemName;
         private Integer quantity;
         private BigDecimal unitPrice;
         private BigDecimal subtotal;
+        private String notes;
     }
 }

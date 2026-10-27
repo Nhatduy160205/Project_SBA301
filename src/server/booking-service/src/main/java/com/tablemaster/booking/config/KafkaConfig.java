@@ -16,6 +16,42 @@ public class KafkaConfig {
     public static final String TOPIC_BOOKING_EXPIRED = "booking.expired";
     public static final String TOPIC_TABLE_UPDATED = "booking.table.updated";
     public static final String TOPIC_PAYMENT_SUCCESS = "payment.success";
+    public static final String TOPIC_BOOKING_SPECIAL_REQUESTS = "booking.special-notes.updated";
+    public static final String TOPIC_EVENT_INQUIRY_CREATED = "booking.event-inquiry.created";
+    public static final String TOPIC_EVENT_INQUIRY_CONSULTED = "booking.event-inquiry.consulted";
+    public static final String TOPIC_TICKET_ISSUED = "booking.ticket.issued";
+    public static final String TOPIC_NOTIFICATION_ZNS_SENT = "notification.zns.sent";
+    public static final String TOPIC_NOTIFICATION_EMAIL_SENT = "notification.email.sent";
+
+    @Bean
+    public NewTopic ticketIssuedTopic() {
+        return TopicBuilder.name(TOPIC_TICKET_ISSUED).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public NewTopic notificationZnsTopic() {
+        return TopicBuilder.name(TOPIC_NOTIFICATION_ZNS_SENT).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public NewTopic notificationEmailTopic() {
+        return TopicBuilder.name(TOPIC_NOTIFICATION_EMAIL_SENT).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public NewTopic eventInquiryCreatedTopic() {
+        return TopicBuilder.name(TOPIC_EVENT_INQUIRY_CREATED).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public NewTopic eventInquiryConsultedTopic() {
+        return TopicBuilder.name(TOPIC_EVENT_INQUIRY_CONSULTED).partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public NewTopic bookingSpecialRequestsTopic() {
+        return TopicBuilder.name(TOPIC_BOOKING_SPECIAL_REQUESTS).partitions(3).replicas(1).build();
+    }
 
     @Bean
     public NewTopic bookingCreatedTopic() {

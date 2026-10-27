@@ -51,6 +51,21 @@ public class CreateBookingRequest {
     // Ghi chú của khách: "Set nến kỷ niệm ngày cưới"
     private String specialNotes;
 
+    // UC-08: Mục đích tiệc (BIRTHDAY, BUSINESS, ROMANTIC_DATE, FAMILY, ANNIVERSARY, OTHER)
+    private String occasion;
+
+    // UC-08: Ghi chú dị ứng & ăn uống (không rắc tiêu, không cay, dị ứng hải sản...)
+    private String dietaryNotes;
+
+    // UC-08: Yêu cầu chuẩn bị ghế ăn cho trẻ em (Baby high-chair)
+    @Min(value = 0, message = "Số lượng ghế em bé không được âm")
+    @Builder.Default
+    private Integer babyChairCount = 0;
+
+    // UC-08: Setup nến thơm lãng mạn
+    @Builder.Default
+    private Boolean candleSetup = false;
+
     // Danh sách món đặt trước (tuỳ chọn)
     @Valid
     private List<PreorderItemRequest> preorderItems;

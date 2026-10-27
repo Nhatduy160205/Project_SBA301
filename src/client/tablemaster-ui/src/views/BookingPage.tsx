@@ -32,10 +32,20 @@ import {
   ShoppingBag,
   Trash2,
   Shirt,
+  Move3d,
+  Sun,
+  Moon,
+  Star,
+  Sliders,
+  Cake,
+  Baby,
+  ShieldAlert,
+  AlertCircle,
 } from 'lucide-react';
 import type { TableItem, SignatureDish, BookingDetails } from '../types';
 import { SIGNATURE_DISHES } from '../data/mockData';
 import { QRPaymentModal } from '../components/common/QRPaymentModal';
+import { ETicketModal } from '../components/booking/ETicketModal';
 import { AvailabilitySearchEngine } from '../components/booking/AvailabilitySearchEngine';
 import { FloorPlanCanvas } from '../components/floor/FloorPlanCanvas';
 import { SpatialFloor3D } from '../components/floor/SpatialFloor3D';
@@ -43,26 +53,78 @@ import { webSocketFloorService } from '../services/websocketService';
 import {
   bookingApi,
   ensureUUID,
+  getDishUUID,
   SEED_DATA,
   type CreateBookingRequestPayload,
   type TableAvailabilityDto,
 } from '../services/bookingApi';
 
-const OCCASIONS = [
-  { id: 'date', label: 'Hẹn hò lãng mạn', icon: Heart },
-  { id: 'anniversary', label: 'Kỷ niệm ngày cưới / Yêu nhau', icon: Sparkles },
-  { id: 'birthday', label: 'Tiệc sinh nhật', icon: Gift },
-  { id: 'business', label: 'Tiếp đối tác / Công việc', icon: Building2 },
-  { id: 'family', label: 'Tụ họp gia đình / Bạn bè', icon: Users },
+export const OCCASIONS = [
+  { id: 'date', label: 'Hẹn hò lãng mạn', icon: Heart, desc: 'Bàn nến ấm cúng, view lãng mạn' },
+  { id: 'anniversary', label: 'Kỷ niệm ngày cưới / Yêu nhau', icon: Sparkles, desc: 'Setup hoa hồng & chúc mừng' },
+  { id: 'birthday', label: 'Tiệc sinh nhật', icon: Gift, desc: 'Tặng đĩa bánh sinh nhật nhỏ' },
+  { id: 'business', label: 'Tiếp đối tác / Công việc', icon: Building2, desc: 'Yên tĩnh, trang trọng & riêng tư' },
+  { id: 'family', label: 'Tụ họp gia đình / Bạn bè', icon: Users, desc: 'Không gian rộng rãi, ấm cúng' },
 ];
 
-const QUICK_TAGS = [
-  'Ưu tiên bàn gần cửa sổ ngắm view phố',
-  'Yêu cầu chuẩn bị nến & hoa trang trí',
-  'Cần kê thêm 01 ghế ăn em bé',
-  'Vị trí yên tĩnh để trao đổi công việc',
-  'Dị ứng hải sản có vỏ',
-  'Có khách ăn chay',
+export const DIETARY_OPTIONS = [
+  {
+    id: 'no_pepper',
+    label: 'Không rắc tiêu vào thức ăn (Có trẻ nhỏ)',
+    subtitle: 'Không rắc tiêu đen hoặc tiêu sọ vào bất kỳ món ăn nào',
+    badge: '🚨 Quan trọng',
+    color: 'text-rose-700 bg-rose-50 border-rose-300 ring-rose-200',
+  },
+  {
+    id: 'seafood_allergy',
+    label: 'Dị ứng hải sản có vỏ',
+    subtitle: 'Không dùng tôm, cua, sò điệp, hàu trong bất kỳ công đoạn chế biến',
+    badge: '⚠️ Dị ứng',
+    color: 'text-amber-800 bg-amber-50 border-amber-300 ring-amber-200',
+  },
+  {
+    id: 'peanut_allergy',
+    label: 'Dị ứng đậu phộng / các loại hạt',
+    subtitle: 'Tuyệt đối không dùng dầu lạc, bơ đậu phộng, hạt điều, hạnh nhân',
+    badge: '⚠️ Dị ứng',
+    color: 'text-amber-800 bg-amber-50 border-amber-300 ring-amber-200',
+  },
+  {
+    id: 'no_spicy',
+    label: 'Không ăn cay (Không ớt, gia vị cay)',
+    subtitle: 'Chế biến thanh ngọt tự nhiên, êm dịu dạ dày',
+    badge: '🌶️ Khẩu vị',
+    color: 'text-stone-700 bg-stone-50 border-stone-300 ring-stone-200',
+  },
+  {
+    id: 'vegetarian',
+    label: 'Có khách ăn chay (Vegetarian)',
+    subtitle: 'Bếp trưởng chuẩn bị riêng thực đơn nấm & rau củ quả hữu cơ',
+    badge: '🥗 Món chay',
+    color: 'text-emerald-800 bg-emerald-50 border-emerald-300 ring-emerald-200',
+  },
+  {
+    id: 'no_msg',
+    label: 'Không bột ngọt / Mì chính (No MSG)',
+    subtitle: 'Nước xốt hầm mộc tự nhiên từ rau củ và xương trong 18 tiếng',
+    badge: '🌿 Tự nhiên',
+    color: 'text-teal-800 bg-teal-50 border-teal-300 ring-teal-200',
+  },
+  {
+    id: 'gluten_free',
+    label: 'Không Gluten / Bất dung nạp sữa',
+    subtitle: 'Không dùng bánh mì bột mì, nước tương có lúa mì, bơ sữa động vật',
+    badge: '🌾 Ăn kiêng',
+    color: 'text-indigo-800 bg-indigo-50 border-indigo-300 ring-indigo-200',
+  },
+];
+
+export const FACILITY_TAGS = [
+  'Ưu tiên bàn gần cửa sổ ngắm view phố Nguyễn Huệ',
+  'Vị trí góc yên tĩnh để đàm đạo riêng tư',
+  'Có người lớn tuổi cần ghế êm & gần lối đi',
+  'Cần Sommelier riêng tư vấn hầm rượu vang',
+  'Chuẩn bị hoa hồng tươi & thiệp chúc mừng trên bàn',
 ];
 
 const formatDateToISO = (date: Date): string => {
@@ -146,6 +208,7 @@ interface BookingPageProps {
   onAddBooking: (newBooking: BookingDetails) => void;
   rebookData?: BookingDetails | null;
   onClearRebook?: () => void;
+  onOpenBanquetModal?: () => void;
 }
 
 export const BookingPage: React.FC<BookingPageProps> = ({
@@ -155,6 +218,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   onAddBooking,
   rebookData,
   onClearRebook,
+  onOpenBanquetModal,
 }) => {
   // Toast thông báo Re-book 1 chạm
   const [rebookToast, setRebookToast] = useState<string | null>(null);
@@ -181,16 +245,65 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   const [conflictError, setConflictError] = useState<string | null>(null);
   const [isHoldingTable, setIsHoldingTable] = useState<boolean>(false);
 
-  // Step 3: Occasion & Preferences
+  // Step 3: Occasion & Preferences (UC-08 Special Requests & Dietary Notes)
   const [showSection3, setShowSection3] = useState<boolean>(true);
   const [selectedOccasion, setSelectedOccasion] = useState<string | null>('date');
+  const [babyChairCount, setBabyChairCount] = useState<number>(1);
+  const [candleSetup, setCandleSetup] = useState<boolean>(true);
+  const [birthdayName, setBirthdayName] = useState<string>('Minh Anh');
+  const [selectedDietaryTags, setSelectedDietaryTags] = useState<string[]>([
+    'Không rắc tiêu vào thức ăn (Có trẻ nhỏ)',
+  ]);
   const [customNotes, setCustomNotes] = useState<string>('Ưu tiên bàn gần cửa sổ ngắm trọn phố Nguyễn Huệ giúp mình nhé!');
 
+  // Step 4: Pre-orders (UC-07 Signature Pre-order Menu & Elaborate Prep)
+  const [showSection4, setShowSection4] = useState<boolean>(true);
+  const [selectedDishes, setSelectedDishes] = useState<Record<string, number>>({});
+  const [dishNotes, setDishNotes] = useState<Record<string, string>>({});
+  const [selectedMenuCategory, setSelectedMenuCategory] = useState<string>('ALL');
+  const [expandedComboIds, setExpandedComboIds] = useState<Record<string, boolean>>({ 'combo-1': true });
+
+  // Step 5: Policies
+  const [showSection5, setShowSection5] = useState<boolean>(true);
+
+  // Customer Contact Info
+  const [customerName, setCustomerName] = useState<string>('Nguyễn Trần Bảo Anh');
+  const [customerPhone, setCustomerPhone] = useState<string>('0909123456');
+  const [customerEmail, setCustomerEmail] = useState<string>('baoanh.nguyen@gmail.com');
+
+  // Payment modal state
+  const [isQRModalOpen, setIsQRModalOpen] = useState<boolean>(false);
+  const [currentBooking, setCurrentBooking] = useState<BookingDetails | null>(null);
+  const [bookingSuccess, setBookingSuccess] = useState<BookingDetails | null>(null);
+  const [backendBookingUUID, setBackendBookingUUID] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [isETicketOpen, setIsETicketOpen] = useState<boolean>(false);
+
+  // Generate 7 upcoming days for horizontal date selector
+  const upcomingDays = useMemo(() => {
+    const list = [];
+    const dayNames = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      const iso = formatDateToISO(d);
+      const isToday = i === 0;
+      const isTomorrow = i === 1;
+      list.push({
+        iso,
+        dayName: isToday ? 'Hôm nay' : isTomorrow ? 'Ngày mai' : dayNames[d.getDay()],
+        dayNum: d.getDate(),
+        month: d.getMonth() + 1,
+        fullLabel: `${dayNames[d.getDay()]}, ${d.getDate()}/${d.getMonth() + 1}`,
+      });
+    }
+    return list;
+  }, []);
   // Step 3: Pre-orders
   const [selectedDishes, setSelectedDishes] = useState<Record<string, number>>({});
   const [showPreOrderSection, setShowPreOrderSection] = useState<boolean>(true);
 
-  // Tự động khôi phục dữ liệu khi khách bấm "Đặt lại bàn này" (Re-book 1-Chạm)
+  // Tự động khôi phục dữ liệu khi khách bấm "Đặt lại bàn này" (Re-book 1-Chạm, gồm cả món Signature & ghi chú)
   useEffect(() => {
     if (rebookData) {
       if (rebookData.partySize) setPartySize(rebookData.partySize);
@@ -198,15 +311,26 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       if (rebookData.phone) setCustomerPhone(rebookData.phone);
       if (rebookData.email) setCustomerEmail(rebookData.email);
       if (rebookData.notes) setCustomNotes(rebookData.notes);
+      if (rebookData.occasion) setSelectedOccasion(rebookData.occasion.toLowerCase());
+      if (typeof rebookData.babyChairCount === 'number') setBabyChairCount(rebookData.babyChairCount);
+      if (typeof rebookData.candleSetup === 'boolean') setCandleSetup(rebookData.candleSetup);
+      if (rebookData.dietaryNotes) {
+        setSelectedDietaryTags(rebookData.dietaryNotes.split(',').map((s) => s.trim()).filter(Boolean));
+      }
 
       if (rebookData.preOrders && rebookData.preOrders.length > 0) {
         const dishMap: Record<string, number> = {};
+        const noteMap: Record<string, string> = {};
         rebookData.preOrders.forEach((p) => {
           if (p.dish && p.dish.id) {
             dishMap[p.dish.id] = p.quantity;
+            if (p.preparationNotes) {
+              noteMap[p.dish.id] = p.preparationNotes;
+            }
           }
         });
         setSelectedDishes(dishMap);
+        setDishNotes(noteMap);
       }
 
       setRebookToast(`Đã tự động tải cấu hình bàn & món ăn cũ từ đơn ${rebookData.bookingId}. Quý khách chỉ cần chọn ngày giờ phù hợp để hoàn tất.`);
@@ -224,6 +348,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
 
   const handleClearAllDishes = () => {
     setSelectedDishes({});
+    setDishNotes({});
   };
 
   // Customer info
@@ -264,6 +389,21 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       }
       return copy;
     });
+
+    // Mặc định gợi ý ghi chú chế biến công phu cho các món signature đặc thù
+    if (delta > 0 && !selectedDishes[dishId] && !dishNotes[dishId]) {
+      if (dishId === 'dish-1') {
+        setDishNotes((prev) => ({ ...prev, [dishId]: 'Độ chín: Medium-Rare, Ủ nhiệt 45 phút kỹ thuật Sous-vide' }));
+      } else if (dishId === 'wine-1') {
+        setDishNotes((prev) => ({ ...prev, [dishId]: 'Decant chiết thở bình pha lê trước 30 phút, ướp lạnh 16°C' }));
+      } else if (dishId === 'cake-1') {
+        setDishNotes((prev) => ({ ...prev, [dishId]: 'Viết chữ: Chúc Mừng Sinh Nhật (Tặng kèm nến sinh nhật)' }));
+      }
+    }
+  };
+
+  const handleUpdateDishNote = (dishId: string, note: string) => {
+    setDishNotes((prev) => ({ ...prev, [dishId]: note }));
   };
 
   const dishesTotal = Object.entries(selectedDishes).reduce((sum, [dishId, qty]) => {
@@ -463,14 +603,38 @@ export const BookingPage: React.FC<BookingPageProps> = ({
     const preOrderItems = Object.entries(selectedDishes)
       .map(([id, quantity]) => {
         const dish = SIGNATURE_DISHES.find((d) => d.id === id);
-        return dish ? { dish, quantity } : null;
+        return dish
+          ? {
+              dish,
+              quantity,
+              preparationNotes: dishNotes[id] || '',
+            }
+          : null;
       })
-      .filter((item): item is { dish: SignatureDish; quantity: number } => item !== null);
+      .filter((item): item is { dish: SignatureDish; quantity: number; preparationNotes: string } => item !== null);
 
-    const occasionText = selectedOccasion
-      ? `[Dịp: ${OCCASIONS.find((o) => o.id === selectedOccasion)?.label}] `
-      : '';
-    const fullNotes = `${occasionText}${customNotes}`.trim();
+    const occasionLabel = OCCASIONS.find((o) => o.id === selectedOccasion)?.label || '';
+    const dietaryNotesString = selectedDietaryTags.join(', ');
+
+    // Tạo chuỗi ghi chú tổng hợp chu đáo
+    const noteParts: string[] = [];
+    if (occasionLabel) {
+      if (selectedOccasion === 'birthday' && birthdayName.trim()) {
+        noteParts.push(`[Dịp: Tiệc sinh nhật - Bánh kem viết tên "${birthdayName.trim()}"]`);
+      } else {
+        noteParts.push(`[Dịp: ${occasionLabel}]`);
+      }
+    }
+
+    const tableReqs: string[] = [];
+    if (babyChairCount > 0) tableReqs.push(`Chuẩn bị ${babyChairCount} ghế em bé (baby high-chair)`);
+    if (candleSetup) tableReqs.push('Setup nến thơm tinh dầu');
+    if (tableReqs.length > 0) noteParts.push(`[Yêu cầu bàn: ${tableReqs.join(', ')}]`);
+
+    if (dietaryNotesString) noteParts.push(`[Cảnh báo Dị ứng & Bếp KDS: ${dietaryNotesString}]`);
+    if (customNotes.trim()) noteParts.push(customNotes.trim());
+
+    const fullNotes = noteParts.join(' ').trim();
 
     setIsSubmitting(true);
     let realBookingCode = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -485,12 +649,18 @@ export const BookingPage: React.FC<BookingPageProps> = ({
         timeSlotId: SEED_DATA.TIME_SLOT_ID,
         guestCount: partySize,
         tableIds: [tableUUID],
+        occasion: selectedOccasion ? selectedOccasion.toUpperCase() : 'OTHER',
+        dietaryNotes: dietaryNotesString,
+        babyChairCount: babyChairCount,
+        candleSetup: candleSetup,
         specialNotes: fullNotes,
-        totalDeposit: depositRequired,
+        totalDeposit: grandTotal, // UC-07: Tổng cọc đã cộng dồn (Cọc bàn + Cọc món ăn đặt trước)
         preorderItems: preOrderItems.map((p) => ({
-          menuItemId: SEED_DATA.MENU_ITEM_ID,
+          menuItemId: getDishUUID(p.dish.id),
+          itemName: p.dish.name,
           quantity: p.quantity,
           unitPrice: p.dish.price,
+          notes: p.preparationNotes,
         })),
       };
 
@@ -518,8 +688,12 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       date: selectedDate,
       timeSlot: effectiveTimeSlot,
       notes: fullNotes,
+      occasion: selectedOccasion ? selectedOccasion.toUpperCase() : 'OTHER',
+      dietaryNotes: dietaryNotesString,
+      babyChairCount: babyChairCount,
+      candleSetup: candleSetup,
       preOrders: preOrderItems,
-      depositAmount: depositRequired,
+      depositAmount: grandTotal, // UC-07: Cọc cộng dồn chuyển sang VietQR
       totalEstimatedAmount: grandTotal,
       createdAt: 'Vừa xong',
       status: 'PENDING_DEPOSIT',
@@ -537,9 +711,9 @@ export const BookingPage: React.FC<BookingPageProps> = ({
         try {
           const res = await bookingApi.approveAndRequestDeposit(
             backendBookingUUID,
-            depositRequired,
+            grandTotal, // UC-07: Duyệt cọc tổng cộng dồn
             60,
-            'Khách đã thanh toán cọc thành công qua VietQR'
+            'Khách đã thanh toán cọc bàn và món ăn Signature qua VietQR'
           );
           console.log('✅ [Backend API] Duyệt cọc đơn thành công:', res.data);
         } catch (err: any) {
@@ -554,6 +728,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       onAddBooking(confirmedBooking);
       setBookingSuccess(confirmedBooking);
       setIsQRModalOpen(false);
+      setIsETicketOpen(true); // UC-12: Tự động mở Vé Điện Tử QR Check-in sau khi cọc thành công
 
       // Giải phóng phiên giữ tạm thời Redlock khi đã cọc tiền thành công
       if (selectedTable && holdToken) {
@@ -679,6 +854,42 @@ export const BookingPage: React.FC<BookingPageProps> = ({
         </div>
       </div>
 
+      {/* UC-10: Large Banquet & Floor Buyout CTA Banner */}
+      {onOpenBanquetModal && (
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#1E1109] via-[#2D1B0F] to-[#1E1109] border-2 border-amber-500/50 p-6 sm:p-7 shadow-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center shrink-0 shadow-lg font-bold">
+              <Sparkles className="w-7 h-7" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-bold uppercase tracking-widest bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2.5 py-0.5 rounded-full">
+                  Private Banquet & Rooftop Buyout (UC-10)
+                </span>
+                <span className="text-xs text-amber-200/70 font-mono">
+                  SLA Tư Vấn Trực Tiếp 15 Phút
+                </span>
+              </div>
+              <h3 className="font-serif text-xl sm:text-2xl font-bold text-white tracking-tight">
+                Đặt Tiệc Đoàn Đông (20 - 100 Khách) hoặc Bao Trọn Tầng Rooftop
+              </h3>
+              <p className="text-xs sm:text-sm text-stone-300 max-w-2xl leading-relaxed">
+                Tổ chức sinh nhật sang trọng, Year-End Party, hội thảo công ty hay gala dinner. Quản lý ca gọi tư vấn trực tiếp thực đơn và lên thiết kế hoa tươi, âm thanh sân khấu trong 15 phút.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenBanquetModal}
+            className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs sm:text-sm font-bold flex items-center gap-2.5 shadow-xl hover:shadow-amber-500/20 transition-all cursor-pointer shrink-0"
+          >
+            <span>Tư Vấn Đặt Tiệc Sự Kiện Ngay</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Success banner if booking created */}
       {/* SUCCESS CONFIRMATION BANNER IF JUST BOOKED */}
       <AnimatePresence>
         {bookingSuccess && (
@@ -699,8 +910,38 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                 <p className="text-xs sm:text-sm text-[#15803D]">
                   Cảm ơn quý khách <strong>{bookingSuccess.customerName}</strong>. Bàn tại <strong>{bookingSuccess.tableCode}</strong> vào ngày <strong>{bookingSuccess.date} ({bookingSuccess.timeSlot})</strong> cho <strong>{bookingSuccess.partySize} khách</strong> đã được xác nhận.
                 </p>
+                {bookingSuccess.preOrders && bookingSuccess.preOrders.length > 0 && (
+                  <div className="pt-1.5 flex flex-wrap items-center gap-2 text-xs text-emerald-900 font-medium">
+                    <span className="bg-emerald-200/60 px-2 py-0.5 rounded-md font-bold">
+                      🍳 {bookingSuccess.preOrders.reduce((s, p) => s + p.quantity, 0)} món Signature đặt trước:
+                    </span>
+                    <span>
+                      {bookingSuccess.preOrders.map(p => `${p.quantity}x ${p.dish.name}`).join(', ')}
+                    </span>
+                    <span className="font-mono font-bold text-emerald-950">
+                      (Tổng cọc đã thanh toán: {new Intl.NumberFormat('vi-VN').format(bookingSuccess.depositAmount)} đ)
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsETicketOpen(true)}
+                className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
+              >
+                <span>📱 Mở Vé QR Check-in (E-Ticket)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setBookingSuccess(null)}
+                className="px-4 py-2.5 bg-white hover:bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Đặt Thêm Bàn Mới
+              </button>
+            </div>
+
             <button
               onClick={() => setBookingSuccess(null)}
               className="px-5 py-2.5 bg-[#16A34A] text-white text-xs font-bold rounded-xl hover:bg-[#15803D] transition-colors shrink-0 cursor-pointer shadow-xs"
@@ -833,6 +1074,24 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                         );
                       })}
                     </div>
+
+                    {partySize >= 12 && onOpenBanquetModal && (
+                      <div className="p-3 bg-amber-500/10 border border-amber-400/40 rounded-xl flex items-center justify-between text-xs text-amber-950 mt-2">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>
+                            Đoàn từ <strong>15 - 100 khách</strong> hoặc muốn <strong>bao trọn tầng Rooftop</strong>?
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={onOpenBanquetModal}
+                          className="underline font-bold text-amber-800 hover:text-amber-950 ml-2 whitespace-nowrap cursor-pointer"
+                        >
+                          Đăng ký Private Banquet &rarr;
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Date & Time Grid */}
@@ -1323,7 +1582,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       </AnimatePresence>
     </section>
 
-          {/* STEP 3: DỊP TIỆC & GHI CHÚ CHU ĐÁO */}
+          {/* STEP 3: NHU CẦU ĐẶC BIỆT & CẢNH BÁO DỊ ỨNG (UC-08) */}
           <section className="bg-white border-2 border-stone-200/90 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 transition-all hover:border-amber-400/60">
             <div className="flex items-center justify-between pb-4 border-b border-stone-200">
               <div className="flex items-center gap-3">
@@ -1333,16 +1592,14 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="font-serif text-xl font-bold text-stone-900">
-                      Dịp Dùng Bữa & Ghi Chú Chu Đáo
+                      Ghi Chú Nhu Cầu Đặc Biệt & Dị Ứng (Special Requests & Dietary)
                     </h2>
-                    {selectedOccasion && (
-                      <span className="text-[11px] font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-300">
-                        {OCCASIONS.find(o => o.id === selectedOccasion)?.label}
-                      </span>
-                    )}
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                      Đồng bộ Tablet Lễ tân & KDS Bếp
+                    </span>
                   </div>
                   <p className="text-xs text-stone-500">
-                    Nhà hàng sẽ chuẩn bị bài trí nến, hoa hoặc hỗ trợ vị trí đặc biệt theo mong muốn
+                    Mục đích tiệc, ghế em bé (high-chair), nến thơm và lưu ý dị ứng không tiêu / không cay cho Bếp trưởng
                   </p>
                 </div>
               </div>
@@ -1362,8 +1619,21 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="space-y-6 overflow-hidden"
+                  className="space-y-7 overflow-hidden"
                 >
+                  {/* Subsection 1: Occasions / Party Purpose */}
+                  <div className="space-y-3">
+                    <label className="text-xs font-bold uppercase tracking-wider text-stone-600 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                        <span>1. Mục đích tiệc & Dịp dùng bữa:</span>
+                      </span>
+                      <span className="text-[10px] text-amber-800 font-semibold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                        Hỗ trợ setup riêng
+                      </span>
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
                   {/* Occasion Cards */}
                   <div className="space-y-2.5">
                     <label className="text-xs font-bold uppercase tracking-wider text-[#6B5E54] flex items-center justify-between">
@@ -1380,6 +1650,13 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                           <button
                             key={occ.id}
                             type="button"
+                            onClick={() => {
+                              setSelectedOccasion(selectedOccasion === occ.id ? null : occ.id);
+                              if (occ.id === 'date' || occ.id === 'anniversary') {
+                                setCandleSetup(true);
+                              }
+                            }}
+                            className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
                             onClick={() => setSelectedOccasion(selectedOccasion === occ.id ? null : occ.id)}
                             className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
                               isSelected
@@ -1398,8 +1675,106 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                         );
                       })}
                     </div>
+
+                    {/* Birthday Name field if birthday selected */}
+                    {selectedOccasion === 'birthday' && (
+                      <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-300 flex items-center gap-3 animate-in fade-in duration-200">
+                        <Cake className="w-5 h-5 text-amber-600 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <label className="text-[11px] font-bold text-amber-900 block mb-1">
+                            Tên người sinh nhật (Nhà hàng chuẩn bị chữ trên bánh & nhạc chúc mừng):
+                          </label>
+                          <input
+                            type="text"
+                            value={birthdayName}
+                            onChange={(e) => setBirthdayName(e.target.value)}
+                            placeholder="Ví dụ: Hoàng Anh (Sinh nhật lần thứ 25)"
+                            className="w-full bg-white border border-amber-300 rounded-xl px-3 py-1.5 text-xs text-stone-900 focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
+                  {/* Subsection 2: Table Setup & Special Facilities (Baby High-Chair, Candle Setup) */}
+                  <div className="space-y-3 pt-1 border-t border-stone-200">
+                    <label className="text-xs font-bold uppercase tracking-wider text-stone-600 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Baby className="w-3.5 h-3.5 text-amber-600" />
+                        <span>2. Yêu cầu bổ sung tại bàn (Ghế em bé & Nến thơm):</span>
+                      </span>
+                      <span className="text-[10px] text-stone-400">Chuẩn bị trước khi vào bàn</span>
+                    </label>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      {/* Baby Chair Counter */}
+                      <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 hover:border-amber-400 transition-all flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                            babyChairCount > 0 ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-white text-stone-500 border border-stone-200'
+                          }`}>
+                            <Baby className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-stone-900">Ghế Ăn Trẻ Em (Baby High-chair)</p>
+                            <p className="text-[10px] text-stone-500">Khử khuẩn sẵn sàng cho bé nhỏ</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 bg-white px-2.5 py-1.5 rounded-xl border border-stone-200 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => setBabyChairCount((c) => Math.max(0, c - 1))}
+                            disabled={babyChairCount <= 0}
+                            className="w-6 h-6 rounded-lg flex items-center justify-center text-stone-600 hover:bg-stone-100 disabled:opacity-40 cursor-pointer"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="font-mono text-xs font-bold text-stone-900 w-5 text-center">
+                            {babyChairCount}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setBabyChairCount((c) => Math.min(4, c + 1))}
+                            className="w-6 h-6 rounded-lg flex items-center justify-center text-amber-700 hover:bg-amber-50 cursor-pointer font-bold"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Candle Setup Toggle */}
+                      <div
+                        onClick={() => setCandleSetup(!candleSetup)}
+                        className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                          candleSetup
+                            ? 'bg-amber-50/70 border-amber-400 ring-1 ring-amber-300'
+                            : 'bg-stone-50 border-stone-200 hover:border-amber-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                            candleSetup ? 'bg-amber-500 text-slate-950 shadow-xs' : 'bg-white text-stone-500 border border-stone-200'
+                          }`}>
+                            <Flame className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-stone-900">Setup Nến Thơm Lãng Mạn</p>
+                            <p className="text-[10px] text-stone-500">Thắp nến tinh dầu hoa hồng Pháp</p>
+                          </div>
+                        </div>
+
+                        <div className={`w-11 h-6 rounded-full transition-colors flex items-center px-1 shrink-0 ${
+                          candleSetup ? 'bg-amber-600 justify-end' : 'bg-stone-300 justify-start'
+                        }`}>
+                          <div className="w-4 h-4 rounded-full bg-white shadow-xs" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quick Facility Chips */}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {FACILITY_TAGS.map((tag) => {
                   {/* Ghi chú thêm (Quick Chips & Freeform Text) */}
                   <div className="space-y-3 pt-2">
                     <label className="text-xs font-bold uppercase tracking-wider text-[#6B5E54] flex items-center justify-between">
@@ -1418,6 +1793,8 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                             onClick={() => handleQuickTagClick(tag)}
                             className={`text-xs px-3 py-1.5 rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
                               isChecked
+                                ? 'bg-[#8C6A43] text-white border-[#8C6A43] shadow-xs font-semibold'
+                                : 'bg-stone-50 text-stone-700 border-stone-200 hover:border-amber-400 hover:bg-white'
                                 ? 'bg-[#8C6A43] text-white border-[#8C6A43] shadow-2xs font-semibold'
                                 : 'bg-[#FAF7F2] text-[#6B5E54] border-[#E8DFD1] hover:border-[#C4A480]'
                             }`}
@@ -1427,6 +1804,75 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                         );
                       })}
                     </div>
+                  </div>
+
+                  {/* Subsection 3: Dietary Restrictions & Allergies Alert (SYNC TO KDS KITCHEN) */}
+                  <div className="space-y-3 pt-1 border-t border-stone-200">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold uppercase tracking-wider text-rose-800 flex items-center gap-1.5">
+                        <ShieldAlert className="w-4 h-4 text-rose-600" />
+                        <span>3. Cảnh Báo Dị Ứng & Chế Độ Ăn Uống (Gửi trực tiếp KDS Bếp):</span>
+                      </label>
+                      <span className="text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
+                        🚨 Bếp trưởng tẩm ướp riêng
+                      </span>
+                    </div>
+
+                    {/* Notice Callout */}
+                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-rose-50/80 via-amber-50/60 to-rose-50/80 border border-rose-200 text-xs text-rose-950 flex items-start gap-2.5 shadow-2xs">
+                      <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                      <p className="text-[11px] leading-relaxed">
+                        <strong>Lưu ý bảo đảm an toàn thực phẩm:</strong> Dữ liệu dị ứng này sẽ được đồng bộ tức thì lên <strong>Màn hình KDS nhà Bếp</strong> và in đậm trên <strong>phiếu order</strong> để Bếp trưởng kiểm soát chảo nấu riêng, khử khuẩn dụng cụ và tuyệt đối không rắc tiêu/ớt nếu bàn có em bé.
+                      </p>
+                    </div>
+
+                    {/* Grid of Dietary Chips */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {DIETARY_OPTIONS.map((opt) => {
+                        const isSelected = selectedDietaryTags.includes(opt.label);
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedDietaryTags((prev) =>
+                                prev.includes(opt.label)
+                                  ? prev.filter((t) => t !== opt.label)
+                                  : [...prev, opt.label]
+                              );
+                            }}
+                            className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                              isSelected
+                                ? `${opt.color} ring-2 font-semibold shadow-xs`
+                                : 'bg-stone-50 text-stone-700 border-stone-200 hover:border-stone-400 hover:bg-white'
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold truncate">{opt.label}</span>
+                                <span className="text-[9px] px-1.5 py-0.2 rounded font-bold uppercase tracking-wider shrink-0 bg-white/70 border border-current">
+                                  {opt.badge}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-stone-500 truncate mt-0.5">{opt.subtitle}</p>
+                            </div>
+                            <div className={`w-5 h-5 rounded-lg flex items-center justify-center shrink-0 border ${
+                              isSelected ? 'bg-rose-600 text-white border-rose-600' : 'bg-white border-stone-300 text-transparent'
+                            }`}>
+                              ✓
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Subsection 4: Custom Notes Textarea */}
+                  <div className="space-y-2 pt-1 border-t border-stone-200">
+                    <label className="text-xs font-bold uppercase tracking-wider text-stone-600 flex items-center justify-between">
+                      <span>4. Ghi chú bổ sung tự do:</span>
+                      <span className="text-[11px] text-stone-400">Tùy chọn</span>
+                    </label>
 
                     {/* Freeform Notes Area */}
                     <div className="relative">
@@ -1435,6 +1881,8 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                         rows={3}
                         value={customNotes}
                         onChange={(e) => setCustomNotes(e.target.value)}
+                        placeholder="Ví dụ: Có người già đi lại khó khăn xin xếp bàn sát lối đi, chuẩn bị bánh sinh nhật nến số 25..."
+                        className="w-full bg-stone-50/70 border border-stone-300 rounded-2xl pl-10 pr-4 py-3 text-xs font-medium text-stone-900 focus:outline-none focus:border-amber-500 focus:bg-white transition-colors"
                         placeholder="Ví dụ: Ưu tiên bàn nhìn góc phố đẹp, chuẩn bị thêm 1 đĩa bánh sinh nhật nhỏ tặng bạn gái..."
                         className="w-full bg-[#FAF7F2] border border-[#E8DFD1] rounded-2xl pl-10 pr-4 py-3 text-xs font-medium text-[#2C221E] focus:outline-none focus:border-[#C4A480]"
                       />
@@ -1449,6 +1897,9 @@ export const BookingPage: React.FC<BookingPageProps> = ({
             </AnimatePresence>
           </section>
 
+          {/* STEP 4: THỰC ĐƠN SIGNATURE & RƯỢU VANG (PRE-ORDER - UC-07) */}
+          <section className="bg-white border-2 border-stone-200/90 rounded-3xl p-6 sm:p-8 shadow-sm space-y-5 transition-all hover:border-amber-400/60">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-stone-200">
           {/* STEP 3: PRE-ORDER SIGNATURE COMBOS & MENU (OPTIONAL EXPANDABLE) */}
           <section className="bg-white border border-[#E8DFD1] rounded-3xl p-6 sm:p-8 shadow-xs space-y-5">
             {/* Accordion / Header Trigger */}
@@ -1459,6 +1910,15 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                 </span>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="font-serif text-xl font-bold text-stone-900">
+                      Chọn Món Ăn Signature Đặt Trước (Pre-order Menu)
+                    </h2>
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                      Cộng dồn cọc • Bếp trưởng chuẩn bị công phu
+                    </span>
+                  </div>
+                  <p className="text-xs text-stone-500 mt-0.5">
+                    Cho phép chọn trước Bò Wagyu A5 (ủ nhiệt 45p), Decant rượu vang (thở 30p), Bánh kem sinh nhật viết tên riêng. Tiền cọc món ăn cộng dồn vào tổng hóa đơn cọc VietQR.
                     <h2 className="font-serif text-xl font-bold text-[#2C221E]">
                       Đặt Trước Món Ăn & Rượu Vang Signature
                     </h2>
@@ -1555,6 +2015,74 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                                 : 'bg-[#FAF7F2]/60 border-[#E8DFD1] hover:bg-white hover:border-[#C4A480]/60 hover:shadow-2xs'
                             }`}
                           >
+                            <div>
+                              <div className="flex gap-3.5">
+                                {/* Dish Image */}
+                                <div className="relative w-24 h-24 rounded-2xl overflow-hidden shrink-0 bg-stone-100 border border-stone-200">
+                                  <img
+                                    src={dish.image}
+                                    alt={dish.name}
+                                    className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                                    loading="lazy"
+                                  />
+                                  {dish.badge && (
+                                    <div className="absolute top-1 left-1 bg-amber-500 text-slate-950 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md shadow-xs">
+                                      {dish.badge}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Dish Info */}
+                                <div className="flex-1 min-w-0 space-y-1">
+                                  <div className="flex items-start justify-between gap-1">
+                                    <h4 className="font-serif text-sm font-bold text-stone-900 leading-snug">
+                                      {dish.name}
+                                    </h4>
+                                  </div>
+                                  <p className="text-[11px] text-stone-500 line-clamp-2 leading-relaxed">
+                                    {dish.description}
+                                  </p>
+                                  <div className="flex items-center gap-2 pt-0.5">
+                                    <span className="font-serif text-sm font-bold text-amber-700">
+                                      {new Intl.NumberFormat('vi-VN').format(dish.price)} đ
+                                    </span>
+                                    {dish.prepTimeMinutes && (
+                                      <span className="text-[10px] text-stone-400 flex items-center gap-0.5">
+                                        <Clock className="w-3 h-3 text-amber-600" /> Chuẩn bị {dish.prepTimeMinutes}p
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Combo courses preview if combo */}
+                              {dish.comboItems && dish.comboItems.length > 0 && (
+                                <div className="mt-3 pt-2.5 border-t border-stone-200 text-[11px]">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleComboDetails(dish.id)}
+                                    className="text-amber-800 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <span>{isExpanded ? 'Ẩn các món trong set' : 'Xem các món trong set menu'}</span>
+                                    {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                  </button>
+                                  {isExpanded && (
+                                    <ul className="mt-1.5 space-y-0.5 text-stone-600 pl-3 list-disc">
+                                      {dish.comboItems.map((item, idx) => (
+                                        <li key={idx}>{item}</li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Elaborate Preparation Options (UC-07) */}
+                              {isSelected && (
+                                <div className="mt-3 pt-2.5 border-t border-amber-200/70 bg-amber-50/60 -mx-4 p-3 space-y-2 rounded-xl">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] font-bold text-amber-950 flex items-center gap-1">
+                                      <Sliders className="w-3 h-3 text-amber-600" />
+                                      <span>Chuẩn Bị Công Phu (Pre-order Customization):</span>
                             {/* Top row: Badge & Image + Info */}
                             <div>
                               <div className="flex gap-3.5 items-start">
@@ -1648,8 +2176,141 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                                     <span className="text-[11px] font-mono text-[#A8A199] line-through">
                                       {new Intl.NumberFormat('vi-VN').format(dish.originalPrice)} đ
                                     </span>
+                                    <span className="text-[9px] text-amber-800 bg-amber-200/50 px-1.5 py-0.5 rounded font-bold">
+                                      Bếp trưởng Le Prime
+                                    </span>
+                                  </div>
+
+                                  {/* Wagyu / Steak Doneness & 45-min heat hold */}
+                                  {(dish.id === 'dish-1' || dish.category.includes('Bò') || dish.id.includes('dish')) && (
+                                    <div className="space-y-1">
+                                      <span className="text-[10px] text-stone-600 font-medium">Độ chín Steak (Ủ nhiệt Sous-vide 45 phút):</span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {['Medium-Rare (Khuyên dùng)', 'Rare (Tái)', 'Medium (Vừa)', 'Well-Done'].map((opt) => {
+                                          const key = opt.split(' ')[0];
+                                          const isCurrent = (dishNotes[dish.id] || '').includes(key);
+                                          return (
+                                            <button
+                                              key={opt}
+                                              type="button"
+                                              onClick={() => handleUpdateDishNote(dish.id, `Độ chín: ${opt}, Ủ nhiệt 45 phút Sous-vide & áp chảo gang`)}
+                                              className={`px-2 py-0.5 rounded-lg text-[9px] font-semibold transition-all cursor-pointer ${
+                                                isCurrent
+                                                  ? 'bg-amber-600 text-white shadow-xs'
+                                                  : 'bg-white text-stone-700 border border-stone-200 hover:border-amber-400'
+                                              }`}
+                                            >
+                                              {opt}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Fine Wine Decanting */}
+                                  {(dish.id === 'wine-1' || dish.category.includes('Vang') || dish.id.includes('wine')) && (
+                                    <div className="space-y-1">
+                                      <span className="text-[10px] text-stone-600 font-medium">Chiết thở bình Decanter pha lê & ướp nhiệt:</span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {['Decant thở 30 phút (Khuyên dùng)', 'Decant thở 45 phút', 'Mở tại bàn', 'Ướp xô đá (16°C)'].map((opt) => {
+                                          const key = opt.split(' ')[0];
+                                          const isCurrent = (dishNotes[dish.id] || '').includes(key);
+                                          return (
+                                            <button
+                                              key={opt}
+                                              type="button"
+                                              onClick={() => handleUpdateDishNote(dish.id, `Chiết thở vang: ${opt}`)}
+                                              className={`px-2 py-0.5 rounded-lg text-[9px] font-semibold transition-all cursor-pointer ${
+                                                isCurrent
+                                                  ? 'bg-amber-600 text-white shadow-xs'
+                                                  : 'bg-white text-stone-700 border border-stone-200 hover:border-amber-400'
+                                              }`}
+                                            >
+                                              {opt}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Birthday Cake Lettering */}
+                                  {(dish.id === 'cake-1' || dish.name.includes('Bánh Kem') || dish.name.includes('Sinh Nhật')) && (
+                                    <div className="space-y-1">
+                                      <span className="text-[10px] text-stone-600 font-medium flex items-center gap-1">
+                                        <Cake className="w-3 h-3 text-amber-600" />
+                                        <span>Thông điệp viết chữ trên bánh & nến sinh nhật:</span>
+                                      </span>
+                                      <input
+                                        type="text"
+                                        value={dishNotes[dish.id] || ''}
+                                        onChange={(e) => handleUpdateDishNote(dish.id, e.target.value)}
+                                        placeholder="VD: Chúc Mừng Sinh Nhật Minh Anh 26th (Cắm nến số 26)"
+                                        className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1 text-[10px] text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-600"
+                                      />
+                                    </div>
+                                  )}
+
+                                  {/* General custom note */}
+                                  {dish.id !== 'cake-1' && !dish.name.includes('Bánh Kem') && (
+                                    <div className="pt-0.5">
+                                      <input
+                                        type="text"
+                                        value={dishNotes[dish.id] || ''}
+                                        onChange={(e) => handleUpdateDishNote(dish.id, e.target.value)}
+                                        placeholder="Ghi chú thêm: gia vị, dị ứng, thời gian lên món..."
+                                        className="w-full bg-white/90 border border-stone-200 rounded-lg px-2.5 py-1 text-[10px] text-stone-900 placeholder-stone-400 focus:outline-none focus:border-amber-500"
+                                      />
+                                    </div>
                                   )}
                                 </div>
+                              )}
+                            </div>
+
+                            {/* Stepper Footer */}
+                            <div className="mt-3 pt-3 border-t border-stone-200 flex items-center justify-between">
+                              <span className="text-[10px] text-stone-500">
+                                {isSelected ? (
+                                  <strong className="text-amber-700 font-mono">
+                                    Cọc món: {new Intl.NumberFormat('vi-VN').format(dish.price * qty)} đ
+                                  </strong>
+                                ) : (
+                                  <span>Thêm vào tiệc</span>
+                                )}
+                              </span>
+
+                              <div className="flex items-center gap-2 bg-stone-100 p-1 rounded-xl border border-stone-200">
+                                {qty > 0 ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDishQuantityChange(dish.id, -1)}
+                                      className="w-6 h-6 rounded-lg bg-white hover:bg-stone-50 text-stone-800 text-xs font-bold flex items-center justify-center cursor-pointer shadow-xs"
+                                    >
+                                      <Minus className="w-3 h-3" />
+                                    </button>
+                                    <span className="font-mono font-bold text-xs text-stone-900 min-w-6 text-center">
+                                      {qty}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDishQuantityChange(dish.id, 1)}
+                                      className="w-6 h-6 rounded-lg bg-amber-500 text-slate-950 hover:bg-amber-400 text-xs font-bold flex items-center justify-center cursor-pointer shadow-xs"
+                                    >
+                                      <Plus className="w-3 h-3" />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDishQuantityChange(dish.id, 1)}
+                                    className="px-3 py-1 rounded-lg bg-white hover:bg-amber-50 text-stone-800 hover:text-amber-900 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                                  >
+                                    <Plus className="w-3 h-3 text-amber-600" />
+                                    <span>Chọn món</span>
+                                  </button>
+                                )}
                                 {discountAmount > 0 && (
                                   <span className="text-[9px] font-semibold text-emerald-700 flex items-center gap-0.5">
                                     <Tag className="w-2.5 h-2.5" />
@@ -1685,6 +2346,16 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                       })}
                   </div>
 
+                  {/* Summary Cart Pill with Deposit Accumulation Breakdown (UC-07) */}
+                  {Object.keys(selectedDishes).length > 0 && (
+                    <div className="p-4 bg-gradient-to-r from-amber-500/10 via-amber-50 to-amber-500/10 rounded-2xl border border-amber-300 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs text-amber-950 shadow-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center shrink-0 shadow-xs">
+                          <ShoppingBag className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-stone-900 text-sm">
+                            Đã chọn {Object.values(selectedDishes).reduce((a, b) => a + b, 0)} phần món đặc biệt chuẩn bị trước
                   {/* Pre-order Selected Dishes Summary Banner */}
                   {Object.keys(selectedDishes).length > 0 && (
                     <div className="p-4 bg-gradient-to-r from-[#FAF4EB] via-[#F5ECE0] to-[#FAF4EB] border border-[#C4A480] rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
@@ -1699,8 +2370,21 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                           <p className="text-[11px] text-[#78716C]">
                             Tiền cọc món (100%): <strong className="text-[#8C6A43] font-mono">{new Intl.NumberFormat('vi-VN').format(dishesTotal)} đ</strong> (Cọc 100% để Bếp trưởng tẩm ướp & lên lửa trước khi khách đến)
                           </p>
+                          <div className="text-[11px] text-stone-600 flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
+                            <span>Cọc bàn: <strong className="text-stone-900 font-mono">{new Intl.NumberFormat('vi-VN').format(depositRequired)} đ</strong></span>
+                            <span>+</span>
+                            <span>Cọc món Signature: <strong className="text-amber-800 font-mono">{new Intl.NumberFormat('vi-VN').format(dishesTotal)} đ</strong></span>
+                            <span>=</span>
+                            <span className="text-amber-900 font-bold bg-amber-200/60 px-2 py-0.5 rounded-md font-mono">
+                              Tổng cọc VietQR: {new Intl.NumberFormat('vi-VN').format(grandTotal)} đ
+                            </span>
+                          </div>
                         </div>
                       </div>
+                      <div className="flex items-center gap-2 self-end md:self-auto">
+                        <span className="text-[11px] font-bold text-amber-900 bg-white px-3 py-1.5 rounded-xl border border-amber-300 shadow-xs flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Cộng Dồn Vào Hóa Đơn Cọc</span>
 
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] text-[#8C6A43] font-medium bg-white px-2.5 py-1 rounded-lg border border-[#E8DFD1]">
@@ -1912,6 +2596,17 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                 </div>
               )}
 
+              {/* Pre-order summary (UC-07) */}
+              {Object.keys(selectedDishes).length > 0 && (
+                <div className="pt-2 border-t border-stone-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
+                      Món Signature Đặt Trước:
+                    </span>
+                    <span className="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded font-mono">
+                      {Object.values(selectedDishes).reduce((a, b) => a + b, 0)} phần
+                    </span>
+                  </div>
               {Object.keys(selectedDishes).length > 0 && (
                 <div className="pt-2 border-t border-[#E8DFD1] space-y-1.5">
                   <span className="text-[10px] font-bold text-[#8C6A43] uppercase tracking-wider block">
@@ -1921,6 +2616,20 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                     const dish = SIGNATURE_DISHES.find((d) => d.id === id);
                     if (!dish) return null;
                     return (
+                      <div key={id} className="space-y-0.5 text-[11px] pb-1 border-b border-stone-800/60 last:border-0 last:pb-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-stone-300 truncate pr-2">
+                            <strong className="text-amber-400 font-mono">{qty}x</strong> {dish.name}
+                          </span>
+                          <span className="font-mono text-stone-200 shrink-0">
+                            {new Intl.NumberFormat('vi-VN').format(dish.price * qty)} đ
+                          </span>
+                        </div>
+                        {dishNotes[id] && (
+                          <p className="text-[10px] text-amber-300/80 italic pl-2 leading-tight">
+                            ↳ {dishNotes[id]}
+                          </p>
+                        )}
                       <div key={id} className="flex items-center justify-between text-[11px]">
                         <span className="text-[#594D43] truncate pr-2">
                           <strong className="text-[#8C6A43] font-mono">{qty}x</strong> {dish.name}
@@ -1975,6 +2684,12 @@ export const BookingPage: React.FC<BookingPageProps> = ({
               </div>
             </div>
 
+            {/* Financial Breakdown (UC-07 Cọc Bàn + Cọc Món Ăn) */}
+            <div className="space-y-2 pt-3 border-t border-stone-800 text-xs">
+              <div className="flex justify-between items-center text-stone-300">
+                <span>Tiền cọc giữ bàn:</span>
+                <span className="font-bold text-white font-mono">
+                  {new Intl.NumberFormat('vi-VN').format(depositRequired)} đ
             {/* Financial Breakdown */}
             <div className="space-y-2 pt-4 border-t border-[#E8DFD1] text-xs">
               <div className="flex justify-between items-center text-[#6B5E54]">
@@ -1985,6 +2700,10 @@ export const BookingPage: React.FC<BookingPageProps> = ({
               </div>
 
               {dishesTotal > 0 && (
+                <div className="flex justify-between items-center text-amber-300">
+                  <span>Tiền cọc món ăn Signature:</span>
+                  <span className="font-bold text-amber-300 font-mono">
+                    +{new Intl.NumberFormat('vi-VN').format(dishesTotal)} đ
                 <div className="flex justify-between items-center text-[#6B5E54]">
                   <span>Tiền cọc món ăn đặt trước (100%):</span>
                   <span className="font-bold text-[#8C6A43] font-mono">
@@ -1993,6 +2712,13 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                 </div>
               )}
 
+              {/* Grand Total Box */}
+              <div className="p-4 bg-gradient-to-r from-amber-950/80 to-amber-900/60 rounded-2xl border border-amber-500/40 flex justify-between items-center text-xs font-bold pt-3 shadow-md">
+                <div>
+                  <span className="text-amber-200 block">Tổng Cọc VietQR:</span>
+                  <span className="text-[10px] text-stone-400 font-normal">Đã cộng dồn món đặt trước</span>
+                </div>
+                <span className="font-serif text-lg font-black text-amber-300">
               <div className="p-3.5 bg-[#FAF4EB] rounded-2xl border border-[#E8DFD1] flex justify-between items-center text-xs font-bold pt-2.5">
                 <span className="text-[#2C221E]">Tổng Tiền Cọc Thanh Toán (VietQR):</span>
                 <span className="font-serif text-base text-[#8C6A43]">
@@ -2029,6 +2755,15 @@ export const BookingPage: React.FC<BookingPageProps> = ({
         booking={currentBooking}
         onPaymentSuccess={handlePaymentSuccess}
       />
+
+      {/* UC-12: Vé Điện Tử Dynamic QR Code Check-in */}
+      <ETicketModal
+        isOpen={isETicketOpen}
+        onClose={() => setIsETicketOpen(false)}
+        bookingIdOrCode={backendBookingUUID || bookingSuccess?.bookingId}
+        initialBookingDetails={bookingSuccess}
+      />
     </div>
   );
 };
+

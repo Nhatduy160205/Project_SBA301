@@ -4,7 +4,6 @@ import {
   X,
   History,
   QrCode,
-  FileText,
   RotateCcw,
   Calendar,
   Clock,
@@ -14,10 +13,12 @@ import {
   AlertCircle,
   Download,
   UtensilsCrossed,
+  Sparkles,
 } from 'lucide-react';
 import type { BookingDetails, AuthUser } from '../../types';
 import { SIGNATURE_DISHES } from '../../data/mockData';
 import { bookingApi, type BackendBooking } from '../../services/bookingApi';
+import { ETicketModal } from '../booking/ETicketModal';
 
 interface BookingHistoryModalProps {
   isOpen: boolean;
@@ -85,13 +86,22 @@ export const BookingHistoryModal: React.FC<BookingHistoryModalProps> = ({
             notes: b.specialNotes,
             preOrders: b.preorderItems
               ? b.preorderItems.map((item) => {
-                  const dish = SIGNATURE_DISHES.find((d) => d.id === item.menuItemId) || SIGNATURE_DISHES[0];
+                  const dish = SIGNATURE_DISHES.find((d) => d.id === item.menuItemId || d.name === item.itemName) || {
+                    id: item.menuItemId,
+                    name: item.itemName || 'Món Signature Đặt Trước',
+                    category: 'Steak & Main',
+                    price: item.unitPrice || 0,
+                    description: item.notes || '',
+                    image: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80',
+                  };
                   return {
                     dish: {
                       ...dish,
+                      name: item.itemName || dish.name,
                       price: item.unitPrice || dish.price,
                     },
                     quantity: item.quantity,
+                    preparationNotes: item.notes || '',
                   };
                 })
               : [],
@@ -422,6 +432,34 @@ export const BookingHistoryModal: React.FC<BookingHistoryModalProps> = ({
                             Đã cọc VietQR 100%
                           </span>
                         </div>
+
+                        {/* Pre-order Signature Dishes (UC-07) */}
+                        {b.preOrders && b.preOrders.length > 0 && (
+                          <div className="p-3 bg-[#FAF4EB]/80 rounded-xl border border-[#E8DFD1] space-y-1.5 sm:col-span-3 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] text-[#8C6A43] uppercase font-bold tracking-wider flex items-center gap-1">
+                                <Sparkles className="w-3 h-3 text-[#8C6A43]" />
+                                Món Ăn Signature Đặt Trước ({b.preOrders.reduce((s, p) => s + p.quantity, 0)} phần):
+                              </span>
+                              <span className="text-[10px] text-[#8C6A43] font-bold font-mono">
+                                Cọc món: {new Intl.NumberFormat('vi-VN').format(b.preOrders.reduce((s, p) => s + p.dish.price * p.quantity, 0))} đ
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                              {b.preOrders.map((p, idx) => (
+                                <div key={idx} className="bg-white p-2.5 rounded-lg border border-[#F2ECE1] space-y-0.5 shadow-2xs">
+                                  <div className="flex justify-between items-center font-bold text-[#1C1917] text-xs">
+                                    <span>{p.quantity}x {p.dish.name}</span>
+                                    <span className="font-mono text-[#8C6A43]">{new Intl.NumberFormat('vi-VN').format(p.dish.price * p.quantity)} đ</span>
+                                  </div>
+                                  {p.preparationNotes && (
+                                    <p className="text-[10px] text-[#78716C] italic leading-tight">↳ Yêu cầu: {p.preparationNotes}</p>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Action Buttons: 3 Tính năng trọng tâm UC-03 */}
@@ -483,87 +521,14 @@ export const BookingHistoryModal: React.FC<BookingHistoryModalProps> = ({
         </motion.div>
       </div>
 
-      {/* ==================== MODAL XEM MÃ VÉ QR CHECK-IN TẠI SẢNH ==================== */}
-      {selectedTicketBooking && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl border border-amber-200 overflow-hidden text-center"
-          >
-            {/* Header Ticket */}
-            <div className="bg-gradient-to-r from-[#1C1917] to-[#2C221E] text-white p-5 space-y-1 relative">
-              <button
-                onClick={() => setSelectedTicketBooking(null)}
-                className="absolute top-3 right-3 p-1.5 text-stone-400 hover:text-white rounded-full bg-white/10 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-              <div className="w-8 h-8 mx-auto rounded-full bg-gradient-to-br from-[#C4A480] to-[#8C6A43] text-white flex items-center justify-center font-serif text-sm font-bold">
-                P
-              </div>
-              <h4 className="font-serif font-bold text-base tracking-wider text-amber-100">
-                LE PRIME BISTRO & LOUNGE
-              </h4>
-              <p className="text-[10px] uppercase tracking-widest text-stone-400">
-                Vé Điện Tử Check-in Tại Sảnh (E-Ticket)
-              </p>
-            </div>
-
-            {/* QR Code Container */}
-            <div className="p-6 space-y-4">
-              <div className="p-4 bg-amber-50/60 rounded-2xl border-2 border-dashed border-[#C4A480] inline-block shadow-inner">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                    (selectedTicketBooking as any).checkinQrToken || selectedTicketBooking.bookingId
-                  )}`}
-                  alt="Mã QR Check-in"
-                  className="w-44 h-44 object-contain mx-auto rounded-xl bg-white p-1"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <span className="font-mono text-sm font-bold text-[#8C6A43] block">
-                  {selectedTicketBooking.bookingId}
-                </span>
-                <p className="text-xs font-semibold text-[#1C1917]">
-                  {selectedTicketBooking.customerName} • {selectedTicketBooking.partySize} Khách
-                </p>
-                <p className="text-[11px] text-[#78716C]">
-                  {selectedTicketBooking.date} • {selectedTicketBooking.timeSlot} • {selectedTicketBooking.tableCode}
-                </p>
-              </div>
-
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-left text-[11px] text-emerald-800 space-y-0.5">
-                <p className="font-bold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>Vé đã sẵn sàng Check-in</span>
-                </p>
-                <p className="text-emerald-700">
-                  Khi đến cửa nhà hàng, vui lòng xuất trình mã này cho Lễ tân để quét camera và vào bàn ngay lập tức.
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleDownloadInvoice(selectedTicketBooking)}
-                  className="flex-1 py-2.5 rounded-xl border border-[#E8DFD1] hover:bg-[#FAF8F5] text-xs font-bold text-[#1C1917] flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <FileText className="w-3.5 h-3.5 text-[#8C6A43]" />
-                  <span>Hóa Đơn PDF</span>
-                </button>
-                <button
-                  onClick={() => setSelectedTicketBooking(null)}
-                  className="flex-1 py-2.5 rounded-xl bg-[#8C6A43] hover:bg-[#735534] text-white text-xs font-bold cursor-pointer"
-                >
-                  Hoàn Tất
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
+      {/* ==================== VÉ ĐIỆN TỬ DYNAMIC QR CODE CHECK-IN (UC-12) ==================== */}
+      <ETicketModal
+        isOpen={!!selectedTicketBooking}
+        onClose={() => setSelectedTicketBooking(null)}
+        bookingIdOrCode={(selectedTicketBooking as any)?.backendUUID || selectedTicketBooking?.bookingId}
+        initialBookingDetails={selectedTicketBooking}
+      />
     </AnimatePresence>
   );
 };
+

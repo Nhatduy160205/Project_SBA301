@@ -16,21 +16,13 @@ import { LandingPage } from './views/LandingPage';
 import { BookingPage } from './views/BookingPage';
 import { HostTabletPage } from './views/HostTabletPage';
 import { WaitstaffMobilePage } from './views/WaitstaffMobilePage';
+import { KitchenKdsPage } from './views/KitchenKdsPage';
 import { AdminStudioPage } from './views/AdminStudioPage';
 import { RestaurantManagementPage } from './views/restaurant/RestaurantManagementPage';
 import { INITIAL_TABLES, INITIAL_BOOKINGS, INITIAL_TABLE_ORDERS } from './data/mockData';
 import type { TableItem, TableStatus, BookingDetails, TableOrderRecord, AuthUser } from './types';
 import { bookingApi, type BackendBooking } from './services/bookingApi';
-import { authStorage } from './services/authStorage';
-
-export const getDefaultViewForRole = (role?: string): ActiveView => {
-  if (!role) return 'landing';
-  const r = role.toUpperCase();
-  if (r.includes('ADMIN') || r.includes('MANAGER')) return 'admin';
-  if (r.includes('HOST')) return 'host';
-  if (r.includes('WAITER')) return 'waiter';
-  return 'landing';
-};
+import { PrivateBanquetModal } from './components/booking/PrivateBanquetModal';
 
 export function App() {
   // Authentication state (using sessionStorage so tokens wipe completely when browser/tab is closed)
@@ -47,6 +39,7 @@ export function App() {
   const [bookings, setBookings] = useState<BookingDetails[]>(INITIAL_BOOKINGS);
   const [tableOrders, setTableOrders] = useState<Record<string, TableOrderRecord>>(INITIAL_TABLE_ORDERS);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
+  const [isBanquetModalOpen, setIsBanquetModalOpen] = useState<boolean>(false);
   const [rebookData, setRebookData] = useState<BookingDetails | null>(null);
 
   // Auto-verify token validity & blacklist/revocation status with backend on startup
@@ -103,18 +96,35 @@ export function App() {
               phone: b.guestPhone,
               email: b.guestEmail,
               partySize: b.guestCount,
-              floor: 1,
-              tableCode: b.tableIds && b.tableIds.length > 0 ? `Bàn VIP` : 'Sảnh',
+              floor: (b.targetFloor as any) || 1,
+              tableCode: b.tableIds && b.tableIds.length > 0 ? `Bàn VIP` : (b.targetFloor === 3 ? 'Rooftop Tầng 3' : 'Sảnh'),
               tableId: b.tableIds && b.tableIds.length > 0 ? b.tableIds[0] : 'f1-t01',
               date: b.bookingDate,
               timeSlot: '19:00 - 21:00',
               notes: b.specialNotes,
+              occasion: b.occasion,
+              dietaryNotes: b.dietaryNotes,
+              babyChairCount: b.babyChairCount,
+              candleSetup: b.candleSetup,
               preOrders: [],
               depositAmount: Number(b.totalDeposit) || 0,
               totalEstimatedAmount: Number(b.totalDeposit) || 0,
               createdAt: b.createdAt ? new Date(b.createdAt).toLocaleTimeString('vi-VN') : 'Hôm nay',
-              status: b.status === 'CONFIRMED' || b.status === 'SEATED' ? 'CONFIRMED' : 'PENDING_DEPOSIT',
+              status: b.status === 'EVENT_INQUIRY'
+                ? 'EVENT_INQUIRY'
+                : b.status === 'CONFIRMED' || b.status === 'SEATED'
+                ? 'CONFIRMED'
+                : 'PENDING_DEPOSIT',
               vietqrCode: `TM ${b.bookingCode}`,
+              eventType: b.eventType,
+              targetFloor: b.targetFloor,
+              companyName: b.companyName,
+              estimatedBudget: b.estimatedBudget ? Number(b.estimatedBudget) : undefined,
+              stageAudioRequired: b.stageAudioRequired,
+              decorationRequired: b.decorationRequired,
+              callbackDeadline: b.callbackDeadline,
+              managerCallStatus: b.managerCallStatus,
+              consultationNotes: b.consultationNotes,
             }));
             setBookings((prev) => {
               const existingCodes = new Set(mapped.map((m) => m.bookingId));
@@ -185,7 +195,7 @@ export function App() {
           return {
             ...t,
             status: newStatus,
-            currentGuestName: guestName !== undefined ? guestName : t.currentGuestName,
+            currentGuestName: newStatus === 'AVAILABLE' ? (guestName || undefined) : (guestName !== undefined ? guestName : t.currentGuestName),
             isLateNoShow: false,
           };
         }
@@ -387,7 +397,10 @@ export function App() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <LandingPage onNavigate={handleNavigate} />
+              <LandingPage
+                onNavigate={handleNavigate}
+                onOpenBanquetModal={() => setIsBanquetModalOpen(true)}
+              />
             </motion.div>
           )}
 
@@ -406,6 +419,7 @@ export function App() {
                 onAddBooking={handleAddBooking}
                 rebookData={rebookData}
                 onClearRebook={() => setRebookData(null)}
+                onOpenBanquetModal={() => setIsBanquetModalOpen(true)}
               />
             </motion.div>
           )}
@@ -427,6 +441,30 @@ export function App() {
                 onTransferTable={handleTransferTable}
                 onMergeTables={handleMergeTables}
                 onNavigateToWaiter={() => handleNavigate('waiter')}
+                onNavigateToKds={() => handleNavigate('kds')}
+                onUpdateBooking={(updated) => {
+                  setBookings((prev) =>
+                    prev.map((b) => (b.bookingId === updated.bookingId ? updated : b))
+                  );
+                }}
+              />
+            </motion.div>
+          )}
+
+          {currentView === 'kds' && (
+            <motion.div
+              key="kds"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.3 }}
+            >
+              <KitchenKdsPage
+                tables={tables}
+                bookings={bookings}
+                tableOrders={tableOrders}
+                setTableOrders={setTableOrders}
+                onNavigateToHost={() => handleNavigate('host')}
               />
             </motion.div>
           )}
@@ -536,6 +574,13 @@ export function App() {
                   <span className="text-[10px] text-[#3D7058] font-bold">Live</span>
                 </button>
                 <button
+                  onClick={() => handleNavigate('kds')}
+                  className="w-full py-2 px-3 bg-[#FAF7F2] hover:bg-[#F2ECE1] rounded-xl text-left font-semibold text-[#1C1917] flex justify-between items-center transition-colors cursor-pointer"
+                >
+                  <span>Màn Hình Bếp (KDS Ticket Board)</span>
+                  <span className="text-[10px] text-amber-600 font-bold">Kitchen</span>
+                </button>
+                <button
                   onClick={() => handleNavigate('admin')}
                   className="w-full py-2 px-3 bg-[#FAF7F2] hover:bg-[#F2ECE1] rounded-xl text-left font-semibold text-[#1C1917] flex justify-between items-center transition-colors cursor-pointer"
                 >
@@ -597,6 +642,15 @@ export function App() {
         onRebook={(booking) => {
           setRebookData(booking);
           handleNavigate('booking');
+        }}
+      />
+
+      {/* Private Banquet & Floor Buyout Modal (UC-10) */}
+      <PrivateBanquetModal
+        isOpen={isBanquetModalOpen}
+        onClose={() => setIsBanquetModalOpen(false)}
+        onSuccess={(newInquiry) => {
+          setBookings((prev) => [newInquiry, ...prev]);
         }}
       />
     </div>

@@ -1,21 +1,7 @@
-import React from 'react';
-import {
-  Calendar,
-  LayoutDashboard,
-  Shield,
-  Compass,
-  LogIn,
-  LogOut,
-  Building2,
-  Star,
-  History,
-  Smartphone,
-  Eye,
-  ArrowLeft,
-} from 'lucide-react';
+import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut, Building2, Star, History, ChefHat } from 'lucide-react';
 import type { AuthUser } from '../../types';
 
-export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'admin' | 'restaurant';
+export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'kds' | 'restaurant' | 'admin';
 
 interface NavbarProps {
   currentView: ActiveView;
@@ -101,157 +87,92 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Center Nav Links - CLEAN & FILTERED BY ROLE */}
-        <nav className="hidden md:flex items-center gap-2 lg:gap-4 text-sm font-medium text-[#44403C]">
-          {/* STAFF: ADMIN / MANAGER */}
-          {isAdminOrManager && (
-            <>
-              <button
-                onClick={() => onNavigate('admin')}
-                className={`transition-all py-1.5 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer ${
-                  currentView === 'admin'
-                    ? 'bg-[#EFE8DD] text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
-                    : 'text-[#78716C] hover:text-[#1C1917] hover:bg-[#FAF7F2]'
-                }`}
-              >
-                <LayoutDashboard className="w-4 h-4 text-[#C4A480]" />
-                <span>Dashboard</span>
-              </button>
-              <button
-                onClick={() => onNavigate('restaurant')}
-                className={`transition-all py-1.5 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer ${
-                  currentView === 'restaurant'
-                    ? 'bg-[#EFE8DD] text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
-                    : 'text-[#78716C] hover:text-[#1C1917] hover:bg-[#FAF7F2]'
-                }`}
-              >
-                <Building2 className="w-4 h-4 text-[#C4A480]" />
-                <span>Quản Lý Nhà Hàng & Bàn</span>
-              </button>
-              <button
-                onClick={() => onNavigate('host')}
-                className={`transition-all py-1.5 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer ${
-                  currentView === 'host'
-                    ? 'bg-[#EFE8DD] text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
-                    : 'text-[#78716C] hover:text-[#1C1917] hover:bg-[#FAF7F2]'
-                }`}
-              >
-                <Shield className="w-4 h-4 text-[#C4A480]" />
-                <span>Tiếp Tân & Bàn Live</span>
-              </button>
-              <button
-                onClick={() => onNavigate('waiter')}
-                className={`transition-all py-1.5 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer ${
-                  currentView === 'waiter'
-                    ? 'bg-[#EFE8DD] text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
-                    : 'text-[#78716C] hover:text-[#1C1917] hover:bg-[#FAF7F2]'
-                }`}
-              >
-                <Smartphone className="w-4 h-4 text-[#C4A480]" />
-                <span>App Phục Vụ</span>
-              </button>
-            </>
-          )}
-
-          {/* STAFF: HOST ONLY */}
-          {!isAdminOrManager && isHost && (
-            <>
-              <button
-                onClick={() => onNavigate('host')}
-                className={`transition-all py-1.5 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer ${
-                  currentView === 'host'
-                    ? 'bg-[#EFE8DD] text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
-                    : 'text-[#78716C] hover:text-[#1C1917] hover:bg-[#FAF7F2]'
-                }`}
-              >
-                <Shield className="w-4 h-4 text-[#C4A480]" />
-                <span>Tiếp Tân & Bàn Live</span>
-              </button>
-              {onOpenHistory && (
-                <button
-                  onClick={onOpenHistory}
-                  className="transition-all py-1.5 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer text-[#78716C] hover:text-[#1C1917] hover:bg-[#FAF7F2]"
-                >
-                  <History className="w-4 h-4 text-[#C4A480]" />
-                  <span>Tra Cứu Đơn & Cọc</span>
-                </button>
-              )}
-              <button
-                onClick={() => onNavigate('waiter')}
-                className={`transition-all py-1.5 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer ${
-                  currentView === 'waiter'
-                    ? 'bg-[#EFE8DD] text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
-                    : 'text-[#78716C] hover:text-[#1C1917] hover:bg-[#FAF7F2]'
-                }`}
-              >
-                <Smartphone className="w-4 h-4 text-[#C4A480]" />
-                <span>App Phục Vụ</span>
-              </button>
-            </>
-          )}
-
-          {/* STAFF: WAITER ONLY */}
-          {!isAdminOrManager && !isHost && isWaiter && (
-            <>
-              <button
-                onClick={() => onNavigate('waiter')}
-                className={`transition-all py-1.5 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer ${
-                  currentView === 'waiter'
-                    ? 'bg-[#EFE8DD] text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
-                    : 'text-[#78716C] hover:text-[#1C1917] hover:bg-[#FAF7F2]'
-                }`}
-              >
-                <Smartphone className="w-4 h-4 text-[#C4A480]" />
-                <span>App Phục Vụ (Order & Bàn)</span>
-              </button>
-              <button
-                onClick={() => onNavigate('host')}
-                className={`transition-all py-1.5 px-3 rounded-lg flex items-center gap-1.5 cursor-pointer ${
-                  currentView === 'host'
-                    ? 'bg-[#EFE8DD] text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
-                    : 'text-[#78716C] hover:text-[#1C1917] hover:bg-[#FAF7F2]'
-                }`}
-              >
-                <Shield className="w-4 h-4 text-[#C4A480]" />
-                <span>Danh Sách Bàn</span>
-              </button>
-            </>
-          )}
-
-          {/* GUEST / CUSTOMER NAV (Only shown when not staff) */}
-          {!isStaff && (
-            <>
-              <button
-                onClick={() => onNavigate('landing')}
-                className={`transition-all py-1.5 px-3 cursor-pointer ${
-                  currentView === 'landing'
-                    ? 'text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
-                    : 'text-[#78716C] hover:text-[#1C1917]'
-                }`}
-              >
-                Trang Chủ
-              </button>
-              <button
-                onClick={() => onNavigate('booking')}
-                className={`transition-all py-1.5 px-3 flex items-center gap-1.5 cursor-pointer ${
-                  currentView === 'booking'
-                    ? 'text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
-                    : 'text-[#78716C] hover:text-[#1C1917]'
-                }`}
-              >
-                <Calendar className="w-4 h-4 text-[#C4A480]" />
-                <span>Đặt Bàn</span>
-              </button>
-              {currentUser && onOpenHistory && (
-                <button
-                  onClick={onOpenHistory}
-                  className="transition-all py-1.5 px-3 flex items-center gap-1.5 cursor-pointer text-[#78716C] hover:text-[#1C1917]"
-                >
-                  <History className="w-4 h-4 text-[#C4A480]" />
-                  <span>Lịch Sử Đặt Bàn</span>
-                </button>
-              )}
-            </>
+        {/* Center Nav Links */}
+        <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-[#44403C]">
+          <button
+            onClick={() => onNavigate('landing')}
+            className={`transition-all py-1.5 cursor-pointer ${
+              currentView === 'landing'
+                ? 'text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
+                : 'text-[#78716C] hover:text-[#1C1917]'
+            }`}
+          >
+            Trang Chủ
+          </button>
+          <button
+            onClick={() => onNavigate('booking')}
+            className={`transition-all py-1.5 flex items-center gap-1.5 cursor-pointer ${
+              currentView === 'booking'
+                ? 'text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
+                : 'text-[#78716C] hover:text-[#1C1917]'
+            }`}
+          >
+            <Calendar className="w-4 h-4 text-[#C4A480]" />
+            <span>Đặt Bàn</span>
+          </button>
+          <button
+            onClick={() => onNavigate('host')}
+            className={`transition-all py-1.5 flex items-center gap-1.5 cursor-pointer ${
+              currentView === 'host'
+                ? 'text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
+                : 'text-[#78716C] hover:text-[#1C1917]'
+            }`}
+          >
+            <Shield className="w-4 h-4 text-[#C4A480]" />
+            <span>Thu Ngân (Staff)</span>
+          </button>
+          <button
+            onClick={() => onNavigate('waiter')}
+            className={`transition-all py-1.5 flex items-center gap-1.5 cursor-pointer ${
+              currentView === 'waiter'
+                ? 'text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
+                : 'text-[#78716C] hover:text-[#1C1917]'
+            }`}
+          >
+            <span className="text-sm">📱</span>
+            <span>App Phục Vụ</span>
+          </button>
+          <button
+            onClick={() => onNavigate('kds')}
+            className={`transition-all py-1.5 flex items-center gap-1.5 cursor-pointer ${
+              currentView === 'kds'
+                ? 'text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
+                : 'text-[#78716C] hover:text-[#1C1917]'
+            }`}
+          >
+            <ChefHat className="w-4 h-4 text-[#C4A480]" />
+            <span>Bếp (KDS)</span>
+          </button>
+          <button
+            onClick={() => onNavigate('restaurant')}
+            className={`transition-all py-1.5 flex items-center gap-1.5 cursor-pointer ${
+              currentView === 'restaurant'
+                ? 'text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
+                : 'text-[#78716C] hover:text-[#1C1917]'
+            }`}
+          >
+            <Building2 className="w-4 h-4 text-[#C4A480]" />
+            <span>Quản Lý Nhà Hàng</span>
+          </button>
+          <button
+            onClick={() => onNavigate('admin')}
+            className={`transition-all py-1.5 flex items-center gap-1.5 cursor-pointer ${
+              currentView === 'admin'
+                ? 'text-[#1C1917] font-semibold border-b-2 border-[#C4A480]'
+                : 'text-[#78716C] hover:text-[#1C1917]'
+            }`}
+          >
+            <LayoutDashboard className="w-4 h-4 text-[#C4A480]" />
+            <span>Dashboard</span>
+          </button>
+          {onOpenHistory && (
+            <button
+              onClick={onOpenHistory}
+              className="transition-all py-1.5 flex items-center gap-1.5 cursor-pointer text-[#78716C] hover:text-[#1C1917]"
+            >
+              <History className="w-4 h-4 text-[#C4A480]" />
+              <span>Lịch Sử Đơn & Cọc</span>
+            </button>
           )}
         </nav>
 
