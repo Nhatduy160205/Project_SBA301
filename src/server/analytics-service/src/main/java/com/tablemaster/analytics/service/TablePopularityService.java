@@ -1,6 +1,6 @@
 package com.tablemaster.analytics.service;
 
-import com.tablemaster.analytics.dto.TableHeatmapResponse;
+import com.tablemaster.analytics.dto.response.TableHeatmapResponse;
 import com.tablemaster.analytics.entity.TablePopularityStat;
 import com.tablemaster.analytics.repository.TablePopularityStatRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,94 +23,81 @@ public class TablePopularityService {
     @Transactional(readOnly = true)
     public List<TableHeatmapResponse> getHeatmapData() {
         List<TablePopularityStat> allStats = tableStatRepository.findAllByOrderByTotalRevenueGeneratedDesc();
+
         if (allStats.isEmpty()) {
             return List.of();
         }
 
-        // Find max reservations & max revenue to compute normalized heat scores
-        int maxReservations = allStats.stream().mapToInt(TablePopularityStat::getTotalReservations).max().orElse(1);
-        BigDecimal maxRevenue = allStats.stream()
-                .map(TablePopularityStat::getTotalRevenueGenerated)
-                .max(BigDecimal::compareTo)
-                .orElse(BigDecimal.ONE);
+        BigDecimal maxRevenue = allStats.get(0).getTotalRevenueGenerated();
+        if (maxRevenue.compareTo(BigDecimal.ZERO) == 0) {
+            maxRevenue = BigDecimal.ONE;
+        }
 
-        if (maxReservations == 0) maxReservations = 1;
-        if (maxRevenue.compareTo(BigDecimal.ZERO) == 0) maxRevenue = BigDecimal.ONE;
-
-        final int finalMaxRes = maxReservations;
-        final BigDecimal finalMaxRev = maxRevenue;
-
+        BigDecimal finalMaxRev = maxRevenue;
         return allStats.stream()
-                .map(stat -> mapToHeatmapResponse(stat, finalMaxRes, finalMaxRev))
+                .map(stat -> mapToHeatmapResponse(stat, finalMaxRev))
                 .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
     public List<TableHeatmapResponse> getTopTables(int limit) {
-        List<TableHeatmapResponse> heatmap = getHeatmapData();
-        return heatmap.stream().limit(limit).collect(Collectors.toList());
+        List<TableHeatmapResponse> all = getHeatmapData();
+        return all.stream().limit(Math.max(1, limit)).collect(Collectors.toList());
     }
 
     @Transactional
-    public TablePopularityStat recordTableCompletion(UUID tableId, String tableCode, String zoneType, BigDecimal revenue) {
+    public TablePopularityStat recordReservationUsage(UUID tableId, String tableCode, String zoneType, BigDecimal revenue) {
         TablePopularityStat stat = tableStatRepository.findByTableId(tableId)
-                .orElseGet(() -> {
-                    log.info("Registering new TablePopularityStat for tableCode={}", tableCode);
-                    return tableStatRepository.save(TablePopularityStat.builder()
-                            .tableId(tableId)
-                            .tableCode(tableCode != null ? tableCode : "TABLE-" + tableId.toString().substring(0, 4))
-                            .zoneType(zoneType != null ? zoneType : "STANDARD")
-                            .totalReservations(0)
-                            .cancelCount(0)
-                            .totalRevenueGenerated(BigDecimal.ZERO)
-                            .build());
-                });
+                .orElseGet(() -> TablePopularityStat.builder()
+                        .tableId(tableId)
+                        .tableCode(tableCode != null ? tableCode : "TBL-UNKNOWN")
+                        .zoneType(zoneType != null ? zoneType : "STANDARD")
+                        .totalReservations(0)
+                        .cancelCount(0)
+                        .totalRevenueGenerated(BigDecimal.ZERO)
+                        .build());
 
         stat.setTotalReservations(stat.getTotalReservations() + 1);
-        if (revenue != null) {
-            stat.setTotalRevenueGenerated(stat.getTotalRevenueGenerated().add(revenue));
-        }
-        if (zoneType != null && !zoneType.isBlank()) {
-            stat.setZoneType(zoneType);
-        }
-        if (tableCode != null && !tableCode.isBlank()) {
-            stat.setTableCode(tableCode);
-        }
+        stat.setTotalRevenueGenerated(stat.getTotalRevenueGenerated().add(revenue != null ? revenue : BigDecimal.ZERO));
+        if (tableCode != null) stat.setTableCode(tableCode);
+        if (zoneType != null) stat.setZoneType(zoneType);
 
         return tableStatRepository.save(stat);
     }
 
     @Transactional
-    public TablePopularityStat recordTableCancellation(UUID tableId) {
-        return tableStatRepository.findByTableId(tableId)
-                .map(stat -> {
-                    stat.setCancelCount(stat.getCancelCount() + 1);
-                    return tableStatRepository.save(stat);
-                })
-                .orElse(null);
+    public TablePopularityStat recordCancellation(UUID tableId) {
+        TablePopularityStat stat = tableStatRepository.findByTableId(tableId).orElse(null);
+        if (stat != null) {
+            stat.setCancelCount(stat.getCancelCount() + 1);
+            return tableStatRepository.save(stat);
+        }
+        return null;
     }
 
-    private TableHeatmapResponse mapToHeatmapResponse(TablePopularityStat stat, int maxRes, BigDecimal maxRev) {
-        // Compute composite heat score: 50% reservation frequency + 50% revenue
-        double resRatio = (double) stat.getTotalReservations() / maxRes;
-        double revRatio = stat.getTotalRevenueGenerated().doubleValue() / maxRev.doubleValue();
-        double heatScore = Math.min(100.0, Math.round(((resRatio * 0.5) + (revRatio * 0.5)) * 100.0 * 10.0) / 10.0);
+    private TableHeatmapResponse mapToHeatmapResponse(TablePopularityStat stat, BigDecimal maxRevenue) {
+        double score = 0.0;
+        if (maxRevenue.compareTo(BigDecimal.ZERO) > 0) {
+            score = stat.getTotalRevenueGenerated()
+                    .divide(maxRevenue, 4, java.math.RoundingMode.HALF_UP)
+                    .doubleValue() * 100.0;
+        }
 
         String heatLevel;
         String colorHex;
 
-        if (heatScore >= 75.0) {
+        if (score >= 80.0) {
             heatLevel = "HOT";
-            colorHex = "#EF4444"; // Đỏ rực rỡ
-        } else if (heatScore >= 50.0) {
+            colorHex = "#EF4444"; // Đỏ rực
+        } else if (score >= 50.0) {
             heatLevel = "WARM";
-            colorHex = "#F59E0B"; // Cam / Vàng ấm
-        } else if (heatScore >= 25.0) {
+            colorHex = "#F59E0B"; // Cam vàng
+        } else if (score >= 20.0) {
             heatLevel = "NORMAL";
-            colorHex = "#10B981"; // Xanh ngọc
+            colorHex = "#10B981"; // Xanh lá
         } else {
             heatLevel = "COOL";
-            colorHex = "#3B82F6"; // Xanh dương nhạt
+            colorHex = "#3B82F6"; // Xanh lam
         }
 
         return TableHeatmapResponse.builder()
@@ -121,7 +108,7 @@ public class TablePopularityService {
                 .totalReservations(stat.getTotalReservations())
                 .cancelCount(stat.getCancelCount())
                 .totalRevenueGenerated(stat.getTotalRevenueGenerated())
-                .heatScore(heatScore)
+                .heatScore(Math.round(score * 10.0) / 10.0)
                 .heatLevel(heatLevel)
                 .colorHex(colorHex)
                 .build();

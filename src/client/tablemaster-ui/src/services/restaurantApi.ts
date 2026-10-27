@@ -1,4 +1,4 @@
-// Frontend API Client for Restaurant & Floor Service
+// Frontend API Client for Restaurant Service (Data-driven & Zone-based)
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -38,34 +38,15 @@ export interface TimeSlot {
   createdAt?: string;
 }
 
-export interface FloorPlan {
-  id: string;
-  floorNumber: number;
-  name: string;
-  widthPx: number;
-  heightPx: number;
-  gridSize: number;
-  layoutMetadata: string;
-  isPublished: boolean;
-  updatedAt?: string;
-  tables?: Table[];
-}
-
 export interface Table {
   id: string;
-  floorPlanId: string;
   tableCode: string;
-  zoneType: string;
+  zoneType: string; // 'OUTDOOR' | 'BAR_COUNTER' | 'PRIVATE_VIP' | 'WINDOW_VIEW' | 'STANDARD'
   minCapacity: number;
   maxCapacity: number;
   customDeposit?: number;
   isActive: boolean;
-  posX: number;
-  posY: number;
-  width: number;
-  height: number;
-  rotation: number;
-  shape: 'RECT' | 'SQUARE' | 'CIRCLE';
+  createdAt?: string;
   updatedAt?: string;
 }
 
@@ -158,46 +139,16 @@ export const restaurantApi = {
       method: 'DELETE',
     }),
 
-  // FLOOR PLANS
-  getFloorPlans: (publishedOnly = false, includeTables = true) =>
-    request<FloorPlan[]>(`/api/v1/restaurant/floor-plans?publishedOnly=${publishedOnly}&includeTables=${includeTables}`),
-  getFloorPlanById: (id: string, includeTables = true) =>
-    request<FloorPlan>(`/api/v1/restaurant/floor-plans/${id}?includeTables=${includeTables}`),
-  getFloorPlanByNumber: (floorNumber: number, includeTables = true) =>
-    request<FloorPlan>(`/api/v1/restaurant/floor-plans/number/${floorNumber}?includeTables=${includeTables}`),
-  createFloorPlan: (data: Partial<FloorPlan>) =>
-    request<FloorPlan>('/api/v1/restaurant/floor-plans', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-  updateFloorPlan: (id: string, data: Partial<FloorPlan>) =>
-    request<FloorPlan>(`/api/v1/restaurant/floor-plans/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }),
-  updateLayoutMetadata: (id: string, layoutMetadata: string) =>
-    request<FloorPlan>(`/api/v1/restaurant/floor-plans/${id}/layout`, {
-      method: 'PATCH',
-      body: JSON.stringify({ layoutMetadata }),
-    }),
-  toggleFloorPlanPublish: (id: string) =>
-    request<FloorPlan>(`/api/v1/restaurant/floor-plans/${id}/publish`, {
-      method: 'PATCH',
-    }),
-  deleteFloorPlan: (id: string) =>
-    request<void>(`/api/v1/restaurant/floor-plans/${id}`, {
-      method: 'DELETE',
-    }),
-
   // TABLES
-  getTables: (floorPlanId?: string, activeOnly = false) => {
+  getTables: (zoneType?: string, activeOnly = false) => {
     const q = new URLSearchParams();
-    if (floorPlanId) q.append('floorPlanId', floorPlanId);
+    if (zoneType && zoneType !== 'ALL') q.append('zoneType', zoneType);
     if (activeOnly) q.append('activeOnly', 'true');
     const qs = q.toString();
     return request<Table[]>(`/api/v1/restaurant/tables${qs ? '?' + qs : ''}`);
   },
   getTableById: (id: string) => request<Table>(`/api/v1/restaurant/tables/${id}`),
+  getTableByCode: (code: string) => request<Table>(`/api/v1/restaurant/tables/code/${code}`),
   createTable: (data: Partial<Table>) =>
     request<Table>('/api/v1/restaurant/tables', {
       method: 'POST',
@@ -207,11 +158,6 @@ export const restaurantApi = {
     request<Table>(`/api/v1/restaurant/tables/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
-    }),
-  batchUpdatePositions: (tables: Partial<Table>[]) =>
-    request<Table[]>('/api/v1/restaurant/tables/batch-positions', {
-      method: 'PUT',
-      body: JSON.stringify(tables),
     }),
   toggleTableActive: (id: string) =>
     request<Table>(`/api/v1/restaurant/tables/${id}/toggle`, {
