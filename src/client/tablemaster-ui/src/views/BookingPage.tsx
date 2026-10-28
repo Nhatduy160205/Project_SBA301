@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Calendar,
@@ -7,12 +7,13 @@ import {
   Sparkles,
   MapPin,
   CheckCircle2,
-  Heart,
+    Heart,
   ShieldCheck,
   User,
   Phone,
   Mail,
   FileText,
+  X,
   ChevronDown,
   ChevronUp,
   Plus,
@@ -34,6 +35,12 @@ import {
 import type { TableItem, SignatureDish, BookingDetails } from '../types';
 import { SIGNATURE_DISHES } from '../data/mockData';
 import { QRPaymentModal } from '../components/common/QRPaymentModal';
+import {
+  bookingApi,
+  ensureUUID,
+  SEED_DATA,
+  type CreateBookingRequestPayload,
+} from '../services/bookingApi';
 
 const OCCASIONS = [
   { id: 'date', label: 'Hẹn hò lãng mạn', icon: Heart },
@@ -45,6 +52,7 @@ const OCCASIONS = [
 
 const QUICK_TAGS = [
   'Ưu tiên bàn gần cửa sổ ngắm view phố',
+  'Ưu tiên vị trí gần cửa ra vào / sảnh thoáng',
   'Yêu cầu chuẩn bị nến & hoa trang trí',
   'Cần kê thêm 01 ghế ăn em bé',
   'Vị trí yên tĩnh để trao đổi công việc',
@@ -111,15 +119,25 @@ const HOT_SLOTS = [
 interface BookingPageProps {
   tables: TableItem[];
   initialFloor?: 1 | 2 | 3;
-  onUpdateTableStatus: (tableId: string, newStatus: TableItem['status']) => void;
+  onUpdateTableStatus: (tableId: string, newStatus: any, guestName?: string) => void;
   onAddBooking: (newBooking: BookingDetails) => void;
+  rebookData?: BookingDetails | null;
+  onClearRebook?: () => void;
+  onOpenBanquetModal?: () => void;
 }
 
 export const BookingPage: React.FC<BookingPageProps> = ({
   tables,
+  initialFloor = 1,
   onUpdateTableStatus,
   onAddBooking,
+  rebookData,
+  onClearRebook,
+  onOpenBanquetModal,
 }) => {
+  // Toast thông báo Re-book 1 chạm
+  const [rebookToast, setRebookToast] = useState<string | null>(null);
+
   // Step 1: Time & Party
   const [showSection1, setShowSection1] = useState<boolean>(true);
   const [selectedDate, setSelectedDate] = useState<string>(() => formatDateToISO(new Date()));
@@ -129,14 +147,37 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   const [isTimePickerOpen, setIsTimePickerOpen] = useState<boolean>(false);
   const [partySize, setPartySize] = useState<number>(2);
 
-  // Step 2: Occasion & Preferences (Ghi chú thêm)
+  // Step 2: Dịp dùng bữa & Ghi chú chu đáo (Lễ tân sắp xếp bàn khi khách tới)
   const [showSection2, setShowSection2] = useState<boolean>(true);
-  const [selectedOccasion, setSelectedOccasion] = useState<string | null>(null);
+  const [selectedOccasion, setSelectedOccasion] = useState<string | null>('date');
   const [customNotes, setCustomNotes] = useState<string>('Ưu tiên bàn gần cửa sổ ngắm trọn phố Nguyễn Huệ giúp mình nhé!');
 
   // Step 3: Pre-orders
   const [selectedDishes, setSelectedDishes] = useState<Record<string, number>>({});
   const [showPreOrderSection, setShowPreOrderSection] = useState<boolean>(true);
+
+  // Tự động khôi phục dữ liệu khi khách bấm "Đặt lại bàn này" (Re-book 1-Chạm)
+  useEffect(() => {
+    if (rebookData) {
+      if (rebookData.partySize) setPartySize(rebookData.partySize);
+      if (rebookData.customerName) setCustomerName(rebookData.customerName);
+      if (rebookData.phone) setCustomerPhone(rebookData.phone);
+      if (rebookData.email) setCustomerEmail(rebookData.email);
+      if (rebookData.notes) setCustomNotes(rebookData.notes);
+
+      if (rebookData.preOrders && rebookData.preOrders.length > 0) {
+        const dishMap: Record<string, number> = {};
+        rebookData.preOrders.forEach((p) => {
+          if (p.dish && p.dish.id) {
+            dishMap[p.dish.id] = p.quantity;
+          }
+        });
+        setSelectedDishes(dishMap);
+      }
+
+      setRebookToast(`Đã tự động tải cấu hình bàn & món ăn cũ từ đơn ${rebookData.bookingId}. Quý khách chỉ cần chọn ngày giờ phù hợp để hoàn tất.`);
+    }
+  }, [rebookData]);
   const [selectedMenuCategory, setSelectedMenuCategory] = useState<string>('ALL');
   const [expandedComboIds, setExpandedComboIds] = useState<Record<string, boolean>>({ 'combo-1': true });
 
@@ -160,6 +201,8 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   const [isQRModalOpen, setIsQRModalOpen] = useState<boolean>(false);
   const [currentBooking, setCurrentBooking] = useState<BookingDetails | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<BookingDetails | null>(null);
+  const [backendBookingUUID, setBackendBookingUUID] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const handleQuickTagClick = (tag: string) => {
     if (customNotes.includes(tag)) {
@@ -203,19 +246,24 @@ export const BookingPage: React.FC<BookingPageProps> = ({
     return matched || tables[0];
   };
 
+
   const computeEffectiveSlot = () => {
     return isCustomTime ? customArrivalTime : selectedSlot;
   };
 
   const effectiveTimeSlot = computeEffectiveSlot();
 
-  const handleOpenDepositModal = () => {
+  const handleOpenDepositModal = async () => {
     if (!customerName.trim() || !customerPhone.trim()) {
       alert('Vui lòng nhập họ tên và số điện thoại liên hệ');
       return;
     }
 
     const assignedTable = findMatchingTable();
+    const tableUUID = ensureUUID(assignedTable.id);
+    const tableCode = 'Lễ tân sắp xếp khi đón khách';
+    const tableFloor = initialFloor;
+
     const preOrderItems = Object.entries(selectedDishes)
       .map(([id, quantity]) => {
         const dish = SIGNATURE_DISHES.find((d) => d.id === id);
@@ -228,15 +276,48 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       : '';
     const fullNotes = `${occasionText}${customNotes}`.trim();
 
-    const bookingId = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
+    setIsSubmitting(true);
+    let realBookingCode = `BK-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // GỌI BACKEND THẬT QUA REST API: POST /api/v1/bookings/request
+    try {
+      const payload: CreateBookingRequestPayload = {
+        guestName: customerName,
+        guestPhone: customerPhone,
+        guestEmail: customerEmail || 'customer@leprimebistro.vn',
+        bookingDate: selectedDate,
+        timeSlotId: SEED_DATA.TIME_SLOT_ID,
+        guestCount: partySize,
+        tableIds: [tableUUID],
+        specialNotes: fullNotes,
+        totalDeposit: depositRequired,
+        preorderItems: preOrderItems.map((p) => ({
+          menuItemId: SEED_DATA.MENU_ITEM_ID,
+          quantity: p.quantity,
+          unitPrice: p.dish.price,
+        })),
+      };
+
+      const res = await bookingApi.createBooking(payload);
+      if (res.success && res.data) {
+        realBookingCode = res.data.bookingCode;
+        setBackendBookingUUID(res.data.id);
+        console.log('✅ [Backend API] Đã tạo thành công đơn đặt bàn trên PostgreSQL:', res.data);
+      }
+    } catch (err: any) {
+      console.warn('⚠️ [Backend API] Lỗi khi gửi đơn lên Backend (chuyển sang dự phòng):', err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+
     const newBooking: BookingDetails = {
-      bookingId,
+      bookingId: realBookingCode,
       customerName,
       phone: customerPhone,
       email: customerEmail || 'customer@leprimebistro.vn',
       partySize,
-      floor: 1,
-      tableCode: `Le Prime (Lễ tân xếp)`,
+      floor: tableFloor,
+      tableCode: tableCode,
       tableId: assignedTable.id,
       date: selectedDate,
       timeSlot: effectiveTimeSlot,
@@ -246,15 +327,30 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       totalEstimatedAmount: grandTotal,
       createdAt: 'Vừa xong',
       status: 'PENDING_DEPOSIT',
-      vietqrCode: `TM ${bookingId}`,
+      vietqrCode: `TM ${realBookingCode}`,
     };
 
     setCurrentBooking(newBooking);
     setIsQRModalOpen(true);
   };
 
-  const handlePaymentSuccess = () => {
+  const handlePaymentSuccess = async () => {
     if (currentBooking) {
+      // GỌI BACKEND THẬT: DUYỆT ĐƠN VÀ XÁC NHẬN CỌC
+      if (backendBookingUUID) {
+        try {
+          const res = await bookingApi.approveAndRequestDeposit(
+            backendBookingUUID,
+            depositRequired,
+            60,
+            'Khách đã thanh toán cọc thành công qua VietQR'
+          );
+          console.log('✅ [Backend API] Duyệt cọc đơn thành công:', res.data);
+        } catch (err: any) {
+          console.warn('⚠️ [Backend API] Lỗi duyệt cọc trên backend:', err.message);
+        }
+      }
+
       const confirmedBooking: BookingDetails = {
         ...currentBooking,
         status: 'CONFIRMED',
@@ -263,7 +359,6 @@ export const BookingPage: React.FC<BookingPageProps> = ({
       setBookingSuccess(confirmedBooking);
       setIsQRModalOpen(false);
 
-      // Auto update table state for host
       const matched = findMatchingTable();
       if (matched) {
         onUpdateTableStatus(matched.id, 'CONFIRMED');
@@ -273,6 +368,25 @@ export const BookingPage: React.FC<BookingPageProps> = ({
 
   return (
     <div className="w-full max-w-[1360px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
+      {/* Re-book Notification Banner (UC-03) */}
+      {rebookToast && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-300 flex items-center justify-between text-xs text-amber-900 shadow-sm animate-in fade-in duration-300">
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+            <span className="font-semibold">{rebookToast}</span>
+          </div>
+          <button
+            onClick={() => {
+              setRebookToast(null);
+              if (onClearRebook) onClearRebook();
+            }}
+            className="p-1 text-amber-600 hover:text-amber-900 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Top Hero Banner - Official Restaurant Brand & Info */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#1A1412] via-[#261E1A] to-[#1A1412] p-8 sm:p-10 text-white shadow-2xl border border-[#3E312B]">
         <div className="absolute -right-16 -top-16 w-96 h-96 bg-[#C4A480]/15 rounded-full blur-3xl pointer-events-none" />
@@ -386,7 +500,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
         )}
       </AnimatePresence>
 
-      {/* MAIN RESERVATION WORKFLOW (2-COLUMN MODERN LAYOUT) */}
+      {/* MAIN RESERVATION WORKFLOW (2-COLUMN MODERN LUXURY LAYOUT) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* LEFT COLUMN (7 COLS): STEP 1, 2, 3 SELECTIONS */}
         <div className="lg:col-span-8 space-y-8">
@@ -471,6 +585,25 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                         );
                       })}
                     </div>
+
+                    {onOpenBanquetModal && (
+                      <div className="p-3 bg-[#FAF4EB] border border-[#C4A480]/60 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                        <div className="flex items-center gap-2 text-[#2C221E]">
+                          <span className="text-lg">🏛️</span>
+                          <div>
+                            <span className="font-bold text-[#8C6A43] block">Đặt Tiệc Trọn Gói & Sự Kiện Riêng Tư (Banquet)?</span>
+                            <span className="text-[11px] text-[#78716C]">Dành cho đoàn từ 10 - 60 khách hoặc bao trọn sảnh/tầng VIP.</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={onOpenBanquetModal}
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#C4A480] to-[#B3936F] hover:brightness-105 text-white font-bold text-[11px] shadow-2xs shrink-0 cursor-pointer transition-all text-center"
+                        >
+                          Tư Vấn Tiệc VIP
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Date & Time Grid */}
@@ -702,7 +835,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
             </AnimatePresence>
           </section>
 
-          {/* STEP 2: GHI CHÚ THÊM */}
+          {/* STEP 2: DỊP DÙNG BỮA & GHI CHÚ CHU ĐÁO */}
           <section className="bg-white border border-[#E8DFD1] rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-[#E8DFD1]">
               <div className="flex items-center gap-3">
@@ -712,16 +845,16 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="font-serif text-xl font-bold text-[#2C221E]">
-                      Ghi Chú Thêm
+                      Dịp Dùng Bữa & Ghi Chú Chu Đáo
                     </h2>
-                    {!showSection2 && customNotes && (
-                      <span className="text-[11px] font-medium text-[#8C6A43] bg-[#FAF4EB] px-2.5 py-0.5 rounded-full border border-[#E8DFD1] max-w-xs truncate">
-                        {customNotes}
+                    {selectedOccasion && (
+                      <span className="text-[11px] font-bold text-[#8C6A43] bg-[#FAF4EB] px-2.5 py-0.5 rounded-full border border-[#E8DFD1]">
+                        {OCCASIONS.find(o => o.id === selectedOccasion)?.label}
                       </span>
                     )}
                   </div>
                   <p className="text-xs text-[#78716C]">
-                    Lễ tân sẽ chuẩn bị và ưu tiên sắp xếp bàn theo ghi chú và mong muốn của quý khách
+                    Lễ tân sẽ chuẩn bị và ưu tiên sắp xếp vị trí bàn theo ghi chú và mong muốn của quý khách khi tới nhà hàng
                   </p>
                 </div>
               </div>
@@ -744,7 +877,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                   exit={{ opacity: 0, height: 0 }}
                   className="space-y-6 overflow-hidden"
                 >
-                  {/* Optional Occasion Selector */}
+                  {/* Occasion Cards */}
                   <div className="space-y-2.5">
                     <label className="text-xs font-bold uppercase tracking-wider text-[#6B5E54] flex items-center justify-between">
                       <span>Dịp dùng bữa của quý khách:</span>
@@ -768,7 +901,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                             }`}
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
-                              <Icon className={`w-4 h-4 shrink-0 ${isSelected ? 'text-[#8C6A43]' : 'text-[#78716C]'}`} />
+                              <Icon className={`w-4 h-4 shrink-0 ${isSelected ? "text-[#8C6A43]" : "text-[#78716C]"}`} />
                               <span className="text-xs truncate">{occ.label}</span>
                             </div>
                             {isSelected && (
@@ -783,7 +916,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                   {/* Ghi chú thêm (Quick Chips & Freeform Text) */}
                   <div className="space-y-3 pt-2">
                     <label className="text-xs font-bold uppercase tracking-wider text-[#6B5E54] flex items-center justify-between">
-                      <span>Ghi chú thêm:</span>
+                      <span>Ghi chú thêm (Yêu cầu vị trí bàn & phục vụ):</span>
                       <span className="text-[11px] text-[#78716C] font-normal">Tùy chọn</span>
                     </label>
 
@@ -815,13 +948,13 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                         rows={3}
                         value={customNotes}
                         onChange={(e) => setCustomNotes(e.target.value)}
-                        placeholder="Ví dụ: Ưu tiên bàn nhìn góc phố đẹp, chuẩn bị thêm 1 đĩa bánh sinh nhật nhỏ tặng bạn gái..."
+                        placeholder="Ví dụ: Ưu tiên bàn gần cửa sổ ngắm phố / gần lối vào thoáng, chuẩn bị thêm 1 đĩa bánh sinh nhật nhỏ tặng bạn gái..."
                         className="w-full bg-[#FAF7F2] border border-[#E8DFD1] rounded-2xl pl-10 pr-4 py-3 text-xs font-medium text-[#2C221E] focus:outline-none focus:border-[#C4A480]"
                       />
                     </div>
                     <p className="text-[11px] text-[#78716C] italic flex items-center gap-1.5">
                       <Info className="w-3.5 h-3.5 text-[#C4A480] shrink-0" />
-                      <span>Nhà hàng luôn lưu tâm từng yêu cầu và sẽ hướng dẫn quý khách tới bàn tương ứng ngay khi bước vào sảnh.</span>
+                      <span>Nhà hàng luôn lưu tâm từng yêu cầu và lễ tân sẽ hướng dẫn quý khách tới bàn tương ứng ngay khi bước vào sảnh.</span>
                     </p>
                   </div>
                 </motion.div>
@@ -1260,6 +1393,14 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                 <span className="font-bold text-[#2C221E]">{partySize} Khách</span>
               </div>
 
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#78716C] flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-[#C4A480]" />
+                  <span>Vị trí bàn:</span>
+                </span>
+                <span className="font-bold text-[#8C6A43]">Sắp xếp khi đón khách</span>
+              </div>
+
               {selectedOccasion && (
                 <div className="flex items-center justify-between text-xs pt-2 border-t border-[#E8DFD1]">
                   <span className="text-[#78716C] flex items-center gap-1.5">
@@ -1364,9 +1505,10 @@ export const BookingPage: React.FC<BookingPageProps> = ({
             {/* Submit Action Button */}
             <button
               onClick={handleOpenDepositModal}
-              className="w-full py-4 bg-gradient-to-r from-[#C4A480] to-[#B3936F] hover:brightness-105 text-white text-xs font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all active:scale-98"
+              disabled={isSubmitting}
+              className="w-full py-4 bg-gradient-to-r from-[#C4A480] to-[#B3936F] hover:brightness-105 text-white text-xs font-bold rounded-2xl flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all active:scale-98 disabled:opacity-60"
             >
-              <span>Xác Nhận Đặt Bàn & Giữ Chỗ VietQR</span>
+              <span>{isSubmitting ? 'Đang gửi yêu cầu tới máy chủ...' : 'Xác Nhận Đặt Bàn & Giữ Chỗ VietQR'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Phone,
@@ -8,23 +8,186 @@ import {
 
 import { Navbar } from './components/common/Navbar';
 import type { ActiveView } from './components/common/Navbar';
+import { LoginModal } from './components/common/LoginModal';
+import { ProfileModal } from './components/common/ProfileModal';
+import { ReviewModal } from './components/common/ReviewModal';
+import { BookingHistoryModal } from './components/common/BookingHistoryModal';
 import { LandingPage } from './views/LandingPage';
 import { BookingPage } from './views/BookingPage';
 import { HostTabletPage } from './views/HostTabletPage';
 import { WaitstaffMobilePage } from './views/WaitstaffMobilePage';
+import { KitchenKdsPage } from './views/KitchenKdsPage';
 import { AdminStudioPage } from './views/AdminStudioPage';
+import { RestaurantManagementPage } from './views/restaurant/RestaurantManagementPage';
 import { INITIAL_TABLES, INITIAL_BOOKINGS, INITIAL_TABLE_ORDERS } from './data/mockData';
-import type { TableItem, TableStatus, BookingDetails, TableOrderRecord } from './types';
+import type { TableItem, TableStatus, BookingDetails, TableOrderRecord, AuthUser } from './types';
+import { bookingApi, type BackendBooking } from './services/bookingApi';
+import { PrivateBanquetModal } from './components/booking/PrivateBanquetModal';
+import { authStorage } from './services/authStorage';
 
+function getDefaultViewForRole(role?: string): ActiveView {
+  if (!role) return 'landing';
+  const r = role.toUpperCase();
+  if (r.includes('ADMIN') || r.includes('MANAGER')) return 'admin';
+  if (r.includes('HOST')) return 'host';
+  if (r.includes('WAITER')) return 'waiter';
+  if (r.includes('CHEF') || r.includes('KITCHEN')) return 'kds';
+  return 'landing';
+}
 
 export function App() {
-  const [currentView, setCurrentView] = useState<ActiveView>('landing');
+  // Authentication state (using sessionStorage so tokens wipe completely when browser/tab is closed)
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    return authStorage.getUser();
+  });
+
+  const [currentView, setCurrentView] = useState<ActiveView>(() => {
+    const user = authStorage.getUser();
+    return getDefaultViewForRole(user?.role);
+  });
   const [targetFloor, setTargetFloor] = useState<1 | 2 | 3>(1);
   const [tables, setTables] = useState<TableItem[]>(INITIAL_TABLES);
   const [bookings, setBookings] = useState<BookingDetails[]>(INITIAL_BOOKINGS);
   const [tableOrders, setTableOrders] = useState<Record<string, TableOrderRecord>>(INITIAL_TABLE_ORDERS);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
+  const [isBanquetModalOpen, setIsBanquetModalOpen] = useState<boolean>(false);
+  const [rebookData, setRebookData] = useState<BookingDetails | null>(null);
+
+  // Auto-verify token validity & blacklist/revocation status with backend on startup
+  useEffect(() => {
+    // Automatically wipe legacy localStorage tokens
+    localStorage.removeItem('tm_user');
+    localStorage.removeItem('tm_access_token');
+    localStorage.removeItem('tm_refresh_token');
+
+    const accessToken = authStorage.getAccessToken();
+    if (!accessToken) {
+      if (currentUser) {
+        authStorage.clear();
+        setCurrentUser(null);
+        setCurrentView('landing');
+      }
+      return;
+    }
+
+    // Call /api/v1/auth/me to verify token with auth-service & Redis blacklist
+    fetch('/api/v1/auth/me', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+      .then(async (res) => {
+        if (res.ok) {
+          const freshUser = await res.json();
+          setCurrentUser(freshUser);
+          authStorage.setUser(freshUser);
+        } else {
+          // Token is invalid, expired, revoked in Redis, or DB was wiped
+          console.warn('⚠️ [Auth] Phiên đăng nhập không hợp lệ hoặc đã bị thu hồi/hết hạn. Tự động dọn dẹp...');
+          authStorage.clear();
+          setCurrentUser(null);
+          setCurrentView('landing');
+        }
+      })
+      .catch((err) => {
+        console.warn('⚠️ [Auth] Không thể kết nối tới backend để xác thực token:', err);
+      });
+  }, []);
+
+  useEffect(() => {
+    bookingApi
+      .getAllBookings()
+      .then((res: any) => {
+        if (res.success && Array.isArray(res.data)) {
+          console.log('✅ [App] Đã kết nối với Backend Spring Boot (8083)! Có', res.data.length, 'đơn trong DB');
+          if (res.data.length > 0) {
+            const mapped: BookingDetails[] = res.data.map((b: BackendBooking) => ({
+              bookingId: b.bookingCode || b.id.substring(0, 8),
+              customerName: b.guestName,
+              phone: b.guestPhone,
+              email: b.guestEmail,
+              partySize: b.guestCount,
+              floor: (b.targetFloor as any) || 1,
+              tableCode: b.tableIds && b.tableIds.length > 0 ? `Bàn VIP` : (b.targetFloor === 3 ? 'Rooftop Tầng 3' : 'Sảnh'),
+              tableId: b.tableIds && b.tableIds.length > 0 ? b.tableIds[0] : 'f1-t01',
+              date: b.bookingDate,
+              timeSlot: '19:00 - 21:00',
+              notes: b.specialNotes,
+              occasion: b.occasion,
+              dietaryNotes: b.dietaryNotes,
+              babyChairCount: b.babyChairCount,
+              candleSetup: b.candleSetup,
+              preOrders: [],
+              depositAmount: Number(b.totalDeposit) || 0,
+              totalEstimatedAmount: Number(b.totalDeposit) || 0,
+              createdAt: b.createdAt ? new Date(b.createdAt).toLocaleTimeString('vi-VN') : 'Hôm nay',
+              status: b.status === 'EVENT_INQUIRY'
+                ? 'EVENT_INQUIRY'
+                : b.status === 'CONFIRMED' || b.status === 'SEATED'
+                ? 'CONFIRMED'
+                : 'PENDING_DEPOSIT',
+              vietqrCode: `TM ${b.bookingCode}`,
+              eventType: b.eventType,
+              targetFloor: b.targetFloor,
+              companyName: b.companyName,
+              estimatedBudget: b.estimatedBudget ? Number(b.estimatedBudget) : undefined,
+              stageAudioRequired: b.stageAudioRequired,
+              decorationRequired: b.decorationRequired,
+              callbackDeadline: b.callbackDeadline,
+              managerCallStatus: b.managerCallStatus,
+              consultationNotes: b.consultationNotes,
+            }));
+            setBookings((prev) => {
+              const existingCodes = new Set(mapped.map((m) => m.bookingId));
+              return [...mapped, ...prev.filter((p) => !existingCodes.has(p.bookingId))];
+            });
+          }
+        }
+      })
+      .catch((err: any) => {
+        console.warn('⚠️ [App] Chưa thể kết nối Backend:', err);
+      });
+  }, []);
+
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+
+  const handleLogout = async () => {
+    const refreshToken = authStorage.getRefreshToken();
+    const accessToken = authStorage.getAccessToken();
+    try {
+      if (refreshToken || accessToken) {
+        await fetch('/api/v1/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          },
+          body: JSON.stringify({ refreshToken }),
+        });
+      }
+    } catch (e) {
+      console.warn('Logout API error:', e);
+    } finally {
+      authStorage.clear();
+      setCurrentUser(null);
+      setCurrentView('landing');
+    }
+  };
 
   const handleNavigate = (view: ActiveView, floor?: 1 | 2 | 3) => {
+    // Role protection for internal staff portals
+    const staffViews: ActiveView[] = ['admin', 'restaurant', 'host', 'waiter'];
+    if (staffViews.includes(view)) {
+      const r = currentUser?.role?.toUpperCase() || '';
+      const isStaff = r.includes('ADMIN') || r.includes('MANAGER') || r.includes('HOST') || r.includes('WAITER');
+      if (!isStaff) {
+        setIsLoginModalOpen(true);
+        return;
+      }
+    }
+
     if (floor) {
       setTargetFloor(floor);
     }
@@ -43,7 +206,7 @@ export function App() {
           return {
             ...t,
             status: newStatus,
-            currentGuestName: guestName !== undefined ? guestName : t.currentGuestName,
+            currentGuestName: newStatus === 'AVAILABLE' ? (guestName || undefined) : (guestName !== undefined ? guestName : t.currentGuestName),
             isLateNoShow: false,
           };
         }
@@ -223,7 +386,16 @@ export function App() {
   return (
     <div className="min-h-screen flex flex-col bg-[#FDFBF7] text-[#0F172A] selection:bg-amber-100 selection:text-amber-900">
       {/* Sticky Luxury Navbar */}
-      <Navbar currentView={currentView} onNavigate={handleNavigate} />
+      <Navbar
+        currentView={currentView}
+        onNavigate={handleNavigate}
+        currentUser={currentUser}
+        onOpenLogin={() => setIsLoginModalOpen(true)}
+        onLogout={handleLogout}
+        onOpenProfile={() => setIsProfileModalOpen(true)}
+        onOpenReview={() => setIsReviewModalOpen(true)}
+        onOpenHistory={() => setIsHistoryModalOpen(true)}
+      />
 
       {/* Main View Transition Container */}
       <main className="flex-1 flex flex-col">
@@ -236,7 +408,10 @@ export function App() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <LandingPage onNavigate={handleNavigate} />
+              <LandingPage
+                onNavigate={handleNavigate}
+                onOpenBanquetModal={() => setIsBanquetModalOpen(true)}
+              />
             </motion.div>
           )}
 
@@ -253,6 +428,9 @@ export function App() {
                 initialFloor={targetFloor}
                 onUpdateTableStatus={handleUpdateTableStatus}
                 onAddBooking={handleAddBooking}
+                rebookData={rebookData}
+                onClearRebook={() => setRebookData(null)}
+                onOpenBanquetModal={() => setIsBanquetModalOpen(true)}
               />
             </motion.div>
           )}
@@ -274,6 +452,30 @@ export function App() {
                 onTransferTable={handleTransferTable}
                 onMergeTables={handleMergeTables}
                 onNavigateToWaiter={() => handleNavigate('waiter')}
+                onNavigateToKds={() => handleNavigate('kds')}
+                onUpdateBooking={(updated) => {
+                  setBookings((prev) =>
+                    prev.map((b) => (b.bookingId === updated.bookingId ? updated : b))
+                  );
+                }}
+              />
+            </motion.div>
+          )}
+
+          {currentView === 'kds' && (
+            <motion.div
+              key="kds"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.3 }}
+            >
+              <KitchenKdsPage
+                tables={tables}
+                bookings={bookings}
+                tableOrders={tableOrders}
+                setTableOrders={setTableOrders}
+                onNavigateToHost={() => handleNavigate('host')}
               />
             </motion.div>
           )}
@@ -294,6 +496,18 @@ export function App() {
                 onMergeTables={handleMergeTables}
                 onNavigateToHost={() => handleNavigate('host')}
               />
+            </motion.div>
+          )}
+
+          {currentView === 'restaurant' && (
+            <motion.div
+              key="restaurant"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <RestaurantManagementPage />
             </motion.div>
           )}
 
@@ -371,6 +585,13 @@ export function App() {
                   <span className="text-[10px] text-[#3D7058] font-bold">Live</span>
                 </button>
                 <button
+                  onClick={() => handleNavigate('kds')}
+                  className="w-full py-2 px-3 bg-[#FAF7F2] hover:bg-[#F2ECE1] rounded-xl text-left font-semibold text-[#1C1917] flex justify-between items-center transition-colors cursor-pointer"
+                >
+                  <span>Màn Hình Bếp (KDS Ticket Board)</span>
+                  <span className="text-[10px] text-amber-600 font-bold">Kitchen</span>
+                </button>
+                <button
                   onClick={() => handleNavigate('admin')}
                   className="w-full py-2 px-3 bg-[#FAF7F2] hover:bg-[#F2ECE1] rounded-xl text-left font-semibold text-[#1C1917] flex justify-between items-center transition-colors cursor-pointer"
                 >
@@ -388,6 +609,61 @@ export function App() {
         </div>
       </footer>
 
+      {/* Authentication Login Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onLoginSuccess={(user) => {
+          setCurrentUser(user);
+          const targetView = getDefaultViewForRole(user.role);
+          setCurrentView(targetView);
+        }}
+      />
+
+      {/* Profile & Dietary Preferences Modal */}
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        user={currentUser}
+        onClose={() => setIsProfileModalOpen(false)}
+        onProfileUpdated={(user) => setCurrentUser(user)}
+      />
+
+      {/* Post-dining Review & Rating Modal (UC-14) */}
+      <ReviewModal
+        isOpen={isReviewModalOpen}
+        user={currentUser}
+        onClose={() => setIsReviewModalOpen(false)}
+        onOpenLogin={() => setIsLoginModalOpen(true)}
+        onReviewSubmitted={(_review, updatedPoints) => {
+          if (currentUser) {
+            setCurrentUser({
+              ...currentUser,
+              loyaltyPoints: updatedPoints,
+            });
+          }
+        }}
+      />
+
+      {/* Booking History, E-Invoices & QR Pass Modal (UC-03) */}
+      <BookingHistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+        currentUser={currentUser}
+        localBookings={bookings}
+        onRebook={(booking) => {
+          setRebookData(booking);
+          handleNavigate('booking');
+        }}
+      />
+
+      {/* Private Banquet & Floor Buyout Modal (UC-10) */}
+      <PrivateBanquetModal
+        isOpen={isBanquetModalOpen}
+        onClose={() => setIsBanquetModalOpen(false)}
+        onSuccess={(newInquiry) => {
+          setBookings((prev) => [newInquiry, ...prev]);
+        }}
+      />
     </div>
   );
 }

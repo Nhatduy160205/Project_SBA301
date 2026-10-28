@@ -2,6 +2,7 @@ package com.tablemaster.restaurant.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
@@ -20,9 +21,6 @@ public class TableEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
-
-    @Column(name = "floor_plan_id", nullable = false)
-    private UUID floorPlanId;
 
     @Column(name = "table_code", unique = true, nullable = false, length = 30)
     private String tableCode;
@@ -46,17 +44,9 @@ public class TableEntity {
     @Builder.Default
     private Boolean isActive = true;
 
-    @Column(name = "pos_x", nullable = false)
-    @Builder.Default
-    private Float posX = 100.0f;
-
-    @Column(name = "pos_y", nullable = false)
-    @Builder.Default
-    private Float posY = 100.0f;
-
-    @Column(name = "shape", nullable = false, length = 20)
-    @Builder.Default
-    private String shape = "RECT";
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private ZonedDateTime createdAt;
 
     @UpdateTimestamp
     @Column(name = "updated_at")
