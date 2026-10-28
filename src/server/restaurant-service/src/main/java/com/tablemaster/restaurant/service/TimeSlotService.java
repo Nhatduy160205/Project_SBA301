@@ -1,9 +1,11 @@
 package com.tablemaster.restaurant.service;
 
-import com.tablemaster.restaurant.dto.TimeSlotDto;
+import com.tablemaster.restaurant.dto.request.TimeSlotRequest;
+import com.tablemaster.restaurant.dto.response.TimeSlotResponse;
 import com.tablemaster.restaurant.entity.TimeSlot;
 import com.tablemaster.restaurant.exception.BadRequestException;
 import com.tablemaster.restaurant.exception.ConflictException;
+import com.tablemaster.restaurant.exception.ErrorCode;
 import com.tablemaster.restaurant.exception.ResourceNotFoundException;
 import com.tablemaster.restaurant.repository.TimeSlotRepository;
 import lombok.RequiredArgsConstructor;
@@ -21,88 +23,88 @@ public class TimeSlotService {
     private final TimeSlotRepository timeSlotRepository;
 
     @Transactional(readOnly = true)
-    public List<TimeSlotDto> getAllTimeSlots(boolean activeOnly) {
+    public List<TimeSlotResponse> getAllTimeSlots(boolean activeOnly) {
         List<TimeSlot> slots = activeOnly
                 ? timeSlotRepository.findByIsActiveTrueOrderByStartTimeAsc()
                 : timeSlotRepository.findAllByOrderByStartTimeAsc();
-        return slots.stream().map(this::mapToDto).collect(Collectors.toList());
+        return slots.stream().map(this::mapToResponse).collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
-    public TimeSlotDto getTimeSlotById(UUID id) {
+    public TimeSlotResponse getTimeSlotById(UUID id) {
         TimeSlot slot = timeSlotRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khung giờ với ID: " + id));
-        return mapToDto(slot);
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TIME_SLOT_NOT_FOUND));
+        return mapToResponse(slot);
     }
 
     @Transactional
-    public TimeSlotDto createTimeSlot(TimeSlotDto dto) {
-        validateTimeSlot(dto, null);
+    public TimeSlotResponse createTimeSlot(TimeSlotRequest request) {
+        validateTimeSlot(request, null);
 
         TimeSlot timeSlot = TimeSlot.builder()
-                .slotName(dto.getSlotName())
-                .startTime(dto.getStartTime())
-                .endTime(dto.getEndTime())
-                .maxCapacity(dto.getMaxCapacity() != null ? dto.getMaxCapacity() : 50)
-                .isActive(dto.getIsActive() != null ? dto.getIsActive() : true)
+                .slotName(request.getSlotName())
+                .startTime(request.getStartTime())
+                .endTime(request.getEndTime())
+                .maxCapacity(request.getMaxCapacity() != null ? request.getMaxCapacity() : 50)
+                .isActive(request.getIsActive() != null ? request.getIsActive() : true)
                 .build();
 
         TimeSlot saved = timeSlotRepository.save(timeSlot);
-        return mapToDto(saved);
+        return mapToResponse(saved);
     }
 
     @Transactional
-    public TimeSlotDto updateTimeSlot(UUID id, TimeSlotDto dto) {
+    public TimeSlotResponse updateTimeSlot(UUID id, TimeSlotRequest request) {
         TimeSlot slot = timeSlotRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khung giờ với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TIME_SLOT_NOT_FOUND));
 
-        validateTimeSlot(dto, id);
+        validateTimeSlot(request, id);
 
-        slot.setSlotName(dto.getSlotName());
-        slot.setStartTime(dto.getStartTime());
-        slot.setEndTime(dto.getEndTime());
-        if (dto.getMaxCapacity() != null) {
-            slot.setMaxCapacity(dto.getMaxCapacity());
+        slot.setSlotName(request.getSlotName());
+        slot.setStartTime(request.getStartTime());
+        slot.setEndTime(request.getEndTime());
+        if (request.getMaxCapacity() != null) {
+            slot.setMaxCapacity(request.getMaxCapacity());
         }
-        if (dto.getIsActive() != null) {
-            slot.setIsActive(dto.getIsActive());
+        if (request.getIsActive() != null) {
+            slot.setIsActive(request.getIsActive());
         }
 
         TimeSlot saved = timeSlotRepository.save(slot);
-        return mapToDto(saved);
+        return mapToResponse(saved);
     }
 
     @Transactional
     public void deleteTimeSlot(UUID id) {
         if (!timeSlotRepository.existsById(id)) {
-            throw new ResourceNotFoundException("Không tìm thấy khung giờ với ID: " + id);
+            throw new ResourceNotFoundException(ErrorCode.TIME_SLOT_NOT_FOUND);
         }
         timeSlotRepository.deleteById(id);
     }
 
     @Transactional
-    public TimeSlotDto toggleStatus(UUID id) {
+    public TimeSlotResponse toggleStatus(UUID id) {
         TimeSlot slot = timeSlotRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khung giờ với ID: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.TIME_SLOT_NOT_FOUND));
         slot.setIsActive(!slot.getIsActive());
-        return mapToDto(timeSlotRepository.save(slot));
+        return mapToResponse(timeSlotRepository.save(slot));
     }
 
-    private void validateTimeSlot(TimeSlotDto dto, UUID currentId) {
-        if (dto.getStartTime().compareTo(dto.getEndTime()) >= 0) {
-            throw new BadRequestException("Giờ bắt đầu phải trước giờ kết thúc (" + dto.getStartTime() + " < " + dto.getEndTime() + ")");
+    private void validateTimeSlot(TimeSlotRequest request, UUID currentId) {
+        if (request.getStartTime().compareTo(request.getEndTime()) >= 0) {
+            throw new BadRequestException(ErrorCode.TIME_SLOT_INVALID_HOURS);
         }
 
-        timeSlotRepository.findByStartTimeAndEndTime(dto.getStartTime(), dto.getEndTime())
+        timeSlotRepository.findByStartTimeAndEndTime(request.getStartTime(), request.getEndTime())
                 .ifPresent(existing -> {
                     if (currentId == null || !existing.getId().equals(currentId)) {
-                        throw new ConflictException("Đã tồn tại khung giờ với thời gian từ " + dto.getStartTime() + " đến " + dto.getEndTime());
+                        throw new ConflictException(ErrorCode.TIME_SLOT_ALREADY_EXISTS);
                     }
                 });
     }
 
-    private TimeSlotDto mapToDto(TimeSlot entity) {
-        return TimeSlotDto.builder()
+    public TimeSlotResponse mapToResponse(TimeSlot entity) {
+        return TimeSlotResponse.builder()
                 .id(entity.getId())
                 .slotName(entity.getSlotName())
                 .startTime(entity.getStartTime())
