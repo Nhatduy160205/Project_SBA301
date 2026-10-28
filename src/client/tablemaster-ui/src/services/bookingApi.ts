@@ -224,6 +224,7 @@ export interface TableStateUpdatePayload {
 
 // Fallback UUIDs từ Seed Data cơ sở dữ liệu
 export const SEED_DATA = {
+  BOOKING_ID: 'c0000000-0000-0000-0000-000000000001',
   USER_ID: 'a0000000-0000-0000-0000-000000000005', // Khách VIP
   STAFF_ID: 'a0000000-0000-0000-0000-000000000003', // Lễ tân
   TIME_SLOT_ID: 'b1000000-0000-0000-0000-000000000002', // Ca tối Giờ Vàng
@@ -551,21 +552,29 @@ export const bookingApi = {
    * POST /api/v1/bookings/{id}/transfer-table
    */
   async transferTable(id: string, sourceTableId: string, targetTableId: string, reason?: string): Promise<ApiResponse<BackendBooking>> {
-    const res = await fetch(`${BASE_URL}/${id}/transfer-table`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Id': SEED_DATA.STAFF_ID,
-      },
-      body: JSON.stringify({
-        sourceTableId: ensureUUID(sourceTableId),
-        targetTableId: ensureUUID(targetTableId),
-        reason: reason || 'Khách yêu cầu chuyển bàn',
-      }),
-    });
+    try {
+      const res = await fetch(`${BASE_URL}/${ensureUUID(id)}/transfer-table`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': SEED_DATA.STAFF_ID,
+        },
+        body: JSON.stringify({
+          sourceTableId: ensureUUID(sourceTableId),
+          targetTableId: ensureUUID(targetTableId),
+          reason: reason || 'Khách yêu cầu chuyển bàn',
+        }),
+      });
 
-    if (!res.ok) throw new Error('Chuyển bàn thất bại');
-    return res.json();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: 'Chuyển bàn thất bại' }));
+        return { success: false, message: err.message || 'Chuyển bàn thất bại', data: null as any };
+      }
+      return await res.json();
+    } catch (e: any) {
+      console.warn('⚠️ [bookingApi] transferTable backend offline:', e?.message || e);
+      return { success: false, message: 'Backend offline', data: null as any };
+    }
   },
 
   /**
@@ -591,7 +600,7 @@ export const bookingApi = {
   },
 
   /**
-   * 10. Phục vụ gọi thêm món tại bàn
+   * 10. Phục vụ gọi thêm món tại bàn (UC-31 Waitstaff Mobile POS)
    * POST /api/v1/bookings/{id}/table-orders
    */
   async addTableOrders(id: string, tableId: string, items: Array<{
@@ -601,20 +610,32 @@ export const bookingApi = {
     unitPrice: number;
     notes?: string;
   }>) {
-    const res = await fetch(`${BASE_URL}/${id}/table-orders`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Id': SEED_DATA.STAFF_ID,
-      },
-      body: JSON.stringify({
-        tableId: ensureUUID(tableId),
-        items,
-      }),
-    });
+    try {
+      const res = await fetch(`${BASE_URL}/${ensureUUID(id)}/table-orders`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': SEED_DATA.STAFF_ID,
+        },
+        body: JSON.stringify({
+          tableId: ensureUUID(tableId),
+          items: items.map((i) => ({
+            ...i,
+            menuItemId: i.menuItemId && i.menuItemId.includes('-') && i.menuItemId.length === 36 ? i.menuItemId : undefined,
+          })),
+        }),
+      });
 
-    if (!res.ok) throw new Error('Gọi món thất bại');
-    return res.json();
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: `Lỗi ${res.status}` }));
+        console.warn('⚠️ [bookingApi] addTableOrders không thành công:', err.message);
+        return { success: false, message: err.message || 'Gọi món thất bại', data: [] };
+      }
+      return await res.json();
+    } catch (e: any) {
+      console.warn('⚠️ [bookingApi] Lỗi kết nối addTableOrders:', e?.message || e);
+      return { success: false, message: 'Backend offline', data: [] };
+    }
   },
 
   /**
