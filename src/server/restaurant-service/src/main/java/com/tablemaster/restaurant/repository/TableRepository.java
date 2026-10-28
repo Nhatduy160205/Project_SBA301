@@ -10,8 +10,9 @@ import java.util.UUID;
 
 @Repository
 public interface TableRepository extends JpaRepository<TableEntity, UUID> {
-    List<TableEntity> findByFloorPlanId(UUID floorPlanId);
-    List<TableEntity> findByFloorPlanIdAndIsActiveTrue(UUID floorPlanId);
+    List<TableEntity> findByZoneType(String zoneType);
+    List<TableEntity> findByZoneTypeAndIsActiveTrue(String zoneType);
+    List<TableEntity> findByIsActiveTrue();
     Optional<TableEntity> findByTableCode(String tableCode);
     boolean existsByTableCode(String tableCode);
     boolean existsByTableCodeAndIdNot(String tableCode, UUID id);

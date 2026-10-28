@@ -117,6 +117,7 @@ interface BookingPageProps {
   onAddBooking: (newBooking: BookingDetails) => void;
   rebookData?: BookingDetails | null;
   onClearRebook?: () => void;
+  onOpenBanquetModal?: () => void;
 }
 
 export const BookingPage: React.FC<BookingPageProps> = ({
@@ -126,6 +127,7 @@ export const BookingPage: React.FC<BookingPageProps> = ({
   onAddBooking,
   rebookData,
   onClearRebook,
+  onOpenBanquetModal,
 }) => {
   // Toast thông báo Re-book 1 chạm
   const [rebookToast, setRebookToast] = useState<string | null>(null);
@@ -706,6 +708,25 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                         );
                       })}
                     </div>
+
+                    {onOpenBanquetModal && (
+                      <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                        <div className="flex items-center gap-2 text-stone-700">
+                          <span className="text-lg">🏛️</span>
+                          <div>
+                            <span className="font-bold text-amber-950 block">Đặt Tiệc Trọn Gói & Sự Kiện Riêng Tư (Banquet)?</span>
+                            <span className="text-[11px] text-stone-500">Dành cho đoàn từ 10 - 60 khách hoặc bao trọn sảnh/tầng VIP.</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={onOpenBanquetModal}
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-bold text-[11px] shadow-sm shrink-0 cursor-pointer transition-all text-center"
+                        >
+                          Tư Vấn Tiệc VIP
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Date Strip & Calendar Picker */}

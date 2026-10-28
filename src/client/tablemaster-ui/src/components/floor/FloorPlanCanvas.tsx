@@ -11,6 +11,8 @@ interface FloorPlanCanvasProps {
   selectedTable: TableItem | null;
   onSelectTable: (table: TableItem) => void;
   isHeatmapMode?: boolean;
+  isHostView?: boolean;
+  tableLiveMetrics?: Record<string, { durationFormatted?: string; alertLevel?: 'NORMAL' | 'LONG_DINING' | 'OVERSTAY' }>;
 }
 
 export const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
@@ -19,6 +21,8 @@ export const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
   selectedTable,
   onSelectTable,
   isHeatmapMode = false,
+  isHostView = false,
+  tableLiveMetrics = {},
 }) => {
   const [zoomLevel, setZoomLevel] = useState<number>(1);
 
@@ -123,15 +127,21 @@ export const FloorPlanCanvas: React.FC<FloorPlanCanvasProps> = ({
           </div>
 
           {/* Render All Tables on Current Floor */}
-          {floorTables.map((table) => (
-            <TableNode
-              key={table.id}
-              table={table}
-              isSelected={selectedTable?.id === table.id}
-              onSelect={onSelectTable}
-              isHeatmapMode={isHeatmapMode}
-            />
-          ))}
+          {floorTables.map((table) => {
+            const metrics = tableLiveMetrics[table.id] || tableLiveMetrics[table.code];
+            return (
+              <TableNode
+                key={table.id}
+                table={table}
+                isSelected={selectedTable?.id === table.id}
+                onSelect={onSelectTable}
+                isHeatmapMode={isHeatmapMode}
+                isHostView={isHostView}
+                diningDurationFormatted={metrics?.durationFormatted}
+                diningAlertLevel={metrics?.alertLevel}
+              />
+            );
+          })}
         </div>
       </div>
     </div>
