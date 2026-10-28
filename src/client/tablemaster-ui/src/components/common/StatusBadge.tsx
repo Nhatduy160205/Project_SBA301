@@ -40,11 +40,17 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
           classes: 'bg-blue-50 text-blue-700 border-blue-400',
           dotColor: 'bg-blue-500',
         };
+      case 'CALL_BILL':
+        return {
+          label: 'Gọi tính tiền',
+          classes: 'bg-purple-50 text-purple-800 border-purple-400 font-bold',
+          dotColor: 'bg-purple-600',
+        };
       case 'CLEANING':
         return {
           label: 'Đang dọn bàn',
-          classes: 'bg-slate-100 text-slate-600 border-slate-300',
-          dotColor: 'bg-slate-400',
+          classes: 'bg-teal-50 text-teal-800 border-teal-400 font-bold',
+          dotColor: 'bg-teal-500',
         };
       default:
         return {

@@ -2,11 +2,9 @@ import React, { useState, useEffect } from 'react';
 import {
   Building2,
   Clock,
-  Layers,
   UtensilsCrossed,
   Calendar,
   Grid,
-  Edit,
   Trash2,
   Plus,
   Save,
@@ -21,7 +19,6 @@ import {
   restaurantApi,
   type RestaurantProfile,
   type TimeSlot,
-  type FloorPlan,
   type Table,
   type MenuCategory,
   type MenuItem,
@@ -31,7 +28,6 @@ import { FloorPlanEditor } from './FloorPlanEditor';
 
 export type RestaurantTab =
   | 'overview'
-  | 'floor-plans'
   | 'floor-editor'
   | 'tables'
   | 'time-slots'
@@ -52,24 +48,17 @@ export const RestaurantManagementPage: React.FC = () => {
   // Data states
   const [profile, setProfile] = useState<RestaurantProfile | null>(null);
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
-  const [floorPlans, setFloorPlans] = useState<FloorPlan[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [blackoutDates, setBlackoutDates] = useState<BlackoutDate[]>([]);
 
-  // Selected floor for editor
-  const [selectedFloorId, setSelectedFloorId] = useState<string>('');
-
   // Search & Filters
   const [searchTableQuery, setSearchTableQuery] = useState('');
-  const [filterFloorId, setFilterFloorId] = useState<string>('ALL');
+  const [filterZoneType, setFilterZoneType] = useState<string>('ALL');
   const [filterMenuCatId, setFilterMenuCatId] = useState<string>('ALL');
 
   // Modals
-  const [isFloorModalOpen, setIsFloorModalOpen] = useState(false);
-  const [floorForm, setFloorForm] = useState({ id: '', floorNumber: 1, name: '', widthPx: 1600, heightPx: 900, gridSize: 20 });
-
   const [isSlotModalOpen, setIsSlotModalOpen] = useState(false);
   const [slotForm, setSlotForm] = useState({ id: '', slotName: '', startTime: '11:00:00', endTime: '13:00:00', maxCapacity: 40, isActive: true });
 
@@ -108,11 +97,10 @@ export const RestaurantManagementPage: React.FC = () => {
   const loadAllData = async () => {
     setIsLoading(true);
     try {
-      const [profData, slotsData, floorsData, tablesData, catsData, itemsData, bDatesData] =
+      const [profData, slotsData, tablesData, catsData, itemsData, bDatesData] =
         await Promise.all([
           restaurantApi.getProfile().catch(() => null),
           restaurantApi.getTimeSlots(false).catch(() => []),
-          restaurantApi.getFloorPlans(false, true).catch(() => []),
           restaurantApi.getTables(undefined, false).catch(() => []),
           restaurantApi.getMenuCategories(false, true).catch(() => []),
           restaurantApi.getMenuItems(undefined, false, false).catch(() => []),
@@ -121,15 +109,10 @@ export const RestaurantManagementPage: React.FC = () => {
 
       if (profData) setProfile(profData);
       setTimeSlots(slotsData);
-      setFloorPlans(floorsData);
       setTables(tablesData);
       setCategories(catsData);
       setMenuItems(itemsData);
       setBlackoutDates(bDatesData);
-
-      if (floorsData.length > 0 && !selectedFloorId) {
-        setSelectedFloorId(floorsData[0].id);
-      }
     } catch (err: any) {
       showToast(err.message || 'Lỗi khi tải dữ liệu từ máy chủ', 'error');
     } finally {
@@ -151,35 +134,6 @@ export const RestaurantManagementPage: React.FC = () => {
       showToast('Cập nhật hồ sơ nhà hàng thành công!', 'success');
     } catch (err: any) {
       showToast(err.message || 'Lỗi cập nhật hồ sơ', 'error');
-    }
-  };
-
-  // Floor Plan Form Submit
-  const handleSaveFloor = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      if (floorForm.id) {
-        await restaurantApi.updateFloorPlan(floorForm.id, floorForm);
-        showToast('Cập nhật thông tin sơ đồ tầng thành công!', 'success');
-      } else {
-        await restaurantApi.createFloorPlan(floorForm);
-        showToast('Thêm sơ đồ tầng mới thành công!', 'success');
-      }
-      setIsFloorModalOpen(false);
-      await loadAllData();
-    } catch (err: any) {
-      showToast(err.message || 'Lỗi lưu sơ đồ tầng', 'error');
-    }
-  };
-
-  const handleDeleteFloor = async (id: string) => {
-    if (!confirm('Bạn có chắc chắn muốn xóa sơ đồ tầng này? Tất cả các bàn thuộc tầng cũng sẽ bị xóa.')) return;
-    try {
-      await restaurantApi.deleteFloorPlan(id);
-      showToast('Đã xóa sơ đồ tầng thành công', 'success');
-      await loadAllData();
-    } catch (err: any) {
-      showToast(err.message || 'Lỗi khi xóa tầng', 'error');
     }
   };
 
@@ -248,19 +202,28 @@ export const RestaurantManagementPage: React.FC = () => {
     if (!confirm('Bạn có chắc chắn muốn xóa danh mục này?')) return;
     try {
       await restaurantApi.deleteMenuCategory(id);
-      showToast('Đã xóa danh mục món', 'success');
+      showToast('Đã xóa danh mục', 'success');
       await loadAllData();
     } catch (err: any) {
       showToast(err.message || 'Lỗi khi xóa danh mục', 'error');
     }
   };
 
+  const handleToggleCategory = async (id: string) => {
+    try {
+      await restaurantApi.toggleMenuCategory(id);
+      showToast('Đổi trạng thái danh mục thành công', 'success');
+      await loadAllData();
+    } catch (err: any) {
+      showToast(err.message || 'Lỗi đổi trạng thái', 'error');
+    }
+  };
+
   // Menu Item Submit
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!itemForm.categoryId) {
-      showToast('Vui lòng chọn danh mục cho món ăn!', 'error');
-      return;
+    if (!itemForm.categoryId && categories.length > 0) {
+      itemForm.categoryId = categories[0].id;
     }
     try {
       if (itemForm.id) {
@@ -278,13 +241,23 @@ export const RestaurantManagementPage: React.FC = () => {
   };
 
   const handleDeleteItem = async (id: string) => {
-    if (!confirm('Bạn có chắc chắn muốn xóa món ăn này?')) return;
+    if (!confirm('Bạn có chắc chắn muốn xóa món này?')) return;
     try {
       await restaurantApi.deleteMenuItem(id);
       showToast('Đã xóa món ăn', 'success');
       await loadAllData();
     } catch (err: any) {
       showToast(err.message || 'Lỗi khi xóa món', 'error');
+    }
+  };
+
+  const handleToggleItem = async (id: string) => {
+    try {
+      await restaurantApi.toggleMenuItem(id);
+      showToast('Đổi trạng thái món ăn thành công', 'success');
+      await loadAllData();
+    } catch (err: any) {
+      showToast(err.message || 'Lỗi đổi trạng thái', 'error');
     }
   };
 
@@ -320,8 +293,8 @@ export const RestaurantManagementPage: React.FC = () => {
   // Filtered tables for Tables Tab
   const filteredTables = tables.filter((t) => {
     const matchesSearch = t.tableCode.toLowerCase().includes(searchTableQuery.toLowerCase());
-    const matchesFloor = filterFloorId === 'ALL' || t.floorPlanId === filterFloorId;
-    return matchesSearch && matchesFloor;
+    const matchesZone = filterZoneType === 'ALL' || t.zoneType === filterZoneType;
+    return matchesSearch && matchesZone;
   });
 
   // Filtered items for Menu Tab
@@ -357,7 +330,7 @@ export const RestaurantManagementPage: React.FC = () => {
               TableMaster Core Engine
             </span>
             <h2 className="font-serif text-lg font-bold text-[#2C221E] tracking-tight">
-              Restaurant & Floor Studio
+              Restaurant Studio
             </h2>
           </div>
 
@@ -382,27 +355,7 @@ export const RestaurantManagementPage: React.FC = () => {
               </div>
             </button>
 
-            {/* Tab 2: Floor Plans */}
-            <button
-              onClick={() => setActiveTab('floor-plans')}
-              className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                activeTab === 'floor-plans'
-                  ? 'bg-gradient-to-r from-[#C4A480] to-[#B3936F] text-white shadow-sm font-bold'
-                  : 'text-[#6B5E54] hover:bg-[#F3ECE0] hover:text-[#2C221E]'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Layers className="w-4 h-4" />
-                <span>Sơ Đồ Mặt Bằng</span>
-              </div>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                activeTab === 'floor-plans' ? 'bg-white text-[#8C6A43]' : 'bg-[#EFE7DC] text-[#78716C]'
-              }`}>
-                {floorPlans.length}
-              </span>
-            </button>
-
-            {/* Tab 3: Interactive Floor Editor */}
+            {/* Tab 2: Interactive Table Box Grid */}
             <button
               onClick={() => setActiveTab('floor-editor')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
@@ -413,14 +366,14 @@ export const RestaurantManagementPage: React.FC = () => {
             >
               <div className="flex items-center gap-3">
                 <Grid className="w-4 h-4" />
-                <span>Trình Vẽ Sơ Đồ 2D</span>
+                <span>Sơ Đồ Bàn (Box View)</span>
               </div>
               <span className="text-[10px] bg-[#3D7058] text-white px-2 py-0.5 rounded-full font-bold">
-                Kéo Thả
+                Dạng Box
               </span>
             </button>
 
-            {/* Tab 4: Table Inventory */}
+            {/* Tab 3: Table Inventory */}
             <button
               onClick={() => setActiveTab('tables')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
@@ -440,7 +393,7 @@ export const RestaurantManagementPage: React.FC = () => {
               </span>
             </button>
 
-            {/* Tab 5: Time Slots */}
+            {/* Tab 4: Time Slots */}
             <button
               onClick={() => setActiveTab('time-slots')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
@@ -460,7 +413,7 @@ export const RestaurantManagementPage: React.FC = () => {
               </span>
             </button>
 
-            {/* Tab 6: Menu Management */}
+            {/* Tab 5: Menu Management */}
             <button
               onClick={() => setActiveTab('menu')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
@@ -480,7 +433,7 @@ export const RestaurantManagementPage: React.FC = () => {
               </span>
             </button>
 
-            {/* Tab 7: Blackout Dates */}
+            {/* Tab 6: Blackout Dates */}
             <button
               onClick={() => setActiveTab('special-dates')}
               className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
@@ -528,7 +481,7 @@ export const RestaurantManagementPage: React.FC = () => {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[11px] font-bold text-[#8C6A43] uppercase tracking-[0.2em] bg-[#FAF4EB] px-2.5 py-0.5 rounded-full border border-[#E0D7C9]/60">
-                Restaurant & Floor Management
+                Restaurant Management Module
               </span>
               <span className="text-xs font-semibold text-[#3D7058] flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-[#3D7058]" />
@@ -537,8 +490,7 @@ export const RestaurantManagementPage: React.FC = () => {
             </div>
             <h1 className="font-serif text-2xl sm:text-3xl font-bold text-[#1C1917] tracking-tight">
               {activeTab === 'overview' && 'Hồ Sơ Nhà Hàng & Thiết Lập Cọc'}
-              {activeTab === 'floor-plans' && 'Danh Sách Sơ Đồ Mặt Bằng & Tầng'}
-              {activeTab === 'floor-editor' && 'Trình Biên Tập Sơ Đồ 2D Tương Tác'}
+              {activeTab === 'floor-editor' && 'Bố Cục Bàn Dạng Box Theo Khu Vực'}
               {activeTab === 'tables' && 'Quản Lý Danh Sách & Thuộc Tính Bàn'}
               {activeTab === 'time-slots' && 'Quản Lý Khung Giờ & Công Suất Ca Trực'}
               {activeTab === 'menu' && 'Quản Lý Thực Đơn & Danh Mục Món Ăn'}
@@ -559,16 +511,18 @@ export const RestaurantManagementPage: React.FC = () => {
             {/* Top Quick Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
               <div className="bg-white border border-[#E8DFD1] rounded-2xl p-5 shadow-xs">
-                <span className="text-[11px] font-bold text-[#78716C] uppercase tracking-wider">Tổng Số Tầng Mặt Bằng</span>
-                <div className="text-2xl font-serif font-bold text-[#1C1917] mt-1">{floorPlans.length} Tầng</div>
-                <span className="text-[10px] text-[#3D7058] font-semibold mt-1 block">100% Đã xuất bản</span>
+                <span className="text-[11px] font-bold text-[#78716C] uppercase tracking-wider">Tổng Số Bàn Đang Quản Lý</span>
+                <div className="text-2xl font-serif font-bold text-[#1C1917] mt-1">{tables.length} Bàn</div>
+                <span className="text-[10px] text-[#3D7058] font-semibold mt-1 block">Toàn bộ nhà hàng</span>
               </div>
 
               <div className="bg-white border border-[#E8DFD1] rounded-2xl p-5 shadow-xs">
-                <span className="text-[11px] font-bold text-[#78716C] uppercase tracking-wider">Tổng Số Bàn Đang Quản Lý</span>
-                <div className="text-2xl font-serif font-bold text-[#8C6A43] mt-1">{tables.length} Bàn</div>
+                <span className="text-[11px] font-bold text-[#78716C] uppercase tracking-wider">Bàn Đang Mở Hoạt Động</span>
+                <div className="text-2xl font-serif font-bold text-[#8C6A43] mt-1">
+                  {tables.filter((t) => t.isActive).length} Bàn
+                </div>
                 <span className="text-[10px] text-[#78716C] font-semibold mt-1 block">
-                  {tables.filter((t) => t.isActive).length} bàn đang mở phục vụ
+                  Sẵn sàng đón khách
                 </span>
               </div>
 
@@ -600,7 +554,7 @@ export const RestaurantManagementPage: React.FC = () => {
                 </div>
                 <button
                   type="submit"
-                  className="btn-tan px-6 py-2.5 text-xs font-bold shadow-xs flex items-center gap-2 cursor-pointer"
+                  className="btn-tan px-6 py-2.5 text-xs font-bold flex items-center gap-2 cursor-pointer shadow-xs"
                 >
                   <Save className="w-4 h-4" />
                   <span>Lưu Hồ Sơ Nhà Hàng</span>
@@ -615,23 +569,23 @@ export const RestaurantManagementPage: React.FC = () => {
                     required
                     value={profile.name}
                     onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#E0D7C9] bg-[#FAF7F2] font-semibold"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#E0D7C9] bg-[#FAF7F2] font-semibold text-[#1C1917]"
                   />
                 </div>
 
                 <div>
-                  <label className="font-bold text-[#2C221E] block mb-1">Số Hotline *</label>
+                  <label className="font-bold text-[#2C221E] block mb-1">Số Điện Thoại Hotline *</label>
                   <input
                     type="text"
                     required
                     value={profile.hotline}
                     onChange={(e) => setProfile({ ...profile, hotline: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#E0D7C9] bg-[#FAF7F2] font-mono font-semibold"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-[#E0D7C9] bg-[#FAF7F2]"
                   />
                 </div>
 
                 <div>
-                  <label className="font-bold text-[#2C221E] block mb-1">Email Liên Hệ *</label>
+                  <label className="font-bold text-[#2C221E] block mb-1">Email Tiếp Nhận Đặt Bàn *</label>
                   <input
                     type="email"
                     required
@@ -642,7 +596,7 @@ export const RestaurantManagementPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="font-bold text-[#2C221E] block mb-1">Địa Chỉ Mặt Bằng *</label>
+                  <label className="font-bold text-[#2C221E] block mb-1">Địa Chỉ Thực Tế Của Nhà Hàng *</label>
                   <input
                     type="text"
                     required
@@ -653,11 +607,9 @@ export const RestaurantManagementPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="font-bold text-[#2C221E] block mb-1">Giờ Mở Cửa Hàng Ngày *</label>
+                  <label className="font-bold text-[#2C221E] block mb-1">Giờ Mở Cửa (Hàng Ngày)</label>
                   <input
-                    type="time"
-                    step={1}
-                    required
+                    type="text"
                     value={profile.openingTime}
                     onChange={(e) => setProfile({ ...profile, openingTime: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E0D7C9] bg-[#FAF7F2] font-mono"
@@ -665,11 +617,9 @@ export const RestaurantManagementPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="font-bold text-[#2C221E] block mb-1">Giờ Đóng Cửa Hàng Ngày *</label>
+                  <label className="font-bold text-[#2C221E] block mb-1">Giờ Đóng Cửa</label>
                   <input
-                    type="time"
-                    step={1}
-                    required
+                    type="text"
                     value={profile.closingTime}
                     onChange={(e) => setProfile({ ...profile, closingTime: e.target.value })}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-[#E0D7C9] bg-[#FAF7F2] font-mono"
@@ -771,118 +721,16 @@ export const RestaurantManagementPage: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 2: FLOOR PLANS MANAGEMENT */}
-        {activeTab === 'floor-plans' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between pb-2">
-              <div>
-                <h3 className="font-serif text-xl font-bold text-[#1C1917]">
-                  Danh Sách Sơ Đồ Tầng & Không Gian
-                </h3>
-                <p className="text-xs text-[#78716C]">Quản lý các tầng phục vụ của nhà hàng</p>
-              </div>
-
-              <button
-                onClick={() => {
-                  setFloorForm({ id: '', floorNumber: floorPlans.length + 1, name: `Tầng ${floorPlans.length + 1}`, widthPx: 1600, heightPx: 900, gridSize: 20 });
-                  setIsFloorModalOpen(true);
-                }}
-                className="btn-tan px-4 py-2 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Thêm Tầng Mới</span>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {floorPlans.map((floor) => (
-                <div
-                  key={floor.id}
-                  className="bg-white border border-[#EBE5DC] rounded-3xl p-6 shadow-xs flex flex-col justify-between space-y-4 hover:border-[#C4A480] transition-colors group"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="w-8 h-8 rounded-full bg-[#FAF7F2] text-[#8C6A43] font-serif font-bold text-sm flex items-center justify-center border border-[#E0D7C9]">
-                        {floor.floorNumber}
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                          floor.isPublished
-                            ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]'
-                            : 'bg-[#FEF2F2] text-[#991B1B] border-[#FECACA]'
-                        }`}
-                      >
-                        {floor.isPublished ? 'Đã Xuất Bản' : 'Bản Nháp'}
-                      </span>
-                    </div>
-
-                    <h4 className="font-serif text-lg font-bold text-[#1C1917]">
-                      {floor.name}
-                    </h4>
-
-                    <div className="text-xs text-[#78716C] space-y-1">
-                      <p>Kích thước canvas: <strong>{floor.widthPx} × {floor.heightPx}px</strong></p>
-                      <p>Lưới tọa độ: <strong>{floor.gridSize}px</strong></p>
-                      <p>Số bàn hiện có: <strong>{floor.tables?.length || 0} bàn</strong></p>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-[#EBE5DC] flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setSelectedFloorId(floor.id);
-                        setActiveTab('floor-editor');
-                      }}
-                      className="flex-1 btn-tan py-2 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-                    >
-                      <Grid className="w-3.5 h-3.5" />
-                      <span>Vẽ Sơ Đồ 2D</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setFloorForm({
-                          id: floor.id,
-                          floorNumber: floor.floorNumber,
-                          name: floor.name,
-                          widthPx: floor.widthPx,
-                          heightPx: floor.heightPx,
-                          gridSize: floor.gridSize,
-                        });
-                        setIsFloorModalOpen(true);
-                      }}
-                      className="p-2 rounded-xl text-[#78716C] hover:bg-[#FAF7F2] border border-[#E0D7C9] cursor-pointer"
-                      title="Sửa cấu hình tầng"
-                    >
-                      <Edit className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteFloor(floor.id)}
-                      className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 cursor-pointer"
-                      title="Xóa tầng"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: INTERACTIVE FLOOR EDITOR */}
+        {/* TAB 2: INTERACTIVE BOX GRID VIEW */}
         {activeTab === 'floor-editor' && (
           <FloorPlanEditor
-            floorPlans={floorPlans}
-            selectedFloorId={selectedFloorId}
-            onSelectFloorId={setSelectedFloorId}
+            tables={tables}
             onRefreshData={loadAllData}
             onShowToast={showToast}
           />
         )}
 
-        {/* TAB 4: TABLE INVENTORY LIST */}
+        {/* TAB 3: TABLE INVENTORY LIST */}
         {activeTab === 'tables' && (
           <div className="bg-white border border-[#EBE5DC] rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#EBE5DC]">
@@ -890,7 +738,7 @@ export const RestaurantManagementPage: React.FC = () => {
                 <h3 className="font-serif text-xl font-bold text-[#1C1917]">
                   Danh Sách Toàn Bộ Bàn Ăn
                 </h3>
-                <p className="text-xs text-[#78716C]">Quản lý chi tiết sức chứa, loại bàn và tiền cọc từng vị trí</p>
+                <p className="text-xs text-[#78716C]">Quản lý chi tiết sức chứa, khu vực và tiền cọc từng vị trí</p>
               </div>
 
               {/* Filters */}
@@ -907,14 +755,16 @@ export const RestaurantManagementPage: React.FC = () => {
                 </div>
 
                 <select
-                  value={filterFloorId}
-                  onChange={(e) => setFilterFloorId(e.target.value)}
+                  value={filterZoneType}
+                  onChange={(e) => setFilterZoneType(e.target.value)}
                   className="px-3 py-1.5 text-xs rounded-xl border border-[#E0D7C9] bg-[#FAF7F2] font-semibold text-[#6B5E54]"
                 >
-                  <option value="ALL">Tất Cả Tầng ({tables.length})</option>
-                  {floorPlans.map((f) => (
-                    <option key={f.id} value={f.id}>{f.name}</option>
-                  ))}
+                  <option value="ALL">Tất Cả Khu Vực ({tables.length})</option>
+                  <option value="STANDARD">Tiêu Chuẩn (Standard)</option>
+                  <option value="PRIVATE_VIP">Phòng VIP (Private VIP)</option>
+                  <option value="WINDOW_VIEW">Mặt Kính (Window View)</option>
+                  <option value="OUTDOOR">Ngoài Trời (Outdoor)</option>
+                  <option value="BAR_COUNTER">Quầy Bar (Bar Counter)</option>
                 </select>
               </div>
             </div>
@@ -925,11 +775,8 @@ export const RestaurantManagementPage: React.FC = () => {
                 <thead>
                   <tr className="border-b border-[#EBE5DC] text-[#78716C] uppercase tracking-wider text-[10px]">
                     <th className="py-3 px-3">Mã Bàn</th>
-                    <th className="py-3 px-3">Tầng Mặt Bằng</th>
-                    <th className="py-3 px-3">Khu Vực</th>
+                    <th className="py-3 px-3">Khu Vực (Zone)</th>
                     <th className="py-3 px-3">Sức Chứa (Min - Max)</th>
-                    <th className="py-3 px-3">Hình Dạng</th>
-                    <th className="py-3 px-3">Kích Thước</th>
                     <th className="py-3 px-3">Tiền Cọc Riêng</th>
                     <th className="py-3 px-3">Trạng Thái</th>
                     <th className="py-3 px-3 text-right">Thao Tác</th>
@@ -937,25 +784,17 @@ export const RestaurantManagementPage: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-[#FAF7F2]">
                   {filteredTables.map((t) => {
-                    const floorName = floorPlans.find((f) => f.id === t.floorPlanId)?.name || 'Chưa gán';
                     return (
                       <tr key={t.id} className="hover:bg-[#FAF7F2] transition-colors">
                         <td className="py-3.5 px-3 font-mono font-bold text-[#8C6A43] text-sm">{t.tableCode}</td>
-                        <td className="py-3.5 px-3 font-medium text-[#1C1917]">{floorName}</td>
                         <td className="py-3.5 px-3">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FAF4EB] border border-[#E0D7C9] text-[#8C6A43]">
                             {t.zoneType}
                           </span>
                         </td>
                         <td className="py-3.5 px-3 font-semibold text-[#1C1917]">{t.minCapacity} - {t.maxCapacity} Khách</td>
-                        <td className="py-3.5 px-3">
-                          {t.shape === 'RECT' && 'Chữ Nhật'}
-                          {t.shape === 'SQUARE' && 'Hình Vuông'}
-                          {t.shape === 'CIRCLE' && 'Bàn Tròn'}
-                        </td>
-                        <td className="py-3.5 px-3 font-mono text-[11px] text-[#78716C]">{t.width} × {t.height}px</td>
                         <td className="py-3.5 px-3 font-mono font-bold text-[#3D7058]">
-                          {t.customDeposit ? `${new Intl.NumberFormat('vi-VN').format(t.customDeposit)} đ` : 'Mặc định'}
+                          {t.customDeposit ? `${new Intl.NumberFormat('vi-VN').format(t.customDeposit)} đ` : 'Mặc định quán'}
                         </td>
                         <td className="py-3.5 px-3">
                           <span
@@ -1008,7 +847,7 @@ export const RestaurantManagementPage: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 5: TIME SLOTS */}
+        {/* TAB 4: TIME SLOTS */}
         {activeTab === 'time-slots' && (
           <div className="bg-white border border-[#EBE5DC] rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-[#EBE5DC]">
@@ -1048,19 +887,17 @@ export const RestaurantManagementPage: React.FC = () => {
                             : 'bg-[#FEF2F2] text-[#991B1B] border-[#FECACA]'
                         }`}
                       >
-                        {slot.isActive ? 'Đang Mở Đặt' : 'Tạm Đóng'}
+                        {slot.isActive ? 'Đang Mở' : 'Tạm Đóng'}
                       </button>
                     </div>
 
                     <div className="text-xs text-[#78716C] space-y-1">
-                      <p className="font-mono font-bold text-sm text-[#8C6A43]">
-                        ⏰ {slot.startTime} — {slot.endTime}
-                      </p>
-                      <p>Công suất tối đa: <strong className="text-[#1C1917]">{slot.maxCapacity} khách</strong></p>
+                      <p>Khung giờ: <strong className="font-mono text-[#8C6A43]">{slot.startTime} — {slot.endTime}</strong></p>
+                      <p>Công suất phục vụ: <strong>{slot.maxCapacity} khách tối đa</strong></p>
                     </div>
                   </div>
 
-                  <div className="pt-3 border-t border-[#EBE5DC] flex items-center justify-end gap-2">
+                  <div className="pt-3 border-t border-[#E0D7C9]/60 flex items-center justify-end gap-2 text-xs">
                     <button
                       onClick={() => {
                         setSlotForm({
@@ -1073,16 +910,16 @@ export const RestaurantManagementPage: React.FC = () => {
                         });
                         setIsSlotModalOpen(true);
                       }}
-                      className="p-1.5 rounded-lg text-[#78716C] hover:bg-white border border-[#E0D7C9] cursor-pointer"
+                      className="text-[#8C6A43] hover:underline font-semibold cursor-pointer"
                     >
-                      <Edit className="w-3.5 h-3.5" />
+                      Sửa
                     </button>
-
+                    <span className="text-[#E0D7C9]">|</span>
                     <button
                       onClick={() => handleDeleteSlot(slot.id)}
-                      className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 border border-rose-200 cursor-pointer"
+                      className="text-rose-600 hover:underline font-semibold cursor-pointer"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      Xóa
                     </button>
                   </div>
                 </div>
@@ -1091,61 +928,80 @@ export const RestaurantManagementPage: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 6: MENU & CATEGORIES */}
+        {/* TAB 5: MENU MANAGEMENT */}
         {activeTab === 'menu' && (
           <div className="space-y-6">
-            {/* Categories Bar */}
-            <div className="bg-white border border-[#EBE5DC] rounded-2xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-bold text-[#8C6A43] uppercase tracking-wider mr-2">Danh Mục:</span>
+            {/* Categories Management Bar */}
+            <div className="bg-white border border-[#EBE5DC] rounded-3xl p-6 shadow-xs space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-[#EBE5DC]">
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-[#1C1917]">
+                    Danh Mục Thực Đơn
+                  </h3>
+                  <p className="text-xs text-[#78716C]">Quản lý các nhóm món ăn chính phục vụ nhà hàng</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setCatForm({ id: '', name: '', displayOrder: categories.length + 1, isActive: true });
+                    setIsCategoryModalOpen(true);
+                  }}
+                  className="btn-tan px-4 py-2 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Thêm Danh Mục</span>
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-2.5">
                 <button
                   onClick={() => setFilterMenuCatId('ALL')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     filterMenuCatId === 'ALL'
-                      ? 'bg-gradient-to-r from-[#C4A480] to-[#B3936F] text-white shadow-2xs'
-                      : 'bg-[#FAF7F2] text-[#6B5E54] hover:text-[#1C1917]'
+                      ? 'bg-[#2C221E] text-white shadow-xs'
+                      : 'bg-[#FAF7F2] text-[#6B5E54] hover:bg-[#F2ECE1]'
                   }`}
                 >
-                  Tất Cả ({menuItems.length})
+                  Tất Cả Món ({menuItems.length})
                 </button>
                 {categories.map((cat) => (
-                  <div key={cat.id} className="inline-flex items-center gap-1 group">
-                    <button
-                      onClick={() => setFilterMenuCatId(cat.id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                        filterMenuCatId === cat.id
-                          ? 'bg-gradient-to-r from-[#C4A480] to-[#B3936F] text-white shadow-2xs'
-                          : 'bg-[#FAF7F2] text-[#6B5E54] hover:text-[#1C1917]'
-                      }`}
-                    >
+                  <div
+                    key={cat.id}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs transition-colors ${
+                      filterMenuCatId === cat.id
+                        ? 'bg-[#C4A480] text-white border-[#C4A480] font-bold'
+                        : 'bg-[#FAF7F2] text-[#2C221E] border-[#E0D7C9]'
+                    }`}
+                  >
+                    <span onClick={() => setFilterMenuCatId(cat.id)} className="cursor-pointer">
                       {cat.name}
+                    </span>
+                    <button
+                      onClick={() => handleToggleCategory(cat.id)}
+                      className={`text-[9px] px-1.5 py-0.2 rounded-full cursor-pointer ml-1 ${
+                        cat.isActive ? 'bg-[#3D7058] text-white' : 'bg-gray-400 text-white'
+                      }`}
+                      title={cat.isActive ? 'Đang mở' : 'Đang ẩn'}
+                    >
+                      {cat.isActive ? 'Bật' : 'Ẩn'}
                     </button>
                     <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteCategory(cat.id);
-                      }}
-                      title="Xóa danh mục này"
-                      className="opacity-0 group-hover:opacity-100 p-1 text-rose-500 hover:text-rose-700 transition-opacity cursor-pointer"
+                      onClick={() => handleDeleteCategory(cat.id)}
+                      className="text-rose-500 hover:text-rose-700 ml-1 cursor-pointer"
+                      title="Xóa danh mục"
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
                 ))}
               </div>
+            </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setCatForm({ id: '', name: '', displayOrder: categories.length + 1, isActive: true });
-                    setIsCategoryModalOpen(true);
-                  }}
-                  className="btn-tan-outline px-3.5 py-1.5 text-xs font-bold cursor-pointer"
-                >
-                  + Danh Mục
-                </button>
-
+            {/* Menu Items List */}
+            <div className="bg-white border border-[#EBE5DC] rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
+              <div className="flex items-center justify-between pb-4 border-b border-[#EBE5DC]">
+                <h3 className="font-serif text-xl font-bold text-[#1C1917]">
+                  Danh Sách Món Ăn ({filteredMenuItems.length})
+                </h3>
                 <button
                   onClick={() => {
                     setItemForm({
@@ -1153,110 +1009,99 @@ export const RestaurantManagementPage: React.FC = () => {
                       categoryId: categories[0]?.id || '',
                       name: '',
                       description: '',
-                      price: 250000,
+                      price: 180000,
                       imageUrl: '',
                       isPreorderAvailable: true,
                       isActive: true,
                     });
                     setIsItemModalOpen(true);
                   }}
-                  className="btn-tan px-4 py-1.5 text-xs font-bold flex items-center gap-1 cursor-pointer shadow-xs"
+                  className="btn-tan px-4 py-2 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>+ Thêm Món Ăn</span>
+                  <span>+ Thêm Món Ăn Mới</span>
                 </button>
               </div>
-            </div>
 
-            {/* Menu Items Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {filteredMenuItems.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-white border border-[#EBE5DC] rounded-3xl overflow-hidden shadow-xs hover:border-[#C4A480] transition-colors flex flex-col justify-between"
-                >
-                  <div>
-                    {item.imageUrl ? (
-                      <img src={item.imageUrl} alt={item.name} className="w-full h-40 object-cover" />
-                    ) : (
-                      <div className="w-full h-40 bg-[#FAF7F2] flex items-center justify-center text-[#8C6A43]">
-                        <UtensilsCrossed className="w-8 h-8 opacity-40" />
-                      </div>
-                    )}
-                    <div className="p-4 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase text-[#8C6A43] tracking-wider">
-                          {item.categoryName || 'Món Ăn'}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {filteredMenuItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-4 rounded-2xl bg-[#FAF7F2] border border-[#EBE5DC] space-y-3 flex flex-col justify-between hover:border-[#C4A480] transition-colors"
+                  >
+                    <div className="space-y-2.5">
+                      {item.imageUrl && (
+                        <img
+                          src={item.imageUrl}
+                          alt={item.name}
+                          className="w-full h-36 object-cover rounded-xl border border-[#E0D7C9]"
+                        />
+                      )}
+                      <div className="flex items-start justify-between gap-2">
+                        <h4 className="font-serif font-bold text-base text-[#1C1917] leading-tight">
+                          {item.name}
+                        </h4>
+                        <span className="font-mono font-bold text-[#8C6A43] text-sm shrink-0">
+                          {new Intl.NumberFormat('vi-VN').format(item.price)} đ
                         </span>
+                      </div>
+                      <p className="text-xs text-[#78716C] line-clamp-2">{item.description}</p>
+                    </div>
+
+                    <div className="pt-3 border-t border-[#EBE5DC] flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleToggleItem(item.id)}
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border cursor-pointer ${
+                            item.isActive
+                              ? 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]'
+                              : 'bg-[#FEF2F2] text-[#991B1B] border-[#FECACA]'
+                          }`}
+                        >
+                          {item.isActive ? 'Đang Bán' : 'Ngừng'}
+                        </button>
                         {item.isPreorderAvailable && (
-                          <span className="text-[9px] font-bold bg-[#FAF4EB] text-[#8C6A43] px-2 py-0.5 rounded-full border border-[#E0D7C9]">
-                            Cho Phép Cọc Trước
+                          <span className="text-[9px] bg-[#FAF4EB] text-[#8C6A43] px-2 py-0.5 rounded-full font-bold border border-[#E0D7C9]">
+                            Đặt Trước
                           </span>
                         )}
                       </div>
-                      <h4 className="font-serif font-bold text-sm text-[#1C1917] leading-snug line-clamp-1">
-                        {item.name}
-                      </h4>
-                      <p className="text-[11px] text-[#78716C] line-clamp-2 leading-relaxed">
-                        {item.description || 'Hương vị tinh tế tiêu chuẩn Michelin'}
-                      </p>
-                      <div className="text-base font-serif font-bold text-[#8C6A43] pt-1">
-                        {new Intl.NumberFormat('vi-VN').format(item.price)} đ
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setItemForm({
+                              id: item.id,
+                              categoryId: item.categoryId,
+                              name: item.name,
+                              description: item.description || '',
+                              price: item.price,
+                              imageUrl: item.imageUrl || '',
+                              isPreorderAvailable: item.isPreorderAvailable,
+                              isActive: item.isActive,
+                            });
+                            setIsItemModalOpen(true);
+                          }}
+                          className="text-[#8C6A43] hover:underline font-semibold cursor-pointer"
+                        >
+                          Sửa
+                        </button>
+                        <button
+                          onClick={() => handleDeleteItem(item.id)}
+                          className="text-rose-600 hover:underline font-semibold cursor-pointer"
+                        >
+                          Xóa
+                        </button>
                       </div>
                     </div>
                   </div>
-
-                  <div className="p-4 pt-2 border-t border-[#EBE5DC] flex items-center justify-between text-xs">
-                    <button
-                      onClick={async () => {
-                        try {
-                          await restaurantApi.toggleMenuItem(item.id);
-                          showToast('Đổi trạng thái món ăn thành công', 'success');
-                          await loadAllData();
-                        } catch (err: any) {
-                          showToast(err.message || 'Lỗi đổi trạng thái', 'error');
-                        }
-                      }}
-                      className="text-[11px] font-bold text-[#78716C] hover:text-[#1C1917] cursor-pointer"
-                    >
-                      {item.isActive ? 'Tạm Ngưng' : 'Mở Lại'}
-                    </button>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => {
-                          setItemForm({
-                            id: item.id,
-                            categoryId: item.categoryId,
-                            name: item.name,
-                            description: item.description || '',
-                            price: item.price,
-                            imageUrl: item.imageUrl || '',
-                            isPreorderAvailable: item.isPreorderAvailable,
-                            isActive: item.isActive,
-                          });
-                          setIsItemModalOpen(true);
-                        }}
-                        className="p-1 text-[#78716C] hover:text-[#1C1917] cursor-pointer"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                      </button>
-
-                      <button
-                        onClick={() => handleDeleteItem(item.id)}
-                        className="p-1 text-rose-600 hover:text-rose-800 cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* TAB 7: BLACKOUT & SPECIAL DATES */}
+        {/* TAB 6: BLACKOUT DATES */}
         {activeTab === 'special-dates' && (
           <div className="bg-white border border-[#EBE5DC] rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-[#EBE5DC]">
@@ -1265,7 +1110,7 @@ export const RestaurantManagementPage: React.FC = () => {
                   Cấu Hình Ngày Lễ & Blackout Dates (UC-30)
                 </h3>
                 <p className="text-xs text-[#78716C]">
-                  Tự động tăng tiền cọc vào các ngày cao điểm (Valentine, Giáng Sinh) hoặc chặn đặt bàn khi bảo dưỡng quán
+                  Thiết lập phụ thu tiền cọc, bắt buộc set menu đặc biệt hoặc đóng cửa ngưng nhận khách
                 </p>
               </div>
 
@@ -1276,7 +1121,7 @@ export const RestaurantManagementPage: React.FC = () => {
                     eventDate: new Date().toISOString().slice(0, 10),
                     eventName: '',
                     isClosed: false,
-                    customDepositAmount: 500000,
+                    customDepositAmount: 300000,
                     requireSpecialMenu: false,
                     note: '',
                   });
@@ -1285,65 +1130,68 @@ export const RestaurantManagementPage: React.FC = () => {
                 className="btn-tan px-4 py-2 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>+ Thêm Ngày Đặc Biệt</span>
+                <span>+ Thiết Lập Ngày Lễ Mới</span>
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {blackoutDates.map((item) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {blackoutDates.map((bDate) => (
                 <div
-                  key={item.id}
-                  className="p-5 rounded-2xl bg-[#FAF7F2] border border-[#E0D7C9]/80 flex items-center justify-between"
+                  key={bDate.id}
+                  className="p-5 rounded-2xl bg-[#FAF7F2] border border-[#EBE5DC] space-y-3 flex flex-col justify-between"
                 >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-xs bg-white px-2.5 py-0.5 rounded-full border border-[#E0D7C9] text-[#8C6A43]">
-                        📅 {item.eventDate}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-serif font-bold text-base text-[#1C1917]">{bDate.eventName}</span>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          bDate.isClosed
+                            ? 'bg-[#FEF2F2] text-[#991B1B] border-[#FECACA]'
+                            : 'bg-[#ECFDF5] text-[#065F46] border-[#A7F3D0]'
+                        }`}
+                      >
+                        {bDate.isClosed ? 'Đóng Cửa / Bảo Trì' : 'Mở Phục Vụ'}
                       </span>
-                      {item.isClosed ? (
-                        <span className="text-[10px] font-bold bg-[#FEF2F2] text-[#991B1B] px-2 py-0.5 rounded-full border border-[#FECACA]">
-                          Đóng Cửa / Bảo Dưỡng
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-bold bg-[#ECFDF5] text-[#065F46] px-2 py-0.5 rounded-full border border-[#A7F3D0]">
-                          Mở Đặt Có Phụ Thu
-                        </span>
-                      )}
                     </div>
 
-                    <h4 className="font-serif font-bold text-base text-[#1C1917]">{item.eventName}</h4>
-                    {item.note && <p className="text-xs text-[#78716C]">{item.note}</p>}
-
-                    {item.customDepositAmount && (
-                      <p className="text-xs font-mono font-bold text-[#8C6A43]">
-                        Tiền cọc ngày lễ: {new Intl.NumberFormat('vi-VN').format(item.customDepositAmount)} đ
+                    <div className="text-xs text-[#78716C] space-y-1">
+                      <p>Ngày diễn ra: <strong className="font-mono text-[#8C6A43]">{bDate.eventDate}</strong></p>
+                      <p>
+                        Tiền cọc áp dụng:{' '}
+                        <strong className="font-mono text-[#3D7058]">
+                          {bDate.customDepositAmount
+                            ? `${new Intl.NumberFormat('vi-VN').format(bDate.customDepositAmount)} đ`
+                            : 'Theo tiêu chuẩn'}
+                        </strong>
                       </p>
-                    )}
+                      {bDate.note && <p className="text-[#8C6A43] italic">Ghi chú: {bDate.note}</p>}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="pt-3 border-t border-[#EBE5DC] flex items-center justify-end gap-2 text-xs">
                     <button
                       onClick={() => {
                         setBlackoutForm({
-                          id: item.id,
-                          eventDate: item.eventDate,
-                          eventName: item.eventName,
-                          isClosed: item.isClosed,
-                          customDepositAmount: item.customDepositAmount || 0,
-                          requireSpecialMenu: item.requireSpecialMenu,
-                          note: item.note || '',
+                          id: bDate.id,
+                          eventDate: bDate.eventDate,
+                          eventName: bDate.eventName,
+                          isClosed: bDate.isClosed,
+                          customDepositAmount: bDate.customDepositAmount || 0,
+                          requireSpecialMenu: bDate.requireSpecialMenu,
+                          note: bDate.note || '',
                         });
                         setIsBlackoutModalOpen(true);
                       }}
-                      className="p-2 rounded-xl text-[#78716C] hover:bg-white border border-[#E0D7C9] cursor-pointer"
+                      className="text-[#8C6A43] hover:underline font-semibold cursor-pointer"
                     >
-                      <Edit className="w-3.5 h-3.5" />
+                      Sửa
                     </button>
+                    <span className="text-[#EBE5DC]">|</span>
                     <button
-                      onClick={() => handleDeleteBlackout(item.id)}
-                      className="p-2 rounded-xl text-rose-600 hover:bg-rose-50 border border-rose-200 cursor-pointer"
+                      onClick={() => handleDeleteBlackout(bDate.id)}
+                      className="text-rose-600 hover:underline font-semibold cursor-pointer"
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      Xóa
                     </button>
                   </div>
                 </div>
@@ -1353,98 +1201,30 @@ export const RestaurantManagementPage: React.FC = () => {
         )}
       </main>
 
-      {/* FLOOR PLAN MODAL */}
-      {isFloorModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#EBE5DC] space-y-4">
-            <h3 className="font-serif text-lg font-bold text-[#1C1917]">
-              {floorForm.id ? 'Sửa Sơ Đồ Tầng' : '+ Thêm Sơ Đồ Tầng Mới'}
-            </h3>
-            <form onSubmit={handleSaveFloor} className="space-y-4 text-xs">
-              <div>
-                <label className="font-bold block mb-1">Số Tầng (Thứ tự) *</label>
-                <input
-                  type="number"
-                  min={1}
-                  required
-                  value={floorForm.floorNumber}
-                  onChange={(e) => setFloorForm({ ...floorForm, floorNumber: parseInt(e.target.value) || 1 })}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E0D7C9] bg-[#FAF7F2]"
-                />
-              </div>
-              <div>
-                <label className="font-bold block mb-1">Tên Tầng / Khu Vực *</label>
-                <input
-                  type="text"
-                  required
-                  value={floorForm.name}
-                  onChange={(e) => setFloorForm({ ...floorForm, name: e.target.value })}
-                  placeholder="VD: Tầng 1 - Sảnh Vòm & Bar"
-                  className="w-full px-3 py-2 rounded-xl border border-[#E0D7C9] bg-[#FAF7F2]"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold block mb-1">Chiều Rộng (px)</label>
-                  <input
-                    type="number"
-                    value={floorForm.widthPx}
-                    onChange={(e) => setFloorForm({ ...floorForm, widthPx: parseInt(e.target.value) || 1600 })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#E0D7C9] bg-[#FAF7F2]"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold block mb-1">Chiều Cao (px)</label>
-                  <input
-                    type="number"
-                    value={floorForm.heightPx}
-                    onChange={(e) => setFloorForm({ ...floorForm, heightPx: parseInt(e.target.value) || 900 })}
-                    className="w-full px-3 py-2 rounded-xl border border-[#E0D7C9] bg-[#FAF7F2]"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#EBE5DC]">
-                <button
-                  type="button"
-                  onClick={() => setIsFloorModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-[#78716C]"
-                >
-                  Hủy
-                </button>
-                <button type="submit" className="btn-tan px-5 py-2 font-bold cursor-pointer">
-                  Lưu Sơ Đồ
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* TIME SLOT MODAL */}
       {isSlotModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#EBE5DC] space-y-4">
             <h3 className="font-serif text-lg font-bold text-[#1C1917]">
-              {slotForm.id ? 'Sửa Khung Giờ Ca Trực' : '+ Thêm Khung Giờ Mới'}
+              {slotForm.id ? 'Sửa Khung Giờ Ca Trực' : '+ Thêm Khung Giờ Ca Mới'}
             </h3>
             <form onSubmit={handleSaveSlot} className="space-y-4 text-xs">
               <div>
-                <label className="font-bold block mb-1">Tên Khung Giờ *</label>
+                <label className="font-bold block mb-1">Tên Ca Trực *</label>
                 <input
                   type="text"
                   required
                   value={slotForm.slotName}
                   onChange={(e) => setSlotForm({ ...slotForm, slotName: e.target.value })}
-                  placeholder="VD: Ca tối Giờ Vàng (18:30 - 20:30)"
+                  placeholder="VD: Ca trưa Giờ Vàng (11:30 - 13:30)"
                   className="w-full px-3 py-2 rounded-xl border border-[#E0D7C9] bg-[#FAF7F2]"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold block mb-1">Giờ Bắt Đầu *</label>
+                  <label className="font-bold block mb-1">Giờ Bắt Đầu (HH:mm:ss) *</label>
                   <input
-                    type="time"
-                    step={1}
+                    type="text"
                     required
                     value={slotForm.startTime}
                     onChange={(e) => setSlotForm({ ...slotForm, startTime: e.target.value })}
@@ -1452,10 +1232,9 @@ export const RestaurantManagementPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="font-bold block mb-1">Giờ Kết Thúc *</label>
+                  <label className="font-bold block mb-1">Giờ Kết Thúc (HH:mm:ss) *</label>
                   <input
-                    type="time"
-                    step={1}
+                    type="text"
                     required
                     value={slotForm.endTime}
                     onChange={(e) => setSlotForm({ ...slotForm, endTime: e.target.value })}
@@ -1464,14 +1243,14 @@ export const RestaurantManagementPage: React.FC = () => {
                 </div>
               </div>
               <div>
-                <label className="font-bold block mb-1">Công Suất Tối Đa Ca (Khách) *</label>
+                <label className="font-bold block mb-1">Sức Chứa / Công Suất Tối Đa Của Ca (Khách) *</label>
                 <input
                   type="number"
                   min={1}
                   required
                   value={slotForm.maxCapacity}
                   onChange={(e) => setSlotForm({ ...slotForm, maxCapacity: parseInt(e.target.value) || 40 })}
-                  className="w-full px-3 py-2 rounded-xl border border-[#E0D7C9] bg-[#FAF7F2]"
+                  className="w-full px-3 py-2 rounded-xl border border-[#E0D7C9] bg-[#FAF7F2] font-mono"
                 />
               </div>
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#EBE5DC]">
@@ -1483,7 +1262,7 @@ export const RestaurantManagementPage: React.FC = () => {
                   Hủy
                 </button>
                 <button type="submit" className="btn-tan px-5 py-2 font-bold cursor-pointer">
-                  Lưu Khung Giờ
+                  Lưu Ca Trực
                 </button>
               </div>
             </form>
@@ -1491,7 +1270,7 @@ export const RestaurantManagementPage: React.FC = () => {
         </div>
       )}
 
-      {/* CATEGORY MODAL */}
+      {/* MENU CATEGORY MODAL */}
       {isCategoryModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-[#EBE5DC] space-y-4">

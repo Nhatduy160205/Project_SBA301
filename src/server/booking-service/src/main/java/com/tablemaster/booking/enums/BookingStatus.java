@@ -4,6 +4,7 @@ package com.tablemaster.booking.enums;
  * Vòng đời 9 trạng thái đơn đặt bàn (Booking State Machine)
  *
  * PENDING_REVIEW   → Khách vừa gửi đơn trên web, chờ Lễ tân gọi điện xác nhận
+ * EVENT_INQUIRY    → Đơn đặt tiệc đoàn đông / sự kiện bao trọn tầng (UC-10), chờ Quản lý ca gọi tư vấn trực tiếp trong 15 phút
  * AWAITING_PAYMENT → Lễ tân đã gọi chốt đơn, chờ khách chuyển khoản cọc VietQR
  * CONFIRMED        → Đã cọc thành công, ĐÃ GỬI VÉ QR EMAIL cho khách
  * SEATED           → Lễ tân quét QR check-in, khách đã vào bàn
@@ -15,6 +16,7 @@ package com.tablemaster.booking.enums;
  */
 public enum BookingStatus {
     PENDING_REVIEW,
+    EVENT_INQUIRY,
     AWAITING_PAYMENT,
     CONFIRMED,
     SEATED,

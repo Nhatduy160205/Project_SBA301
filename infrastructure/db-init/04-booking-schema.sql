@@ -21,11 +21,33 @@ CREATE TABLE bookings (
     guest_count INT NOT NULL CHECK (guest_count > 0),
     total_deposit DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
     status VARCHAR(30) NOT NULL DEFAULT 'PENDING_REVIEW',
+    -- UC-08: Nhu cầu đặc biệt & Dị ứng
+    occasion VARCHAR(50),
+    dietary_notes TEXT,
+    baby_chair_count INT NOT NULL DEFAULT 0,
+    candle_setup BOOLEAN NOT NULL DEFAULT FALSE,
     special_notes TEXT,
     staff_notes TEXT,
+    -- UC-10: Đặt tiệc đoàn đông / Sự kiện bao trọn tầng (Private Banquet Booking)
+    event_type VARCHAR(50),
+    target_floor INT,
+    company_name VARCHAR(150),
+    estimated_budget DECIMAL(14, 2),
+    stage_audio_required BOOLEAN NOT NULL DEFAULT FALSE,
+    decoration_required BOOLEAN NOT NULL DEFAULT FALSE,
+    callback_deadline TIMESTAMP WITH TIME ZONE,
+    manager_call_status VARCHAR(30) DEFAULT 'PENDING_CALL',
+    consultation_notes TEXT,
     reviewed_by_user_id UUID,
     payment_deadline TIMESTAMP WITH TIME ZONE,
     checkin_qr_token VARCHAR(255) UNIQUE,
+    -- UC-12: Vé điện tử E-Ticket & Dynamic QR Code 64 ký tự chống giả mạo
+    ticket_issued_at TIMESTAMP WITH TIME ZONE,
+    ticket_zns_status VARCHAR(30) DEFAULT 'PENDING',
+    ticket_email_status VARCHAR(30) DEFAULT 'PENDING',
+    qr_secret_salt VARCHAR(64),
+    qr_rotation_counter INT NOT NULL DEFAULT 1,
+    checkin_scanned_at TIMESTAMP WITH TIME ZONE,
     seated_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -90,6 +112,7 @@ CREATE INDEX idx_bookings_date_slot ON bookings(booking_date, time_slot_id, stat
 CREATE INDEX idx_bookings_user ON bookings(user_id, status);
 CREATE INDEX idx_bookings_qr_token ON bookings(checkin_qr_token) WHERE checkin_qr_token IS NOT NULL;
 CREATE INDEX idx_bookings_pending_deadline ON bookings(status, payment_deadline) WHERE status = 'AWAITING_PAYMENT';
+CREATE INDEX idx_bookings_event_inquiry ON bookings(status, callback_deadline) WHERE status = 'EVENT_INQUIRY';
 CREATE INDEX idx_table_order_items ON table_order_items(booking_id, table_id, status);
 CREATE INDEX idx_outbox_pending ON outbox_events(status, created_at) WHERE status = 'PENDING';
 
@@ -118,3 +141,35 @@ INSERT INTO bookings (
 
 INSERT INTO booking_tables (booking_id, table_id) VALUES
 ('c0000000-0000-0000-0000-000000000001', 'b3000000-0000-0000-0000-000000000004');
+
+-- Seed UC-10: Đơn Đặt Tiệc Sự Kiện Đoàn Đông / Bao Trọn Tầng (EVENT_INQUIRY)
+INSERT INTO bookings (
+    id, booking_code, user_id, guest_name, guest_phone, guest_email,
+    booking_date, time_slot_id, guest_count, total_deposit, status,
+    event_type, target_floor, company_name, estimated_budget,
+    stage_audio_required, decoration_required, callback_deadline, manager_call_status,
+    special_notes, staff_notes
+) VALUES (
+    'c0000000-0000-0000-0000-000000000010',
+    'EV2610260001',
+    'a0000000-0000-0000-0000-000000000005',
+    'Trần Hoàng Nam',
+    '0909888999',
+    'nam.tran@techcorp.vn',
+    '2026-11-20',
+    'b1000000-0000-0000-0000-000000000002',
+    50,
+    0.00,
+    'EVENT_INQUIRY',
+    'COMPANY_PARTY',
+    3,
+    'Tập đoàn Công nghệ TechCorp VN',
+    65000000.00,
+    TRUE,
+    TRUE,
+    NOW() + INTERVAL '15 minutes',
+    'PENDING_CALL',
+    'Tiệc Year End Party 50 khách bao trọn Tầng 3 Sky Lounge Rooftop. Cần âm thanh, 2 micro không dây, máy chiếu màn lớn và tháp rượu Champagne.',
+    'Chờ Quản lý ca gọi tư vấn trực tiếp trong 15 phút'
+);
+

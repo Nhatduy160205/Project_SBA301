@@ -1,7 +1,8 @@
 package com.tablemaster.restaurant.controller;
 
-import com.tablemaster.restaurant.dto.ApiResponse;
-import com.tablemaster.restaurant.dto.TableDto;
+import com.tablemaster.restaurant.dto.request.TableRequest;
+import com.tablemaster.restaurant.dto.response.ApiResponse;
+import com.tablemaster.restaurant.dto.response.TableResponse;
 import com.tablemaster.restaurant.service.TableService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,46 +21,40 @@ public class TableController {
     private final TableService tableService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<TableDto>>> getAllTables(
-            @RequestParam(value = "floorPlanId", required = false) UUID floorPlanId,
+    public ResponseEntity<ApiResponse<List<TableResponse>>> getAllTables(
+            @RequestParam(value = "zoneType", required = false) String zoneType,
             @RequestParam(value = "activeOnly", defaultValue = "false") boolean activeOnly) {
-        return ResponseEntity.ok(ApiResponse.success(tableService.getAllTables(floorPlanId, activeOnly)));
+        return ResponseEntity.ok(ApiResponse.success(tableService.getAllTables(zoneType, activeOnly)));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<TableDto>> getTableById(@PathVariable("id") UUID id) {
+    public ResponseEntity<ApiResponse<TableResponse>> getTableById(@PathVariable("id") UUID id) {
         return ResponseEntity.ok(ApiResponse.success(tableService.getTableById(id)));
     }
 
     @GetMapping("/code/{code}")
-    public ResponseEntity<ApiResponse<TableDto>> getTableByCode(@PathVariable("code") String code) {
+    public ResponseEntity<ApiResponse<TableResponse>> getTableByCode(@PathVariable("code") String code) {
         return ResponseEntity.ok(ApiResponse.success(tableService.getTableByCode(code)));
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<TableDto>> createTable(@Valid @RequestBody TableDto dto) {
-        TableDto created = tableService.createTable(dto);
+    public ResponseEntity<ApiResponse<TableResponse>> createTable(@Valid @RequestBody TableRequest request) {
+        TableResponse created = tableService.createTable(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Tạo bàn thành công", created));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<TableDto>> updateTable(
+    public ResponseEntity<ApiResponse<TableResponse>> updateTable(
             @PathVariable("id") UUID id,
-            @Valid @RequestBody TableDto dto) {
-        TableDto updated = tableService.updateTable(id, dto);
+            @Valid @RequestBody TableRequest request) {
+        TableResponse updated = tableService.updateTable(id, request);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật thông tin bàn thành công", updated));
     }
 
-    @PutMapping("/batch-positions")
-    public ResponseEntity<ApiResponse<List<TableDto>>> batchUpdatePositions(@RequestBody List<TableDto> tableDtos) {
-        List<TableDto> updated = tableService.batchUpdatePositions(tableDtos);
-        return ResponseEntity.ok(ApiResponse.success("Lưu tọa độ vị trí các bàn thành công", updated));
-    }
-
     @PatchMapping("/{id}/toggle")
-    public ResponseEntity<ApiResponse<TableDto>> toggleActive(@PathVariable("id") UUID id) {
-        TableDto updated = tableService.toggleActive(id);
+    public ResponseEntity<ApiResponse<TableResponse>> toggleActive(@PathVariable("id") UUID id) {
+        TableResponse updated = tableService.toggleActive(id);
         String msg = Boolean.TRUE.equals(updated.getIsActive()) ? "Kích hoạt bàn thành công" : "Ngừng hoạt động bàn thành công";
         return ResponseEntity.ok(ApiResponse.success(msg, updated));
     }
