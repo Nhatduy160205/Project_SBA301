@@ -190,6 +190,18 @@ class WebSocketFloorService {
     this.notifyListeners(update);
   }
 
+  public broadcastOneTouchTableStatus(update: TableStateUpdatePayload): void {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      try {
+        const sendFrame = `SEND\ndestination:/topic/tables/status\ncontent-type:application/json\n\n${JSON.stringify(update)}\0`;
+        this.socket.send(sendFrame);
+      } catch (err) {
+        console.warn('STOMP send error:', err);
+      }
+    }
+    this.notifyListeners(update);
+  }
+
   public simulateHostFloorBroadcast(payload: HostFloorLivePayload): void {
     this.notifyHostFloorListeners(payload);
   }

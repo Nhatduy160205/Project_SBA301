@@ -1,7 +1,8 @@
 package com.tablemaster.restaurant.controller;
 
-import com.tablemaster.restaurant.dto.ApiResponse;
-import com.tablemaster.restaurant.dto.MenuItemDto;
+import com.tablemaster.restaurant.dto.request.MenuItemRequest;
+import com.tablemaster.restaurant.dto.response.ApiResponse;
+import com.tablemaster.restaurant.dto.response.MenuItemResponse;
 import com.tablemaster.restaurant.service.MenuItemService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +21,7 @@ public class MenuItemController {
     private final MenuItemService itemService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<MenuItemDto>>> getAllMenuItems(
+    public ResponseEntity<ApiResponse<List<MenuItemResponse>>> getAllMenuItems(
             @RequestParam(value = "categoryId", required = false) UUID categoryId,
             @RequestParam(value = "activeOnly", required = false) Boolean activeOnly,
             @RequestParam(value = "preorderOnly", required = false) Boolean preorderOnly) {
@@ -28,28 +29,28 @@ public class MenuItemController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<MenuItemDto>> getMenuItemById(@PathVariable("id") UUID id) {
+    public ResponseEntity<ApiResponse<MenuItemResponse>> getMenuItemById(@PathVariable("id") UUID id) {
         return ResponseEntity.ok(ApiResponse.success(itemService.getMenuItemById(id)));
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<MenuItemDto>> createMenuItem(@Valid @RequestBody MenuItemDto dto) {
-        MenuItemDto created = itemService.createMenuItem(dto);
+    public ResponseEntity<ApiResponse<MenuItemResponse>> createMenuItem(@Valid @RequestBody MenuItemRequest request) {
+        MenuItemResponse created = itemService.createMenuItem(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Thêm món ăn thành công", created));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<MenuItemDto>> updateMenuItem(
+    public ResponseEntity<ApiResponse<MenuItemResponse>> updateMenuItem(
             @PathVariable("id") UUID id,
-            @Valid @RequestBody MenuItemDto dto) {
-        MenuItemDto updated = itemService.updateMenuItem(id, dto);
+            @Valid @RequestBody MenuItemRequest request) {
+        MenuItemResponse updated = itemService.updateMenuItem(id, request);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật món ăn thành công", updated));
     }
 
     @PatchMapping("/{id}/toggle")
-    public ResponseEntity<ApiResponse<MenuItemDto>> toggleActive(@PathVariable("id") UUID id) {
-        MenuItemDto updated = itemService.toggleActive(id);
+    public ResponseEntity<ApiResponse<MenuItemResponse>> toggleActive(@PathVariable("id") UUID id) {
+        MenuItemResponse updated = itemService.toggleActive(id);
         String msg = Boolean.TRUE.equals(updated.getIsActive()) ? "Kích hoạt món ăn thành công" : "Ngừng kích hoạt món ăn thành công";
         return ResponseEntity.ok(ApiResponse.success(msg, updated));
     }

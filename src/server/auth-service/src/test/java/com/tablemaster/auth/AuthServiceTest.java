@@ -4,6 +4,7 @@ import com.tablemaster.auth.dto.*;
 import com.tablemaster.auth.entity.RefreshToken;
 import com.tablemaster.auth.entity.User;
 import com.tablemaster.auth.entity.UserRole;
+import com.tablemaster.auth.entity.VipTier;
 import com.tablemaster.auth.repository.RefreshTokenRepository;
 import com.tablemaster.auth.repository.UserRepository;
 import com.tablemaster.auth.security.JwtTokenProvider;
@@ -351,5 +352,159 @@ class AuthServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.getUser().getEmail()).isEqualTo("admin@primebistro.vn");
         verify(userRepository, times(1)).findByEmail("admin@primebistro.vn");
+    }
+
+    @Test
+    @DisplayName("Scenario 19: VIP tier calculation across boundaries")
+    void testVipTierCalculations() {
+        assertThat(VipTier.fromPoints(null)).isEqualTo(VipTier.BRONZE);
+        assertThat(VipTier.fromPoints(0)).isEqualTo(VipTier.BRONZE);
+        assertThat(VipTier.fromPoints(499)).isEqualTo(VipTier.BRONZE);
+        assertThat(VipTier.BRONZE.getNextTierPoints(499)).isEqualTo(1);
+        assertThat(VipTier.BRONZE.getDepositDiscountPercent()).isEqualTo(0);
+
+        assertThat(VipTier.fromPoints(500)).isEqualTo(VipTier.SILVER);
+        assertThat(VipTier.fromPoints(999)).isEqualTo(VipTier.SILVER);
+        assertThat(VipTier.SILVER.getNextTierPoints(500)).isEqualTo(500);
+        assertThat(VipTier.SILVER.getDepositDiscountPercent()).isEqualTo(5);
+
+        assertThat(VipTier.fromPoints(1000)).isEqualTo(VipTier.GOLD);
+        assertThat(VipTier.fromPoints(2499)).isEqualTo(VipTier.GOLD);
+        assertThat(VipTier.GOLD.getNextTierPoints(1000)).isEqualTo(1500);
+        assertThat(VipTier.GOLD.getDepositDiscountPercent()).isEqualTo(10);
+
+        assertThat(VipTier.fromPoints(2500)).isEqualTo(VipTier.DIAMOND);
+        assertThat(VipTier.fromPoints(5000)).isEqualTo(VipTier.DIAMOND);
+        assertThat(VipTier.DIAMOND.getNextTierPoints(2500)).isEqualTo(0);
+        assertThat(VipTier.DIAMOND.getDepositDiscountPercent()).isEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("Scenario 20: getLoyaltyWallet returns correct wallet details and discount")
+    void testGetLoyaltyWallet() {
+        UUID userId = activeAdminUser.getId();
+        activeAdminUser.setLoyaltyPoints(1200);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(activeAdminUser));
+
+        LoyaltyWalletDto wallet = authService.getLoyaltyWallet(userId.toString());
+
+        assertThat(wallet).isNotNull();
+        assertThat(wallet.getUserId()).isEqualTo(userId);
+        assertThat(wallet.getLoyaltyPoints()).isEqualTo(1200);
+        assertThat(wallet.getVipTier()).isEqualTo(VipTier.GOLD);
+        assertThat(wallet.getVipTierName()).isEqualTo("Vàng");
+        assertThat(wallet.getDepositDiscountPercent()).isEqualTo(10);
+        assertThat(wallet.getPointsToNextTier()).isEqualTo(1300);
+    }
+
+    @Test
+    @DisplayName("Scenario 21: getLoyaltyWallet throws NOT_FOUND when user does not exist")
+    void testGetLoyaltyWalletUserNotFound() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.findById(userId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.getLoyaltyWallet(userId.toString()))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("Scenario 22: Awarding points (+600) upgrades tier from Bronze to Silver")
+    void testAdjustLoyaltyPointsUpgradeTier() {
+        UUID userId = activeAdminUser.getId();
+        activeAdminUser.setLoyaltyPoints(0);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(activeAdminUser));
+        when(userRepository.save(any(User.class))).thenReturn(activeAdminUser);
+
+        LoyaltyAdjustRequest request = LoyaltyAdjustRequest.builder()
+                .pointsDelta(600)
+                .reason("ORDER_EARNED")
+                .referenceId("BILL-001")
+                .build();
+
+        LoyaltyWalletDto wallet = authService.adjustLoyaltyPoints(userId.toString(), request);
+
+        assertThat(wallet).isNotNull();
+        assertThat(wallet.getLoyaltyPoints()).isEqualTo(600);
+        assertThat(wallet.getVipTier()).isEqualTo(VipTier.SILVER);
+        assertThat(wallet.getDepositDiscountPercent()).isEqualTo(5);
+        assertThat(wallet.getPointsToNextTier()).isEqualTo(400);
+        assertThat(activeAdminUser.getLoyaltyPoints()).isEqualTo(600);
+        verify(userRepository, times(1)).save(activeAdminUser);
+    }
+
+    @Test
+    @DisplayName("Scenario 23: Deducting points (-200) degrades tier if falling below threshold")
+    void testAdjustLoyaltyPointsDeduct() {
+        UUID userId = activeAdminUser.getId();
+        activeAdminUser.setLoyaltyPoints(600);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(activeAdminUser));
+        when(userRepository.save(any(User.class))).thenReturn(activeAdminUser);
+
+        LoyaltyAdjustRequest request = LoyaltyAdjustRequest.builder()
+                .pointsDelta(-200)
+                .reason("REDEEM_DISCOUNT")
+                .build();
+
+        LoyaltyWalletDto wallet = authService.adjustLoyaltyPoints(userId.toString(), request);
+
+        assertThat(wallet.getLoyaltyPoints()).isEqualTo(400);
+        assertThat(wallet.getVipTier()).isEqualTo(VipTier.BRONZE);
+        assertThat(wallet.getDepositDiscountPercent()).isEqualTo(0);
+        verify(userRepository, times(1)).save(activeAdminUser);
+    }
+
+    @Test
+    @DisplayName("Scenario 24: Deducting more than current balance throws BAD_REQUEST and does not save")
+    void testAdjustLoyaltyPointsInsufficientBalance() {
+        UUID userId = activeAdminUser.getId();
+        activeAdminUser.setLoyaltyPoints(100);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(activeAdminUser));
+
+        LoyaltyAdjustRequest request = LoyaltyAdjustRequest.builder()
+                .pointsDelta(-150)
+                .reason("REDEEM_DISCOUNT")
+                .build();
+
+        assertThatThrownBy(() -> authService.adjustLoyaltyPoints(userId.toString(), request))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("Scenario 25: Zero points delta is rejected with BAD_REQUEST")
+    void testAdjustLoyaltyPointsZeroDelta() {
+        LoyaltyAdjustRequest request = LoyaltyAdjustRequest.builder().pointsDelta(0).build();
+
+        assertThatThrownBy(() -> authService.adjustLoyaltyPoints(activeAdminUser.getId().toString(), request))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    @DisplayName("Scenario 26: Adjusting points on disabled account throws FORBIDDEN")
+    void testAdjustLoyaltyPointsDisabledAccount() {
+        UUID userId = inactiveUser.getId();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(inactiveUser));
+
+        LoyaltyAdjustRequest request = LoyaltyAdjustRequest.builder().pointsDelta(50).build();
+
+        assertThatThrownBy(() -> authService.adjustLoyaltyPoints(userId.toString(), request))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+
+        verify(userRepository, never()).save(any(User.class));
     }
 }
