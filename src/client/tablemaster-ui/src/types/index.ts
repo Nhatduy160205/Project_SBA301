@@ -321,3 +321,72 @@ export interface HostFloorLivePayload {
 }
 
 
+// ==========================================
+// UC-15: Sơ Đồ Sàn Live Đa Tầng Trên Tablet (Host Floor Live View)
+// ==========================================
+
+export interface HostFloorSummary {
+  floorNumber: number;
+  floorName: string;
+  description: string;
+  viewTag: string;
+  totalTables: number;
+  availableTables: number;
+  seatedTables: number;
+  reservedTables: number;
+  cleaningTables: number;
+  totalCapacity: number;
+  occupancyRatePercent: number;
+  floorEstimatedRevenue: number;
+}
+
+export interface HostTableLiveItem {
+  tableId: string;
+  tableCode: string;
+  floorNumber: number;
+  floorName: string;
+  capacity: number;
+  shape: 'rect' | 'circle';
+  status: TableStatus;
+  zoneType: string;
+  posX: number;
+  posY: number;
+  width: number;
+  height: number;
+  bookingId?: string;
+  bookingCode?: string;
+  currentGuestName?: string;
+  guestPhone?: string;
+  bookingTime?: string;
+  depositAmount?: number;
+  isConfirmed?: boolean;
+  seatedAt?: string;
+  seatedMinutes?: number;
+  seatedDurationFormatted?: string;
+  diningAlertLevel: 'NORMAL' | 'LONG_DINING' | 'OVERSTAY';
+  isLateNoShow?: boolean;
+  occasion?: string;
+  dietaryNotes?: string;
+  babyChairCount?: number;
+  candleSetup?: boolean;
+  specialNotes?: string;
+  preorderCount?: number;
+  preorderTotalAmount?: number;
+}
+
+export interface HostFloorLivePayload {
+  floors: HostFloorSummary[];
+  tables: HostTableLiveItem[];
+  syncTimestamp: string;
+  totalTables: number;
+  availableTables: number;
+  seatedTables: number;
+  reservedTables: number;
+  cleaningTables: number;
+  activeGuestsCount: number;
+  totalDepositHeld: number;
+  latencyMs?: number;
+}
+
+
+
