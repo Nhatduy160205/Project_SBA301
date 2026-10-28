@@ -339,19 +339,33 @@ export const bookingApi = {
     if (status) params.append('status', status);
 
     const url = params.toString() ? `${BASE_URL}?${params.toString()}` : BASE_URL;
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: `Lỗi ${res.status}` }));
-      throw new Error(err.message || 'Không thể tải danh sách đơn đặt bàn');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: `Lỗi ${res.status}` }));
+        console.warn('⚠️ [bookingApi] Backend offline hoặc chưa sẵn sàng:', err.message);
+        return {
+          success: false,
+          message: err.message || 'Backend offline',
+          data: [],
+        };
+      }
+
+      return await res.json();
+    } catch (e: any) {
+      console.warn('⚠️ [bookingApi] Không thể kết nối tới booking-service (8083), chuyển sang dữ liệu mẫu cục bộ:', e?.message || e);
+      return {
+        success: false,
+        message: 'Backend offline',
+        data: [],
+      };
     }
-
-    return res.json();
   },
 
   /**
@@ -359,9 +373,17 @@ export const bookingApi = {
    * GET /api/v1/bookings/{id}
    */
   async getBookingById(id: string): Promise<ApiResponse<BackendBooking>> {
-    const res = await fetch(`${BASE_URL}/${id}`);
-    if (!res.ok) throw new Error('Không tìm thấy đơn đặt bàn');
-    return res.json();
+    try {
+      const res = await fetch(`${BASE_URL}/${id}`);
+      if (!res.ok) throw new Error('Không tìm thấy đơn đặt bàn');
+      return await res.json();
+    } catch (e: any) {
+      return {
+        success: false,
+        message: e?.message || 'Không tìm thấy đơn đặt bàn',
+        data: null as any,
+      };
+    }
   },
 
   /**
@@ -370,20 +392,33 @@ export const bookingApi = {
    */
   async getMyBookings(userId?: string): Promise<ApiResponse<BackendBooking[]>> {
     const targetUserId = userId || SEED_DATA.USER_ID;
-    const res = await fetch(`${BASE_URL}/my-bookings`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-User-Id': targetUserId,
-      },
-    });
+    try {
+      const res = await fetch(`${BASE_URL}/my-bookings`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-Id': targetUserId,
+        },
+      });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ message: `Lỗi ${res.status}` }));
-      throw new Error(err.message || 'Không thể tải lịch sử đơn đặt bàn');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: `Lỗi ${res.status}` }));
+        return {
+          success: false,
+          message: err.message || 'Không thể tải lịch sử đơn đặt bàn',
+          data: [],
+        };
+      }
+
+      return await res.json();
+    } catch (e: any) {
+      console.warn('⚠️ [bookingApi] Không thể kết nối backend /my-bookings:', e?.message || e);
+      return {
+        success: false,
+        message: 'Backend offline',
+        data: [],
+      };
     }
-
-    return res.json();
   },
 
   /**
