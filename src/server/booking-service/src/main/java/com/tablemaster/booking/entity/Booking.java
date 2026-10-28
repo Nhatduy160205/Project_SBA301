@@ -89,6 +89,40 @@ public class Booking {
     @Builder.Default
     private Boolean candleSetup = false;
 
+    // UC-10: Đặt tiệc đoàn đông / Sự kiện bao trọn tầng (Private Banquet & Event Inquiry)
+    @Column(name = "event_type", length = 50)
+    private String eventType; // ROOFTOP_BUYOUT, COMPANY_PARTY, BIRTHDAY_GALA, WORKSHOP, WEDDING_BANQUET, OTHER
+
+    @Column(name = "target_floor")
+    private Integer targetFloor; // 1: Grand Bistro, 2: VIP Salon, 3: Sky Lounge Rooftop
+
+    @Column(name = "company_name", length = 150)
+    private String companyName;
+
+    @Column(name = "estimated_budget", precision = 14, scale = 2)
+    private BigDecimal estimatedBudget;
+
+    @Column(name = "stage_audio_required", nullable = false)
+    @Builder.Default
+    private Boolean stageAudioRequired = false;
+
+    @Column(name = "decoration_required", nullable = false)
+    @Builder.Default
+    private Boolean decorationRequired = false;
+
+    // Hạn chót gọi tư vấn 15 phút (15-Minute Callback SLA)
+    @Column(name = "callback_deadline")
+    private ZonedDateTime callbackDeadline;
+
+    // Trạng thái cuộc gọi của Quản lý ca (PENDING_CALL, CALLED, PROPOSAL_SENT, ACCEPTED, REJECTED)
+    @Column(name = "manager_call_status", length = 30)
+    @Builder.Default
+    private String managerCallStatus = "PENDING_CALL";
+
+    // Ghi chú tư vấn của Quản lý ca sau cuộc gọi
+    @Column(name = "consultation_notes", columnDefinition = "TEXT")
+    private String consultationNotes;
+
     // Ghi chú của khách: "Set nến kỷ niệm ngày cưới"
     @Column(name = "special_notes", columnDefinition = "TEXT")
     private String specialNotes;
@@ -108,6 +142,28 @@ public class Booking {
     // Mã Token sinh mã QR gửi qua Email (Check-in tại sảnh)
     @Column(name = "checkin_qr_token", unique = true, length = 255)
     private String checkinQrToken;
+
+    // UC-12: Vé điện tử E-Ticket & Dynamic QR Code 64 ký tự chống giả mạo
+    @Column(name = "ticket_issued_at")
+    private ZonedDateTime ticketIssuedAt;
+
+    @Column(name = "ticket_zns_status", length = 30)
+    @Builder.Default
+    private String ticketZnsStatus = "PENDING";
+
+    @Column(name = "ticket_email_status", length = 30)
+    @Builder.Default
+    private String ticketEmailStatus = "PENDING";
+
+    @Column(name = "qr_secret_salt", length = 64)
+    private String qrSecretSalt;
+
+    @Column(name = "qr_rotation_counter")
+    @Builder.Default
+    private Integer qrRotationCounter = 1;
+
+    @Column(name = "checkin_scanned_at")
+    private ZonedDateTime checkinScannedAt;
 
     @Column(name = "seated_at")
     private ZonedDateTime seatedAt;

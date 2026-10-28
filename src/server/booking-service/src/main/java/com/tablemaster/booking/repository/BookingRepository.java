@@ -23,6 +23,9 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
     // Tìm danh sách đơn theo userId (lịch sử đặt bàn của khách)
     List<Booking> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
+    // Tìm danh sách đơn theo ngày
+    List<Booking> findByBookingDate(LocalDate bookingDate);
+
     // Tìm danh sách đơn theo trạng thái (cho Lễ tân xem đơn cần xử lý)
     List<Booking> findByStatusOrderByCreatedAtDesc(BookingStatus status);
 
