@@ -586,20 +586,21 @@ export const BookingPage: React.FC<BookingPageProps> = ({
                       })}
                     </div>
 
-                    {partySize >= 12 && onOpenBanquetModal && (
-                      <div className="p-3 bg-amber-500/10 border border-amber-400/40 rounded-xl flex items-center justify-between text-xs text-amber-950 mt-2">
-                        <div className="flex items-center gap-2">
-                          <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
-                          <span>
-                            Đoàn từ <strong>15 - 100 khách</strong> hoặc muốn <strong>bao trọn tầng Rooftop</strong>?
-                          </span>
+                    {onOpenBanquetModal && (
+                      <div className="p-3 bg-[#FAF4EB] border border-[#C4A480]/60 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                        <div className="flex items-center gap-2 text-[#2C221E]">
+                          <span className="text-lg">🏛️</span>
+                          <div>
+                            <span className="font-bold text-[#8C6A43] block">Đặt Tiệc Trọn Gói & Sự Kiện Riêng Tư (Banquet)?</span>
+                            <span className="text-[11px] text-[#78716C]">Dành cho đoàn từ 10 - 60 khách hoặc bao trọn sảnh/tầng VIP.</span>
+                          </div>
                         </div>
                         <button
                           type="button"
                           onClick={onOpenBanquetModal}
-                          className="underline font-bold text-amber-800 hover:text-amber-950 ml-2 whitespace-nowrap cursor-pointer"
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#C4A480] to-[#B3936F] hover:brightness-105 text-white font-bold text-[11px] shadow-2xs shrink-0 cursor-pointer transition-all text-center"
                         >
-                          Đăng ký Private Banquet &rarr;
+                          Tư Vấn Tiệc VIP
                         </button>
                       </div>
                     )}
