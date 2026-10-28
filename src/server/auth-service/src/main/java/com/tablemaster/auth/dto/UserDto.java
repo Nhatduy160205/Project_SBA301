@@ -1,6 +1,7 @@
 package com.tablemaster.auth.dto;
 
 import com.tablemaster.auth.entity.UserRole;
+import com.tablemaster.auth.entity.VipTier;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -21,6 +22,10 @@ public class UserDto {
     private UserRole role;
     private Boolean isActive;
     private Integer loyaltyPoints;
+    private VipTier vipTier;
+    private String vipTierName;
     private String avatarUrl;
     private String dietaryPreferences;
+    private Boolean hasPassword;
+    private String createdAt;
 }
