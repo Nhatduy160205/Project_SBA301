@@ -1,7 +1,8 @@
 package com.tablemaster.restaurant.controller;
 
-import com.tablemaster.restaurant.dto.ApiResponse;
-import com.tablemaster.restaurant.dto.MenuCategoryDto;
+import com.tablemaster.restaurant.dto.request.MenuCategoryRequest;
+import com.tablemaster.restaurant.dto.response.ApiResponse;
+import com.tablemaster.restaurant.dto.response.MenuCategoryResponse;
 import com.tablemaster.restaurant.service.MenuCategoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,37 +21,37 @@ public class MenuCategoryController {
     private final MenuCategoryService categoryService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<MenuCategoryDto>>> getAllCategories(
+    public ResponseEntity<ApiResponse<List<MenuCategoryResponse>>> getAllCategories(
             @RequestParam(value = "activeOnly", defaultValue = "false") boolean activeOnly,
             @RequestParam(value = "includeItems", defaultValue = "false") boolean includeItems) {
         return ResponseEntity.ok(ApiResponse.success(categoryService.getAllCategories(activeOnly, includeItems)));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<MenuCategoryDto>> getCategoryById(
+    public ResponseEntity<ApiResponse<MenuCategoryResponse>> getCategoryById(
             @PathVariable("id") UUID id,
             @RequestParam(value = "includeItems", defaultValue = "true") boolean includeItems) {
         return ResponseEntity.ok(ApiResponse.success(categoryService.getCategoryById(id, includeItems)));
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<MenuCategoryDto>> createCategory(@Valid @RequestBody MenuCategoryDto dto) {
-        MenuCategoryDto created = categoryService.createCategory(dto);
+    public ResponseEntity<ApiResponse<MenuCategoryResponse>> createCategory(@Valid @RequestBody MenuCategoryRequest request) {
+        MenuCategoryResponse created = categoryService.createCategory(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Tạo danh mục món ăn thành công", created));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<MenuCategoryDto>> updateCategory(
+    public ResponseEntity<ApiResponse<MenuCategoryResponse>> updateCategory(
             @PathVariable("id") UUID id,
-            @Valid @RequestBody MenuCategoryDto dto) {
-        MenuCategoryDto updated = categoryService.updateCategory(id, dto);
+            @Valid @RequestBody MenuCategoryRequest request) {
+        MenuCategoryResponse updated = categoryService.updateCategory(id, request);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật danh mục thành công", updated));
     }
 
     @PatchMapping("/{id}/toggle")
-    public ResponseEntity<ApiResponse<MenuCategoryDto>> toggleActive(@PathVariable("id") UUID id) {
-        MenuCategoryDto updated = categoryService.toggleActive(id);
+    public ResponseEntity<ApiResponse<MenuCategoryResponse>> toggleActive(@PathVariable("id") UUID id) {
+        MenuCategoryResponse updated = categoryService.toggleActive(id);
         String msg = Boolean.TRUE.equals(updated.getIsActive()) ? "Kích hoạt danh mục thành công" : "Ngừng kích hoạt danh mục thành công";
         return ResponseEntity.ok(ApiResponse.success(msg, updated));
     }

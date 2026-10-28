@@ -89,6 +89,10 @@ public class BookingEventProducer {
     public void publishBookingSeated(Booking booking) {
         Map<String, Object> payload = createBookingPayload(booking);
         publishEvent(KafkaConfig.TOPIC_BOOKING_SEATED, "BOOKING", booking.getId(), "BOOKING_SEATED", payload);
+        broadcastWebSocket("/topic/host/checkin", payload);
+        broadcastWebSocket("/topic/tables/status", payload);
+        broadcastWebSocket("/topic/host/floors-live", payload);
+        broadcastWebSocket("/topic/bookings", payload);
     }
 
     public void publishBookingCompleted(Booking booking) {
@@ -137,6 +141,86 @@ public class BookingEventProducer {
         broadcastWebSocket("/topic/bookings", payload);
     }
 
+    // UC-12: Cấp phát vé điện tử kèm mã QR động 64 ký tự chống giả mạo
+    public void publishTicketIssued(Booking booking) {
+        Map<String, Object> payload = createBookingPayload(booking);
+        publishEvent(KafkaConfig.TOPIC_TICKET_ISSUED, "BOOKING_EVENT", booking.getId(), "TICKET_ISSUED", payload);
+
+        broadcastWebSocket("/topic/bookings", payload);
+        broadcastWebSocket("/topic/host/checkin", payload);
+    }
+
+    // UC-12: Gửi thông báo vé điện tử qua Zalo Notification Service (ZNS)
+    public void publishZnsSent(Booking booking, String recipientPhone) {
+        Map<String, Object> payload = createBookingPayload(booking);
+        payload.put("notificationChannel", "ZNS");
+        payload.put("recipientPhone", recipientPhone);
+        payload.put("znsTemplateId", "ZNS_ETICKET_CHECKIN_CONFIRMATION");
+        publishEvent(KafkaConfig.TOPIC_NOTIFICATION_ZNS_SENT, "NOTIFICATION_EVENT", booking.getId(), "ZNS_SENT", payload);
+    }
+
+    // UC-12: Gửi thông báo vé điện tử qua Email
+    public void publishEmailSent(Booking booking, String recipientEmail) {
+        Map<String, Object> payload = createBookingPayload(booking);
+        payload.put("notificationChannel", "EMAIL");
+        payload.put("recipientEmail", recipientEmail);
+        publishEvent(KafkaConfig.TOPIC_NOTIFICATION_EMAIL_SENT, "NOTIFICATION_EVENT", booking.getId(), "EMAIL_SENT", payload);
+    }
+
+    // UC-15: Đồng bộ dữ liệu Live Sàn đa tầng tới Tablet Lễ tân qua WebSocket STOMP (<300ms)
+    public void publishHostFloorLiveUpdate(Object payload) {
+        broadcastWebSocket("/topic/host/floors-live", payload);
+    }
+
+    // UC-17: Đổi trạng thái bàn 1 chạm trên Tablet (One-touch Table Status)
+    // SEATED -> CALL_BILL -> CLEANING -> AVAILABLE, đồng bộ tức thì Lễ tân, Thu ngân, Phục vụ (<300ms)
+    public void publishOneTouchTableStatusChanged(String tableCode, String status, String updatedBy, String guestName, String notes) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("tableCode", tableCode);
+        payload.put("status", status);
+        payload.put("color", getTableStatusColor(status));
+        payload.put("updatedBy", updatedBy != null ? updatedBy : "STAFF");
+        payload.put("guestName", guestName);
+        payload.put("notes", notes);
+        payload.put("timestamp", ZonedDateTime.now().toString());
+
+        log.info("📡 [UC-17 STOMP] Broadcast One-Touch Table Status: table={}, status={}, by={}", tableCode, status, updatedBy);
+
+        // Kênh phát sóng chung cho sơ đồ sàn và Tablet tiếp tân
+        broadcastWebSocket("/topic/tables/status", payload);
+        broadcastWebSocket("/topic/host/floors-live", payload);
+
+        // Kênh thông báo chuyên biệt theo vai trò vận hành:
+        if ("CALL_BILL".equalsIgnoreCase(status)) {
+            // Đồng bộ Thu ngân (Cashier): Yêu cầu in hóa đơn / thanh toán VietQR
+            broadcastWebSocket("/topic/pos/tables", payload);
+            broadcastWebSocket("/topic/cashier/alerts", payload);
+        } else if ("CLEANING".equalsIgnoreCase(status)) {
+            // Đồng bộ Phục vụ & Tạp vụ (Waitstaff/Bussing): Yêu cầu dọn dẹp vệ sinh bàn
+            broadcastWebSocket("/topic/waiter/tasks", payload);
+            broadcastWebSocket("/topic/bussing/alerts", payload);
+        } else if ("AVAILABLE".equalsIgnoreCase(status)) {
+            // Đồng bộ Lễ tân (Hostess): Bàn đã sạch tinh tươm, sẵn sàng đón lượt khách mới
+            broadcastWebSocket("/topic/host/available-tables", payload);
+        } else if ("SEATED".equalsIgnoreCase(status)) {
+            // Khách vào bàn: Báo KDS và phục vụ
+            broadcastWebSocket("/topic/kitchen/kds", payload);
+        }
+    }
+
+    private String getTableStatusColor(String status) {
+        if (status == null) return "#64748B";
+        switch (status.toUpperCase()) {
+            case "SEATED": return "#2563EB";   // Xanh dương (Royal Blue)
+            case "CALL_BILL": return "#9333EA"; // Tím (Violet/Purple)
+            case "CLEANING": return "#0D9488";  // Xanh mòng két (Teal)
+            case "AVAILABLE": return "#059669"; // Xanh lá cây (Emerald)
+            case "CONFIRMED": return "#4F46E5"; // Chàm (Indigo)
+            case "HOLDING": return "#D97706";   // Vàng hổ phách (Amber)
+            default: return "#64748B";
+        }
+    }
+
     private Map<String, Object> createBookingPayload(Booking booking) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("bookingId", booking.getId());
@@ -168,6 +252,12 @@ public class BookingEventProducer {
         payload.put("callbackDeadline", booking.getCallbackDeadline());
         payload.put("managerCallStatus", booking.getManagerCallStatus());
         payload.put("consultationNotes", booking.getConsultationNotes());
+        // UC-12: E-Ticket & Dynamic QR 64 ký tự
+        payload.put("ticketIssuedAt", booking.getTicketIssuedAt());
+        payload.put("ticketZnsStatus", booking.getTicketZnsStatus());
+        payload.put("ticketEmailStatus", booking.getTicketEmailStatus());
+        payload.put("qrRotationCounter", booking.getQrRotationCounter() != null ? booking.getQrRotationCounter() : 1);
+        payload.put("checkinScannedAt", booking.getCheckinScannedAt());
 
         if (booking.getBookingTables() != null && !booking.getBookingTables().isEmpty()) {
             List<String> tableIds = booking.getBookingTables().stream()

@@ -217,4 +217,108 @@ public class BookingController {
         BookingResponse response = bookingService.updateEventConsultation(id, request, managerUserId);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật kết quả tư vấn sự kiện thành công", response));
     }
+
+    // =========================================================================
+    // UC-12: Nhận Vé điện tử QR Check-in (E-Ticket with Dynamic QR Code)
+    // =========================================================================
+
+    /**
+     * GET /api/v1/bookings/{id}/ticket
+     * Nhận vé điện tử chi tiết kèm mã QR động 64 ký tự chống giả mạo
+     */
+    @GetMapping("/{id}/ticket")
+    public ResponseEntity<ApiResponse<com.tablemaster.booking.dto.response.ETicketResponse>> getETicket(
+            @PathVariable String id) {
+        com.tablemaster.booking.dto.response.ETicketResponse ticket = bookingService.getETicket(id);
+        return ResponseEntity.ok(ApiResponse.success("Lấy thông tin vé điện tử thành công", ticket));
+    }
+
+    /**
+     * GET /api/v1/bookings/ticket/code/{bookingCode}
+     * Nhận vé điện tử qua đường dẫn liên kết từ tin nhắn ZNS hoặc Email
+     */
+    @GetMapping("/ticket/code/{bookingCode}")
+    public ResponseEntity<ApiResponse<com.tablemaster.booking.dto.response.ETicketResponse>> getETicketByCode(
+            @PathVariable String bookingCode) {
+        com.tablemaster.booking.dto.response.ETicketResponse ticket = bookingService.getETicket(bookingCode);
+        return ResponseEntity.ok(ApiResponse.success("Lấy thông tin vé điện tử thành công", ticket));
+    }
+
+    /**
+     * POST /api/v1/bookings/{id}/ticket/refresh-qr
+     * Làm mới mã QR động bảo mật (Dynamic Rotating QR Code)
+     */
+    @PostMapping("/{id}/ticket/refresh-qr")
+    public ResponseEntity<ApiResponse<com.tablemaster.booking.dto.response.ETicketResponse>> refreshDynamicQr(
+            @PathVariable String id) {
+        com.tablemaster.booking.dto.response.ETicketResponse ticket = bookingService.refreshDynamicQrToken(id);
+        return ResponseEntity.ok(ApiResponse.success("Làm mới mã QR động 64 ký tự thành công", ticket));
+    }
+
+    /**
+     * POST /api/v1/bookings/ticket/verify-and-checkin
+     * Quét camera / máy đọc mã QR tại cửa sảnh để xác thực và nhận bàn ngay lập tức
+     */
+    @PostMapping("/ticket/verify-and-checkin")
+    public ResponseEntity<ApiResponse<com.tablemaster.booking.dto.response.ETicketResponse>> verifyAndCheckIn(
+            @Valid @RequestBody com.tablemaster.booking.dto.request.VerifyTicketRequest request) {
+        com.tablemaster.booking.dto.response.ETicketResponse ticket = bookingService.verifyAndCheckIn(request);
+        return ResponseEntity.ok(ApiResponse.success("Xác thực vé điện tử thành công! Chào mừng quý khách.", ticket));
+    }
+
+    /**
+     * POST /api/v1/bookings/{id}/ticket/send-notification
+     * Kích hoạt gửi hoặc gửi lại vé điện tử qua tin nhắn ZNS hoặc Email
+     */
+    @PostMapping("/{id}/ticket/send-notification")
+    public ResponseEntity<ApiResponse<com.tablemaster.booking.dto.response.ETicketResponse>> sendTicketNotification(
+            @PathVariable String id,
+            @Valid @RequestBody com.tablemaster.booking.dto.request.SendTicketNotificationRequest request) {
+        com.tablemaster.booking.dto.response.ETicketResponse ticket = bookingService.sendTicketNotification(id, request);
+        return ResponseEntity.ok(ApiResponse.success("Đã gửi vé điện tử qua kênh " + request.getChannel(), ticket));
+    }
+
+    // =========================================================================
+    // UC-15: Xem Sơ đồ Sàn Live Đa tầng trên Tablet (Host Floor Live View)
+    // =========================================================================
+
+    /**
+     * GET /api/v1/bookings/host/floors-live
+     * Lấy dữ liệu Sơ đồ sàn Live đa tầng thời gian thực cho Tablet Lễ tân (<300ms)
+     */
+    @GetMapping("/host/floors-live")
+    public ResponseEntity<ApiResponse<com.tablemaster.booking.dto.response.HostFloorLiveResponse>> getHostFloorsLive(
+            @RequestParam(required = false) Integer floor) {
+        com.tablemaster.booking.dto.response.HostFloorLiveResponse response = bookingService.getHostFloorsLive(floor);
+        return ResponseEntity.ok(ApiResponse.success("Lấy sơ đồ sàn Live thành công", response));
+    }
+
+    // =========================================================================
+    // UC-17: Đổi trạng thái bàn 1 chạm trên Tablet (One-touch Table Status)
+    // =========================================================================
+
+    /**
+     * PATCH /api/v1/bookings/tables/{tableCode}/one-touch-status
+     * Chuyển nhanh chu trình: SEATED -> CALL_BILL -> CLEANING -> AVAILABLE (<300ms)
+     */
+    @PatchMapping("/tables/{tableCode}/one-touch-status")
+    public ResponseEntity<ApiResponse<com.tablemaster.booking.dto.response.OneTouchTableStatusResponse>> updateOneTouchTableStatusPatch(
+            @PathVariable String tableCode,
+            @Valid @RequestBody com.tablemaster.booking.dto.request.OneTouchTableStatusRequest request) {
+        com.tablemaster.booking.dto.response.OneTouchTableStatusResponse response = bookingService.updateOneTouchTableStatus(tableCode, request);
+        return ResponseEntity.ok(ApiResponse.success("Đổi trạng thái bàn 1 chạm thành công", response));
+    }
+
+    /**
+     * POST /api/v1/bookings/tables/{tableCode}/one-touch-status
+     * Hỗ trợ gọi POST cho các thiết bị Tablet và POS cũ
+     */
+    @PostMapping("/tables/{tableCode}/one-touch-status")
+    public ResponseEntity<ApiResponse<com.tablemaster.booking.dto.response.OneTouchTableStatusResponse>> updateOneTouchTableStatusPost(
+            @PathVariable String tableCode,
+            @Valid @RequestBody com.tablemaster.booking.dto.request.OneTouchTableStatusRequest request) {
+        com.tablemaster.booking.dto.response.OneTouchTableStatusResponse response = bookingService.updateOneTouchTableStatus(tableCode, request);
+        return ResponseEntity.ok(ApiResponse.success("Đổi trạng thái bàn 1 chạm thành công", response));
+    }
 }
+

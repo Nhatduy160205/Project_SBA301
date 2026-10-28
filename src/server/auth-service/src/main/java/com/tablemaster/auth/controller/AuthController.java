@@ -65,4 +65,26 @@ public class AuthController {
         UserDto updatedUser = authService.updateCurrentUser(userIdStr, request);
         return ResponseEntity.ok(updatedUser);
     }
+
+    @GetMapping("/loyalty")
+    public ResponseEntity<LoyaltyWalletDto> getLoyaltyWallet() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getPrincipal() == null) {
+            return ResponseEntity.status(401).build();
+        }
+        String userIdStr = authentication.getPrincipal().toString();
+        LoyaltyWalletDto wallet = authService.getLoyaltyWallet(userIdStr);
+        return ResponseEntity.ok(wallet);
+    }
+
+    @PostMapping("/loyalty/adjust")
+    public ResponseEntity<LoyaltyWalletDto> adjustLoyaltyPoints(@Valid @RequestBody LoyaltyAdjustRequest request) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getPrincipal() == null) {
+            return ResponseEntity.status(401).build();
+        }
+        String userIdStr = authentication.getPrincipal().toString();
+        LoyaltyWalletDto wallet = authService.adjustLoyaltyPoints(userIdStr, request);
+        return ResponseEntity.ok(wallet);
+    }
 }

@@ -41,6 +41,13 @@ CREATE TABLE bookings (
     reviewed_by_user_id UUID,
     payment_deadline TIMESTAMP WITH TIME ZONE,
     checkin_qr_token VARCHAR(255) UNIQUE,
+    -- UC-12: Vé điện tử E-Ticket & Dynamic QR Code 64 ký tự chống giả mạo
+    ticket_issued_at TIMESTAMP WITH TIME ZONE,
+    ticket_zns_status VARCHAR(30) DEFAULT 'PENDING',
+    ticket_email_status VARCHAR(30) DEFAULT 'PENDING',
+    qr_secret_salt VARCHAR(64),
+    qr_rotation_counter INT NOT NULL DEFAULT 1,
+    checkin_scanned_at TIMESTAMP WITH TIME ZONE,
     seated_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
