@@ -277,4 +277,48 @@ public class BookingController {
         com.tablemaster.booking.dto.response.ETicketResponse ticket = bookingService.sendTicketNotification(id, request);
         return ResponseEntity.ok(ApiResponse.success("Đã gửi vé điện tử qua kênh " + request.getChannel(), ticket));
     }
+
+    // =========================================================================
+    // UC-15: Xem Sơ đồ Sàn Live Đa tầng trên Tablet (Host Floor Live View)
+    // =========================================================================
+
+    /**
+     * GET /api/v1/bookings/host/floors-live
+     * Lấy dữ liệu Sơ đồ sàn Live đa tầng thời gian thực cho Tablet Lễ tân (<300ms)
+     */
+    @GetMapping("/host/floors-live")
+    public ResponseEntity<ApiResponse<com.tablemaster.booking.dto.response.HostFloorLiveResponse>> getHostFloorsLive(
+            @RequestParam(required = false) Integer floor) {
+        com.tablemaster.booking.dto.response.HostFloorLiveResponse response = bookingService.getHostFloorsLive(floor);
+        return ResponseEntity.ok(ApiResponse.success("Lấy sơ đồ sàn Live thành công", response));
+    }
+
+    // =========================================================================
+    // UC-17: Đổi trạng thái bàn 1 chạm trên Tablet (One-touch Table Status)
+    // =========================================================================
+
+    /**
+     * PATCH /api/v1/bookings/tables/{tableCode}/one-touch-status
+     * Chuyển nhanh chu trình: SEATED -> CALL_BILL -> CLEANING -> AVAILABLE (<300ms)
+     */
+    @PatchMapping("/tables/{tableCode}/one-touch-status")
+    public ResponseEntity<ApiResponse<com.tablemaster.booking.dto.response.OneTouchTableStatusResponse>> updateOneTouchTableStatusPatch(
+            @PathVariable String tableCode,
+            @Valid @RequestBody com.tablemaster.booking.dto.request.OneTouchTableStatusRequest request) {
+        com.tablemaster.booking.dto.response.OneTouchTableStatusResponse response = bookingService.updateOneTouchTableStatus(tableCode, request);
+        return ResponseEntity.ok(ApiResponse.success("Đổi trạng thái bàn 1 chạm thành công", response));
+    }
+
+    /**
+     * POST /api/v1/bookings/tables/{tableCode}/one-touch-status
+     * Hỗ trợ gọi POST cho các thiết bị Tablet và POS cũ
+     */
+    @PostMapping("/tables/{tableCode}/one-touch-status")
+    public ResponseEntity<ApiResponse<com.tablemaster.booking.dto.response.OneTouchTableStatusResponse>> updateOneTouchTableStatusPost(
+            @PathVariable String tableCode,
+            @Valid @RequestBody com.tablemaster.booking.dto.request.OneTouchTableStatusRequest request) {
+        com.tablemaster.booking.dto.response.OneTouchTableStatusResponse response = bookingService.updateOneTouchTableStatus(tableCode, request);
+        return ResponseEntity.ok(ApiResponse.success("Đổi trạng thái bàn 1 chạm thành công", response));
+    }
 }
+

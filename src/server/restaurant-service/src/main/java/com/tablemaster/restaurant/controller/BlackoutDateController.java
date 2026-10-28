@@ -1,7 +1,8 @@
 package com.tablemaster.restaurant.controller;
 
-import com.tablemaster.restaurant.dto.ApiResponse;
-import com.tablemaster.restaurant.dto.BlackoutDateDto;
+import com.tablemaster.restaurant.dto.request.BlackoutDateRequest;
+import com.tablemaster.restaurant.dto.response.ApiResponse;
+import com.tablemaster.restaurant.dto.response.BlackoutDateResponse;
 import com.tablemaster.restaurant.service.BlackoutDateService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,17 +23,17 @@ public class BlackoutDateController {
     private final BlackoutDateService blackoutDateService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<BlackoutDateDto>>> getAllBlackoutDates() {
+    public ResponseEntity<ApiResponse<List<BlackoutDateResponse>>> getAllBlackoutDates() {
         return ResponseEntity.ok(ApiResponse.success(blackoutDateService.getAllBlackoutDates()));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<BlackoutDateDto>> getBlackoutDateById(@PathVariable("id") UUID id) {
+    public ResponseEntity<ApiResponse<BlackoutDateResponse>> getBlackoutDateById(@PathVariable("id") UUID id) {
         return ResponseEntity.ok(ApiResponse.success(blackoutDateService.getBlackoutDateById(id)));
     }
 
     @GetMapping("/check")
-    public ResponseEntity<ApiResponse<BlackoutDateDto>> checkDate(
+    public ResponseEntity<ApiResponse<BlackoutDateResponse>> checkDate(
             @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         return blackoutDateService.getByDate(date)
                 .map(dto -> ResponseEntity.ok(ApiResponse.success(dto)))
@@ -40,17 +41,17 @@ public class BlackoutDateController {
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<BlackoutDateDto>> createBlackoutDate(@Valid @RequestBody BlackoutDateDto dto) {
-        BlackoutDateDto created = blackoutDateService.createBlackoutDate(dto);
+    public ResponseEntity<ApiResponse<BlackoutDateResponse>> createBlackoutDate(@Valid @RequestBody BlackoutDateRequest request) {
+        BlackoutDateResponse created = blackoutDateService.createBlackoutDate(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Cấu hình ngày đặc biệt thành công", created));
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<ApiResponse<BlackoutDateDto>> updateBlackoutDate(
+    public ResponseEntity<ApiResponse<BlackoutDateResponse>> updateBlackoutDate(
             @PathVariable("id") UUID id,
-            @Valid @RequestBody BlackoutDateDto dto) {
-        BlackoutDateDto updated = blackoutDateService.updateBlackoutDate(id, dto);
+            @Valid @RequestBody BlackoutDateRequest request) {
+        BlackoutDateResponse updated = blackoutDateService.updateBlackoutDate(id, request);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật ngày đặc biệt thành công", updated));
     }
 

@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS floor_plans CASCADE;
 DROP TABLE IF EXISTS time_slots CASCADE;
 DROP TABLE IF EXISTS restaurant_profile CASCADE;
 
+-- 1. HỒ SƠ NHÀ HÀNG & CẤU HÌNH NGÂN HÀNG VIETQR
 CREATE TABLE restaurant_profile (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(150) NOT NULL DEFAULT 'The Prime Bistro & Steakhouse',
@@ -31,6 +32,7 @@ CREATE TABLE restaurant_profile (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 2. KHUNG GIỜ / CA PHỤC VỤ CỐ ĐỊNH & CÔNG SUẤT CA (BR-06)
 CREATE TABLE time_slots (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     slot_name VARCHAR(60) NOT NULL,
@@ -42,36 +44,21 @@ CREATE TABLE time_slots (
     CONSTRAINT uq_slot_time UNIQUE (start_time, end_time)
 );
 
-CREATE TABLE floor_plans (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    floor_number INT UNIQUE NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    width_px INT NOT NULL DEFAULT 1600,
-    height_px INT NOT NULL DEFAULT 900,
-    grid_size INT NOT NULL DEFAULT 20,
-    layout_metadata JSONB NOT NULL DEFAULT '{"walls":[], "windows":[], "doors":[], "facilities":[]}'::jsonb,
-    is_published BOOLEAN NOT NULL DEFAULT TRUE,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
+-- 3. BẢNG BÀN ĂN DẠNG BOX & KHU VỰC KHÔNG GIAN (DATA-DRIVEN & ZONE-BASED)
+-- Bỏ toàn bộ 2D/3D Canvas (posX, posY, width, height, rotation, shape, layout_metadata) và FloorPlans
 CREATE TABLE tables (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    floor_plan_id UUID NOT NULL REFERENCES floor_plans(id) ON DELETE CASCADE,
     table_code VARCHAR(30) UNIQUE NOT NULL,
-    zone_type VARCHAR(50) NOT NULL DEFAULT 'STANDARD',
+    zone_type VARCHAR(50) NOT NULL DEFAULT 'STANDARD', -- 'OUTDOOR', 'BAR_COUNTER', 'PRIVATE_VIP', 'WINDOW_VIEW', 'STANDARD'
     min_capacity INT NOT NULL DEFAULT 2,
     max_capacity INT NOT NULL DEFAULT 4,
     custom_deposit DECIMAL(12, 2),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    pos_x FLOAT NOT NULL DEFAULT 100.0,
-    pos_y FLOAT NOT NULL DEFAULT 100.0,
-    width FLOAT NOT NULL DEFAULT 80.0,
-    height FLOAT NOT NULL DEFAULT 80.0,
-    rotation FLOAT NOT NULL DEFAULT 0.0,
-    shape VARCHAR(20) NOT NULL DEFAULT 'RECT',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 4. DANH MỤC THỰC ĐƠN
 CREATE TABLE menu_categories (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(100) NOT NULL,
@@ -80,6 +67,7 @@ CREATE TABLE menu_categories (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 5. MÓN ĂN & CỜ ĐẶT TRƯỚC (PRE-ORDER)
 CREATE TABLE menu_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     category_id UUID NOT NULL REFERENCES menu_categories(id) ON DELETE CASCADE,
@@ -92,6 +80,7 @@ CREATE TABLE menu_items (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 6. NGÀY LỄ / BLACKOUT DATES & PHỤ THU
 CREATE TABLE blackout_dates (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     event_date DATE NOT NULL,
@@ -104,12 +93,12 @@ CREATE TABLE blackout_dates (
     CONSTRAINT uq_blackout_date UNIQUE (event_date)
 );
 
+-- CHỈ MỤC TỐI ƯU
 CREATE INDEX idx_tables_zone_active ON tables(zone_type, is_active);
-CREATE INDEX idx_tables_floor_capacity ON tables(floor_plan_id, min_capacity, max_capacity) WHERE is_active = TRUE;
-CREATE INDEX idx_floor_layout_gin ON floor_plans USING GIN (layout_metadata);
+CREATE INDEX idx_tables_capacity ON tables(min_capacity, max_capacity) WHERE is_active = TRUE;
 CREATE INDEX idx_blackout_event_date ON blackout_dates(event_date);
 
--- Seed Data
+-- SEED DATA MẪU
 INSERT INTO restaurant_profile (id, name, hotline, email, address, description, bank_bin, bank_name, bank_account_no, bank_account_holder, default_deposit_amount)
 VALUES ('b0000000-0000-0000-0000-000000000001', 'The Prime Bistro & Steakhouse', '0901234567', 'contact@theprimebistro.vn', '123 Nguyễn Huệ, Quận 1, TP. Hồ Chí Minh', 'Fine dining steakhouse & European culinary experience', '970422', 'MBBank (Ngân hàng Quân Đội)', '0388999999', 'CONG TY TNHH THE PRIME BISTRO', 200000.00);
 
@@ -118,17 +107,14 @@ INSERT INTO time_slots (id, slot_name, start_time, end_time, max_capacity) VALUE
 ('b1000000-0000-0000-0000-000000000002', 'Ca tối Giờ Vàng (18:30 - 20:30)', '18:30:00', '20:30:00', 60),
 ('b1000000-0000-0000-0000-000000000003', 'Ca đêm Rooftop (21:00 - 23:30)', '21:00:00', '23:30:00', 40);
 
-INSERT INTO floor_plans (id, floor_number, name, width_px, height_px, grid_size, is_published) VALUES
-('b2000000-0000-0000-0000-000000000001', 1, 'Tầng 1 - Sảnh Vòm & Bar', 1600, 900, 20, TRUE),
-('b2000000-0000-0000-0000-000000000002', 2, 'Tầng 2 - Phòng VIP Riêng Tư', 1600, 900, 20, TRUE),
-('b2000000-0000-0000-0000-000000000003', 3, 'Tầng 3 - Sky Lounge Ngoài Trời (Outdoor)', 1600, 900, 20, TRUE);
-
-INSERT INTO tables (id, floor_plan_id, table_code, zone_type, min_capacity, max_capacity, custom_deposit, pos_x, pos_y, width, height, shape) VALUES
-('b3000000-0000-0000-0000-000000000001', 'b2000000-0000-0000-0000-000000000001', 'BAR-01', 'BAR_SIDE', 1, 2, 100000.00, 200, 300, 70, 70, 'CIRCLE'),
-('b3000000-0000-0000-0000-000000000002', 'b2000000-0000-0000-0000-000000000001', 'WIN-01', 'WINDOW_VIEW', 2, 4, 200000.00, 400, 100, 100, 80, 'RECT'),
-('b3000000-0000-0000-0000-000000000003', 'b2000000-0000-0000-0000-000000000002', 'VIP-01', 'VIP', 6, 12, 500000.00, 150, 150, 140, 90, 'RECT'),
-('b3000000-0000-0000-0000-000000000004', 'b2000000-0000-0000-0000-000000000003', 'OUT-01', 'OUTDOOR', 2, 4, 300000.00, 300, 200, 90, 90, 'SQUARE'),
-('b3000000-0000-0000-0000-000000000005', 'b2000000-0000-0000-0000-000000000003', 'OUT-02', 'OUTDOOR', 4, 6, 300000.00, 500, 200, 110, 80, 'RECT');
+INSERT INTO tables (id, table_code, zone_type, min_capacity, max_capacity, custom_deposit) VALUES
+('b3000000-0000-0000-0000-000000000001', 'BAR-01', 'BAR_COUNTER', 1, 2, 100000.00),
+('b3000000-0000-0000-0000-000000000002', 'WIN-01', 'WINDOW_VIEW', 2, 4, 200000.00),
+('b3000000-0000-0000-0000-000000000003', 'VIP-01', 'PRIVATE_VIP', 6, 12, 500000.00),
+('b3000000-0000-0000-0000-000000000004', 'OUT-01', 'OUTDOOR', 2, 4, 300000.00),
+('b3000000-0000-0000-0000-000000000005', 'OUT-02', 'OUTDOOR', 4, 6, 300000.00),
+('b3000000-0000-0000-0000-000000000006', 'STD-01', 'STANDARD', 2, 4, 200000.00),
+('b3000000-0000-0000-0000-000000000007', 'STD-02', 'STANDARD', 4, 6, 200000.00);
 
 INSERT INTO menu_categories (id, name, display_order, is_active) VALUES
 ('b4000000-0000-0000-0000-000000000001', 'Steak Bò Thượng Hạng', 1, TRUE),

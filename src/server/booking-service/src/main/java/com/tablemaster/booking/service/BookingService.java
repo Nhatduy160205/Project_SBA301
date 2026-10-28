@@ -54,6 +54,15 @@ public interface BookingService {
 
     com.tablemaster.booking.dto.response.ETicketResponse sendTicketNotification(String bookingIdOrCode, com.tablemaster.booking.dto.request.SendTicketNotificationRequest request);
 
+    // UC-15: Xem Sơ đồ Sàn Live Đa tầng trên Tablet (Host Floor Live View)
+    com.tablemaster.booking.dto.response.HostFloorLiveResponse getHostFloorsLive(Integer floorFilter);
+
+    // UC-17: Đổi trạng thái bàn 1 chạm trên Tablet (One-touch Table Status)
+    com.tablemaster.booking.dto.response.OneTouchTableStatusResponse updateOneTouchTableStatus(
+            String tableCode,
+            com.tablemaster.booking.dto.request.OneTouchTableStatusRequest request
+    );
+
     void checkAndExpireBookings();
 
     byte[] generateDepositInvoicePdf(UUID bookingId);

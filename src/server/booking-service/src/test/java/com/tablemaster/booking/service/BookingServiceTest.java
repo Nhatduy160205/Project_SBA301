@@ -6,6 +6,8 @@ import com.tablemaster.booking.dto.request.CreateBookingRequest;
 import com.tablemaster.booking.dto.request.PreorderItemRequest;
 import com.tablemaster.booking.dto.response.BookingResponse;
 import com.tablemaster.booking.entity.Booking;
+import com.tablemaster.booking.entity.BookingTable;
+import com.tablemaster.booking.entity.BookingTableId;
 import com.tablemaster.booking.enums.BookingStatus;
 import com.tablemaster.booking.exception.InvalidBookingStateException;
 import com.tablemaster.booking.exception.TableAlreadyBookedException;
@@ -593,4 +595,193 @@ class BookingServiceTest {
 
         assertThrows(InvalidBookingStateException.class, () -> bookingService.verifyAndCheckIn(req));
     }
+
+    // =========================================================================
+    // UC-15: Unit Tests for getHostFloorsLive
+    // =========================================================================
+
+    @Test
+    void getHostFloorsLive_AllFloors_Success() {
+        UUID t1 = UUID.randomUUID();
+        UUID t2 = UUID.randomUUID();
+        UUID t3 = UUID.randomUUID();
+
+        List<com.tablemaster.booking.client.model.RestaurantTableInfo> mockTables = List.of(
+                com.tablemaster.booking.client.model.RestaurantTableInfo.builder()
+                        .id(t1).tableCode("T-01").floorNumber(1).floorName("Tầng 1 (Grand Bistro)")
+                        .minCapacity(2).maxCapacity(2).shape("rect").posX(100f).posY(100f).build(),
+                com.tablemaster.booking.client.model.RestaurantTableInfo.builder()
+                        .id(t2).tableCode("T-02").floorNumber(1).floorName("Tầng 1 (Grand Bistro)")
+                        .minCapacity(4).maxCapacity(4).shape("rect").posX(200f).posY(100f).build(),
+                com.tablemaster.booking.client.model.RestaurantTableInfo.builder()
+                        .id(t3).tableCode("VIP-01").floorNumber(2).floorName("Tầng 2 (VIP Salon Cellar)")
+                        .minCapacity(8).maxCapacity(8).shape("circle").posX(150f).posY(150f).build()
+        );
+
+        when(restaurantServiceClient.getAllTables()).thenReturn(mockTables);
+
+        Booking seatedBooking = Booking.builder()
+                .id(UUID.randomUUID())
+                .bookingCode("BK-SEATED-01")
+                .guestName("Khách VIP A")
+                .guestPhone("0909123456")
+                .status(BookingStatus.SEATED)
+                .totalDeposit(BigDecimal.valueOf(300000))
+                .checkinScannedAt(ZonedDateTime.now().minusMinutes(45))
+                .build();
+        seatedBooking.setBookingTables(List.of(BookingTable.builder().id(new BookingTableId(seatedBooking.getId(), t1)).booking(seatedBooking).build()));
+
+        when(bookingRepository.findByStatusInOrderByBookingDateAscCreatedAtAsc(anyList()))
+                .thenReturn(List.of(seatedBooking));
+
+        com.tablemaster.booking.dto.response.HostFloorLiveResponse response = bookingService.getHostFloorsLive(null);
+
+        assertNotNull(response);
+        assertEquals(3, response.getTotalTables());
+        assertEquals(1, response.getSeatedTables());
+        assertEquals(2, response.getAvailableTables());
+        assertNotNull(response.getFloors());
+        assertEquals(3, response.getFloors().size());
+
+        // Verify table T-01 is SEATED with dining duration
+        com.tablemaster.booking.dto.response.HostTableLiveDto seatedDto = response.getTables().stream()
+                .filter(t -> t.getTableCode().equals("T-01")).findFirst().orElse(null);
+        assertNotNull(seatedDto);
+        assertEquals("SEATED", seatedDto.getStatus());
+        assertEquals("Khách VIP A", seatedDto.getCurrentGuestName());
+        assertNotNull(seatedDto.getSeatedMinutes());
+        assertTrue(seatedDto.getSeatedMinutes() >= 44);
+
+        verify(bookingEventProducer, times(1)).publishHostFloorLiveUpdate(any());
+    }
+
+    @Test
+    void getHostFloorsLive_FilterByFloor_Success() {
+        UUID t1 = UUID.randomUUID();
+        UUID t2 = UUID.randomUUID();
+
+        List<com.tablemaster.booking.client.model.RestaurantTableInfo> mockTables = List.of(
+                com.tablemaster.booking.client.model.RestaurantTableInfo.builder()
+                        .id(t1).tableCode("T-01").floorNumber(1).floorName("Tầng 1 (Grand Bistro)")
+                        .minCapacity(2).maxCapacity(2).build(),
+                com.tablemaster.booking.client.model.RestaurantTableInfo.builder()
+                        .id(t2).tableCode("VIP-01").floorNumber(2).floorName("Tầng 2 (VIP Salon Cellar)")
+                        .minCapacity(8).maxCapacity(8).build()
+        );
+
+        when(restaurantServiceClient.getAllTables()).thenReturn(mockTables);
+        when(bookingRepository.findByStatusInOrderByBookingDateAscCreatedAtAsc(anyList()))
+                .thenReturn(Collections.emptyList());
+
+        com.tablemaster.booking.dto.response.HostFloorLiveResponse response = bookingService.getHostFloorsLive(2);
+
+        assertNotNull(response);
+        assertEquals(1, response.getTotalTables());
+        assertEquals("VIP-01", response.getTables().get(0).getTableCode());
+        assertEquals(2, response.getTables().get(0).getFloorNumber());
+    }
+
+    // =========================================================================
+    // UC-17: Đổi trạng thái bàn 1 chạm trên Tablet (One-touch Table Status)
+    // =========================================================================
+
+    @Test
+    void updateOneTouchTableStatus_SeatedToCallBill_Success() {
+        String tableCode = "T-01";
+        com.tablemaster.booking.dto.request.OneTouchTableStatusRequest request =
+                com.tablemaster.booking.dto.request.OneTouchTableStatusRequest.builder()
+                        .status("CALL_BILL")
+                        .updatedBy("WAITER")
+                        .guestName("Trần Văn Khách")
+                        .notes("Khách gọi tính tiền thẻ tín dụng")
+                        .build();
+
+        when(bookingRepository.findByBookingDate(any(LocalDate.class))).thenReturn(Collections.emptyList());
+
+        com.tablemaster.booking.dto.response.OneTouchTableStatusResponse response =
+                bookingService.updateOneTouchTableStatus(tableCode, request);
+
+        assertNotNull(response);
+        assertEquals("T-01", response.getTableCode());
+        assertEquals("CALL_BILL", response.getStatus());
+        assertEquals("#9333EA", response.getColor());
+        assertEquals("WAITER", response.getUpdatedBy());
+        assertTrue(response.getMessage().contains("GỌI TÍNH TIỀN"));
+
+        verify(bookingEventProducer, times(1)).publishOneTouchTableStatusChanged(
+                eq("T-01"), eq("CALL_BILL"), eq("WAITER"), eq("Trần Văn Khách"), eq("Khách gọi tính tiền thẻ tín dụng")
+        );
+    }
+
+    @Test
+    void updateOneTouchTableStatus_CallBillToCleaning_CompletesActiveBooking() {
+        String tableCode = "VIP-02";
+        UUID bookingId = UUID.randomUUID();
+        UUID mockTableId = UUID.randomUUID();
+
+        BookingTable bt = new BookingTable();
+        bt.setId(new BookingTableId(bookingId, mockTableId));
+
+        Booking activeBooking = Booking.builder()
+                .id(bookingId)
+                .bookingCode("BK-VIP02-2026")
+                .guestName("VIP Khách Đặng")
+                .status(BookingStatus.SEATED)
+                .bookingTables(List.of(bt))
+                .build();
+        bt.setBooking(activeBooking);
+
+        when(bookingRepository.findByBookingDate(any(LocalDate.class)))
+                .thenReturn(List.of(activeBooking));
+
+        com.tablemaster.booking.dto.request.OneTouchTableStatusRequest request =
+                com.tablemaster.booking.dto.request.OneTouchTableStatusRequest.builder()
+                        .status("CLEANING")
+                        .updatedBy("CASHIER")
+                        .build();
+
+        com.tablemaster.booking.dto.response.OneTouchTableStatusResponse response =
+                bookingService.updateOneTouchTableStatus(mockTableId.toString(), request);
+
+        assertNotNull(response);
+        assertEquals("CLEANING", response.getStatus());
+        assertEquals("#0D9488", response.getColor());
+        assertEquals("CASHIER", response.getUpdatedBy());
+        assertEquals("VIP Khách Đặng", response.getGuestName());
+
+        // Booking should transition to COMPLETED
+        assertEquals(BookingStatus.COMPLETED, activeBooking.getStatus());
+        verify(bookingRepository, times(1)).save(activeBooking);
+        verify(bookingEventProducer, times(1)).publishOneTouchTableStatusChanged(
+                eq(mockTableId.toString()), eq("CLEANING"), eq("CASHIER"), eq("VIP Khách Đặng"), isNull()
+        );
+    }
+
+    @Test
+    void updateOneTouchTableStatus_CleaningToAvailable_Success() {
+        String tableCode = "SKY-05";
+        com.tablemaster.booking.dto.request.OneTouchTableStatusRequest request =
+                com.tablemaster.booking.dto.request.OneTouchTableStatusRequest.builder()
+                        .status("AVAILABLE")
+                        .updatedBy("HOST")
+                        .notes("Đã xịt khuẩn và setup dao nĩa mới")
+                        .build();
+
+        when(bookingRepository.findByBookingDate(any(LocalDate.class))).thenReturn(Collections.emptyList());
+
+        com.tablemaster.booking.dto.response.OneTouchTableStatusResponse response =
+                bookingService.updateOneTouchTableStatus(tableCode, request);
+
+        assertNotNull(response);
+        assertEquals("SKY-05", response.getTableCode());
+        assertEquals("AVAILABLE", response.getStatus());
+        assertEquals("#059669", response.getColor());
+        assertEquals("HOST", response.getUpdatedBy());
+        assertTrue(response.getMessage().contains("TRỐNG KHẢ DỤNG"));
+
+        verify(bookingEventProducer, times(1)).publishOneTouchTableStatusChanged(
+                eq("SKY-05"), eq("AVAILABLE"), eq("HOST"), isNull(), eq("Đã xịt khuẩn và setup dao nĩa mới")
+        );
+    }
 }
+
