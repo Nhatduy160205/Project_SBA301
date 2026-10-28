@@ -119,7 +119,7 @@ const HOT_SLOTS = [
 interface BookingPageProps {
   tables: TableItem[];
   initialFloor?: 1 | 2 | 3;
-  onUpdateTableStatus: (tableId: string, newStatus: TableItem['status']) => void;
+  onUpdateTableStatus: (tableId: string, newStatus: any, guestName?: string) => void;
   onAddBooking: (newBooking: BookingDetails) => void;
   rebookData?: BookingDetails | null;
   onClearRebook?: () => void;
