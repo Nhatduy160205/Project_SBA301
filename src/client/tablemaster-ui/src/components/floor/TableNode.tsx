@@ -254,7 +254,7 @@ export const TableNode: React.FC<TableNodeProps> = ({
 
       {/* Call Bill Badge (Host & Waiter View) */}
       {isHostView && table.status === 'CALL_BILL' && !isSelected && (
-        <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[8px] font-sans font-black tracking-wide px-2 py-0.5 rounded-full shadow-md bg-purple-600 text-white border border-purple-300 flex items-center gap-1 z-20 animate-bounce">
+        <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[8px] font-sans font-black tracking-wide px-2 py-0.5 rounded-full shadow-md bg-purple-600 text-white border-purple-300 flex items-center gap-1 z-20 animate-bounce">
           <span>💳 GỌI BILL</span>
         </div>
       )}

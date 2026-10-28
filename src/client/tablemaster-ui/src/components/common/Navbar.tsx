@@ -1,4 +1,4 @@
-import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut, Building2, Star, History, ChefHat } from 'lucide-react';
+import { Calendar, LayoutDashboard, Shield, Compass, LogIn, LogOut, Building2, Star, History, ChefHat, ArrowLeft, Eye } from 'lucide-react';
 import type { AuthUser } from '../../types';
 
 export type ActiveView = 'landing' | 'booking' | 'host' | 'waiter' | 'kds' | 'restaurant' | 'admin';
@@ -206,6 +206,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* GUEST / CUSTOMER ACTIONS */}
           {!isStaff && (
             <>
+              {onOpenHistory && (
+                <button
+                  onClick={onOpenHistory}
+                  title="Xem Lịch sử Đơn, Hóa đơn Cọc & Mã Vé QR"
+                  className="px-3.5 py-2.5 rounded-full border border-[#E8DFD1] bg-white hover:bg-[#FAF7F2] text-[#8C6A43] text-xs font-semibold shadow-2xs flex items-center gap-1.5 cursor-pointer active:scale-95 transition"
+                >
+                  <History className="w-4 h-4 text-[#8C6A43]" />
+                  <span className="hidden sm:inline">Lịch Sử & Cọc</span>
+                </button>
+              )}
               {onOpenReview && (
                 <button
                   onClick={onOpenReview}

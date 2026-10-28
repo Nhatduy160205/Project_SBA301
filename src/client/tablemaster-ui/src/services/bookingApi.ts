@@ -103,7 +103,6 @@ export interface UpdateSpecialRequestsPayload {
   specialNotes?: string;
   staffNotes?: string;
 }
-
 // UC-04: Chi tiết tình trạng khả dụng & kiểm tra BR-01 của từng bàn
 export interface TableAvailabilityDto {
   tableId: string;
@@ -222,7 +221,6 @@ export interface TableStateUpdatePayload {
   guestName?: string;
   notes?: string;
 }
-
 
 // Fallback UUIDs từ Seed Data cơ sở dữ liệu
 export const SEED_DATA = {
@@ -809,6 +807,7 @@ export const bookingApi = {
     if (!res.ok) throw new Error('Không thể kiểm tra tình trạng bàn');
     return res.json();
   },
+
 
   /**
    * 13. Khóa Giữ bàn 5 phút bằng Redlock (UC-06, BR-02)
@@ -1907,5 +1906,4 @@ export function generateClientMock64CharToken(code: string, counter: number = 1)
   }
   return (hex1 + hex2 + rest).slice(0, 64);
 }
-
 

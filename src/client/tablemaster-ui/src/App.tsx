@@ -23,6 +23,17 @@ import { INITIAL_TABLES, INITIAL_BOOKINGS, INITIAL_TABLE_ORDERS } from './data/m
 import type { TableItem, TableStatus, BookingDetails, TableOrderRecord, AuthUser } from './types';
 import { bookingApi, type BackendBooking } from './services/bookingApi';
 import { PrivateBanquetModal } from './components/booking/PrivateBanquetModal';
+import { authStorage } from './services/authStorage';
+
+function getDefaultViewForRole(role?: string): ActiveView {
+  if (!role) return 'landing';
+  const r = role.toUpperCase();
+  if (r.includes('ADMIN') || r.includes('MANAGER')) return 'admin';
+  if (r.includes('HOST')) return 'host';
+  if (r.includes('WAITER')) return 'waiter';
+  if (r.includes('CHEF') || r.includes('KITCHEN')) return 'kds';
+  return 'landing';
+}
 
 export function App() {
   // Authentication state (using sessionStorage so tokens wipe completely when browser/tab is closed)
